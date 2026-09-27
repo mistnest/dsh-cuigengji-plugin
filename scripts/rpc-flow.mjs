@@ -48,7 +48,10 @@ assert.equal((await request({ action: 'chapter.update', sessionId, args: { chapt
 assert.equal((await call('chapter.history', { chapterId: chapter.id })).length, 2);
 await call('chapter.restore', { chapterId: chapter.id, expectedRevision: chapter.revision, targetRevision: 1 });
 assert.equal((await call('chapter.get', { chapterId: chapter.id })).content, '雨夜，门响了。');
-await call('context.get');
+const reference = await call('context.get');
+assert.equal(reference.items.some(item=>item.kind.startsWith('memory')),false);
+assert.equal(reference.items[0].kind,'approved_plan');
+assert.equal(reference.items.some(item=>item.truncated),false);
 const tavernArgs = { json:{name:'导入人物',description:'雨城的守夜人',character_book:{entries:[{keys:['雨城'],content:'终年下雨',enabled:true}]}} };
 const tavernPreview = await call('tavern.preview',tavernArgs);
 const tavernImport = {...tavernArgs,confirm:true,fingerprint:tavernPreview.fingerprint};

@@ -19,7 +19,7 @@ function failure(error) {
   };
 }
 
-export function registerRpcRoute(ctx, { dispatch, contextChars, dataRoot }) {
+export function registerRpcRoute(ctx, { dispatch, dataRoot }) {
   const dispatchRpc = async (payload, signal) => {
     try {
       signal.throwIfAborted();
@@ -33,7 +33,7 @@ export function registerRpcRoute(ctx, { dispatch, contextChars, dataRoot }) {
         throw Object.assign(new Error('请选择一个 DSH 会话'), { code: 'SESSION_REQUIRED' });
       }
       if (action === 'settings.get') {
-        return { ok: true, value: { contextChars, dataRoot, pluginVersion: manifest.version, supportedDsh: manifest.peerDependencies['@deepseek-ai/dsh-tools'] } };
+        return { ok: true, value: { dataRoot, pluginVersion: manifest.version, supportedDsh: manifest.peerDependencies['@deepseek-ai/dsh-tools'] } };
       }
       if (action === 'legacy.preview') return { ok: true, value: convertLegacyExport(args.input) };
       return { ok: true, value: await dispatch(action, args, { kind: 'human', sessionId }) };

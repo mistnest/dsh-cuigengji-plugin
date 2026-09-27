@@ -27,7 +27,7 @@ test('session policy permits unbound binding inspection and guards only real byp
 test('prompt adds persona and context only for a bound agent', async () => {
   const listeners = {};
   const ctx = { on: (name, fn) => { listeners[name] = fn; } };
-  const store = { dispatch: async (action) => action === 'context.get' ? { novel: 'n1' } : { novelId: 'n1' } };
+  const store = { dispatch: async (action) => action === 'context.get' ? { novel: 'n1', items:[] } : { novelId: 'n1' } };
   const audited = [];
   registerPrompt(ctx, { store, contextChars: 2000, audit: async (...args) => audited.push(args), resolveBinding: async id => id === 'bound' ? { novelId: 'n1' } : null });
   const next = async () => ({ sections: [{ name: 'base', text: 'base' }], contexts: [], tools: [], variables: {} });

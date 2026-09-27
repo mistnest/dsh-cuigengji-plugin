@@ -38,6 +38,8 @@ test('preset persistence enforces human authorship and CAS, and prompt assembly 
   const assemble=id=>handlers['system-prompt/assemble'](base,{agent:{id}},async()=>base);
   assert.equal((await assemble('unbound')).sections.length,1);
   const bound=await assemble('author');assert.equal(bound.sections.find(s=>s.name==='cuigengji:preset').text,'保持人物视角\n\n短句');
+  assert.match(bound.contexts[0].text,/^# 小说参考资料/);
+  assert.doesNotMatch(bound.contexts[0].text,/"usedChars"|"staleMemory"/);
   assert.equal(base.sections.length,1);assert.equal(audit[0][1].preset.revision,1);
   const backup=await store.dispatch('novel.export',{},human);assert.deepEqual(backup.novel.preset.raw,raw);
   const root2=await mkdtemp(join(tmpdir(),'preset-restore-'));t.after(()=>rm(root2,{recursive:true,force:true}));

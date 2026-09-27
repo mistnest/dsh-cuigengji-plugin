@@ -35,7 +35,7 @@ export function TavernImport({ call, novelId, run, busy }) {
         </div>)}</div>
         <div className="row"><button className="primary" disabled={busy||!selected.length} onClick={()=>run(async()=>{
           const response=await call('tavern.import',{novelId,...input,selected,fingerprint:preview.fingerprint,confirm:true});
-          setResult(`导入完成：新增 ${response.imported} 项，跳过 ${response.skipped} 项。请在设定列表核对资料，在“依据与信息边界”中标记有效后才会纳入自动参考。`);setPreview(null);setInput(null);
+          setResult(`导入完成：新增 ${response.imported} 项，跳过 ${response.skipped} 项。请在设定列表核对资料并标记状态。Agent 通过工具按需查阅，不会自动装入全部设定。`);setPreview(null);setInput(null);
         })}>确认导入 {selected.length} 项</button><button disabled={busy} onClick={()=>{setPreview(null);setInput(null);}}>取消</button></div>
       </>}
       {result&&<p role="status">{result}</p>}

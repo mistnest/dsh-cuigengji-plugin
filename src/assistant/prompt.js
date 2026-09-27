@@ -1,10 +1,11 @@
+import { renderReference } from '../core/context.js';
 import { persona } from './skills.js';
 import { compilePreset } from '../core/preset.js';
 
 const CONTEXT_NAME = 'cuigengji:novel';
 const PERSONA_NAME = 'cuigengji:writing';
 
-export function registerPrompt(ctx, { store, contextChars, audit, resolveBinding }) {
+export function registerPrompt(ctx, { store, audit, resolveBinding }) {
   // section/context text providers in DSH 0.1.7 are synchronous. The supported
   // assembly waterfall awaits disk-backed binding/context reads per session.
   ctx.on('system-prompt/assemble', async (assembly, context, next) => {
@@ -16,7 +17,7 @@ export function registerPrompt(ctx, { store, contextChars, audit, resolveBinding
       ? await resolveBinding(actor.sessionId)
       : await store.dispatch('binding.get', {}, actor);
     if (!binding) return result;
-    const material = await store.dispatch('context.get', { maxChars: contextChars }, actor);
+    const material = await store.dispatch('context.get', {}, actor);
     const preset = await store.dispatch('preset.get', {}, actor);
     const presetText = compilePreset(preset);
     context.signal?.throwIfAborted();
@@ -36,7 +37,7 @@ export function registerPrompt(ctx, { store, contextChars, audit, resolveBinding
       ],
       contexts: [
         ...result.contexts.filter(entry => entry.name !== CONTEXT_NAME),
-        { name: CONTEXT_NAME, text: JSON.stringify(material) },
+        { name: CONTEXT_NAME, text: renderReference(material) },
       ],
     };
   });

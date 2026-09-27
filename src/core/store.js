@@ -1,3 +1,4 @@
+import { selectReference } from './context.js';
 import { mkdir, readFile, writeFile, rename, unlink, rmdir, open } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -341,7 +342,7 @@ export class Store {
     }
     if (action === 'graph.list') {
       const q = (a.query || '').toLocaleLowerCase();
-      return Object.values(n.nodes).filter(v => (a.includeDeleted || !v.deleted) && (!a.type || v.type === a.type) && (!q || [v.name, v.summary, ...v.aliases].join(' ').toLocaleLowerCase().includes(q))).map(({ content, ...v }) => v);
+      return Object.values(n.nodes).filter(v => (a.includeDeleted || !v.deleted) && (!a.type || v.type === a.type) && (!q || [v.name, v.summary, v.content, ...v.aliases].join(' ').toLocaleLowerCase().includes(q))).map(({ content, ...v }) => v);
     }
     if (action === 'graph.get') return get(n.nodes, a.nodeId, '节点');
     if (action === 'graph.create') {
@@ -410,29 +411,20 @@ export class Store {
   }
 
   context(n, a) {
-    const budget = a.maxChars ?? 16000;
-    if (!Number.isSafeInteger(budget) || budget < 100 || budget > 200000) fail('INVALID_INPUT', 'maxChars 必须在 100 到 200000 之间');
-    let remaining = budget; const items = [], omitted = [];
+    if (a.chapterId) get(n.chapters, a.chapterId, '章节');
+    const current = a.chapterId ? n.chapters[a.chapterId] : null;
+    const { items, omitted } = selectReference(n, a.chapterId);
     const add = (kind, entity, content) => {
       if (!content) return;
-      if (remaining <= 0 || items.length >= 100) { if (omitted.length < 100) omitted.push({ kind, id: entity.id }); return; }
-      const excerpt = content.slice(0, remaining);
-      items.push({ kind, id: entity.id, revision: entity.revision, title: (entity.title || entity.name || '').slice(0, 200), content: excerpt, truncated: excerpt.length < content.length }); remaining -= excerpt.length;
+      items.push({kind,id:entity.id,revision:entity.revision,title:entity.name,content,truncated:false});
     };
-    const current = a.chapterId ? get(n.chapters, a.chapterId, '章节') : null;
-    if (current && !current.deleted) add('current_chapter', current, current.content);
-    if (n.plan?.approved) add('approved_plan', n.plan, n.plan.content);
-    const chapters = Object.values(n.chapters).filter(c => !c.deleted && c.id !== current?.id && (!current || c.order < current.order)).sort((x, y) => y.order - x.order).slice(0, 2);
-    for (const c of chapters) add('previous_chapter', c, c.content.slice(-3000));
     const nodeIds = a.nodeIds ?? [];
     if (!Array.isArray(nodeIds)) fail('INVALID_INPUT', 'nodeIds 必须是数组');
     for (const id of nodeIds) {
       const node = get(n.nodes, id, '节点');
       if (this.memoryVisible(n, node, current, a.povNodeId)) add('memory', node, node.content || node.summary);
     }
-    const available = Object.values(n.nodes).filter(v => this.memoryVisible(n, v, current, a.povNodeId) && !nodeIds.includes(v.id));
-    for (const node of available) add('memory_summary', node, node.summary || node.content.slice(0, 500));
-    return { novelId: n.id, title: n.title, maxChars: budget, usedChars: budget - remaining, items, omitted,
+    return { novelId: n.id, title: n.title, usedChars: items.reduce((sum,item)=>sum+item.content.length,0), items, omitted,
       staleMemory: Object.values(n.nodes).filter(v => !v.deleted && v.status === 'stale').slice(0, 100).map(v => ({ id: v.id, name: v.name.slice(0, 200), sources: v.sources.slice(0, 10) })) };
   }
 

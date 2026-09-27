@@ -19,14 +19,19 @@ async function fixture(t) {
   return { root, store, novel, human, agent, run };
 }
 
-test('active memory without summary remains discoverable within context budget', async t => {
+test('memory is available through search and explicit read but never auto-injected', async t => {
   const { run } = await fixture(t);
   const visible = await run('graph.create', { type:'world_entry', name:'雨城', content:'雨'.repeat(800), status:'active' });
   const hidden = await run('graph.create', { type:'world_entry', name:'待核对', content:'不应注入', status:'unconfirmed' });
   const context = await run('context.get', {maxChars:600});
-  assert.equal(context.items.find(i=>i.id===visible.id).content.length,500);
+  assert.equal(context.items.some(i=>i.id===visible.id),false);
+  assert.equal((await run('graph.list',{query:'雨雨雨'}))[0].id,visible.id);
+  assert.equal((await run('graph.get',{nodeId:visible.id})).content.length,800);
+  const explicit = await run('context.get',{nodeIds:[visible.id,hidden.id],maxChars:600});
+  assert.equal(explicit.items[0].id,visible.id);
+  assert.equal(explicit.items.some(i=>i.id===hidden.id),false);
   assert.equal(context.items.some(i=>i.id===hidden.id),false);
-  assert.ok(context.usedChars<=600);
+  assert.equal(explicit.items[0].content.length,800);
 });
 
 test('chapter windows, unique patches, CAS, history, soft deletion and restore', async t => {
@@ -84,15 +89,15 @@ test('bound sessions cannot accidentally write a different novel and agent canno
   await assert.rejects(run('chapter.create', { title: '过期授权', content: '' }, agent), { code: 'PLAN_APPROVAL_REQUIRED' });
 });
 
-test('context budget uses current text and excludes stale and future-plan memory', async t => {
+test('context returns complete current text and excludes automatic memory', async t => {
   const { run } = await fixture(t);
   const ch = await run('chapter.create', { title: '一', content: '当前正文'.repeat(30) });
   await run('graph.create', { type: 'world_book', name: '坏记忆', status: 'stale', summary: '旧稿内容' });
   await run('graph.create', { type: 'world_entry', name: '未来事件', factType: 'plan', summary: '客人死亡' });
   const context = await run('context.get', { chapterId: ch.id, maxChars: 100 });
-  assert.equal(context.usedChars, 100);
+  assert.equal(context.usedChars, 120);
   assert.equal(context.items[0].kind, 'current_chapter');
-  assert.equal(context.items[0].truncated, true);
+  assert.equal(context.items[0].truncated, false);
   assert.equal(context.items.some(v => v.title === '未来事件'), false);
   assert.equal(context.staleMemory.length, 1);
 });

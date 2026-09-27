@@ -16,13 +16,12 @@ export const name = 'cuigengji';
 export const inject = ['tools', 'systemPrompt', 'skills', 'connection'];
 export const Config = z.object({
   dataRoot: z.string().default(''),
-  contextChars: z.natural().min(2000).max(60000).default(16000),
 });
 const descriptions = {
   cuigengji_project: '读取和修改本会话小说的卷、章、正文。读操作返回 revision；修改必须提供 expectedRevision。chapter.update 用 content、append 或 patch:{oldText,newText} 三选一。删除需 confirm:true；非空卷还需 chapterPolicy:detach/delete。chapter.get 支持 start/maxChars。',
-  cuigengji_memory: '通过本地 stdio MCP 检索与维护本会话小说图谱。节点 type 为 world_book/world_entry/character_card，字段 name/summary/content；graph.get/update/delete 必须用 nodeId，edge.get/update/delete 必须用 edgeId（不要用 id）。关系创建使用 from/to 节点ID和 name。修改需 expectedRevision，删除 confirm:true。sources:[{chapterId,revision}] 记录依据，knownBy/factType 区分知情与事实。',
+  cuigengji_memory: '通过本地 stdio MCP 检索与维护本会话小说图谱。先用 graph.list 的 query 搜索名称、别名、摘要和正文关键词，再用 graph.get 读详情；edge.list 用 nodeId 查关系。检查 status/factType/sources/knownBy，未确认或过期内容不当作既定事实。节点 type 为 world_book/world_entry/character_card，字段 name/summary/content；graph.get/update/delete 必须用 nodeId，edge.get/update/delete 必须用 edgeId（不要用 id）。关系创建使用 from/to 节点ID和 name。修改需 expectedRevision，删除 confirm:true。sources:[{chapterId,revision}] 记录依据，knownBy/factType 区分知情与事实。',
   cuigengji_plan: '读取或保存小说情节提案，plan.set 使用 content 和 expectedRevision（首次为0）。作者通过面板确认规划，Agent 无权自我批准。',
-  cuigengji_context: '读取会话绑定及按预算选出的小说上下文和来源，用于写作、修订、换场景恢复。',
+  cuigengji_context: '读取会话绑定及完整自动参考及按需指定的设定和来源，用于写作、修订、换场景恢复。',
 };
 function defaultDataRoot() {
   if (process.platform === 'win32') return join(process.env.LOCALAPPDATA || homedir(), 'cuigengji');
@@ -32,7 +31,6 @@ function defaultDataRoot() {
 export async function apply(ctx, config = {}) {
   const root = config.dataRoot || process.env.CUIGENGJI_DATA_ROOT || defaultDataRoot();
   const store = new Store(root);
-  const contextChars = config.contextChars || 16000;
   const auditRoot = join(root, 'audit');
   await mkdir(auditRoot, { recursive:true, mode:0o700 });
   const audit = async (sessionId, value) => {
@@ -46,7 +44,7 @@ export async function apply(ctx, config = {}) {
   ctx.effect(() => () => memory.close());
   ctx.provide('cuigengji',{store,dispatch,memory});
   registerSkills(ctx);
-  registerPrompt(ctx, { store, contextChars, audit, resolveBinding: sessionPolicy.resolveBinding });
+  registerPrompt(ctx, { store, audit, resolveBinding: sessionPolicy.resolveBinding });
 
   for (const [toolName, actions] of Object.entries(allowed)) {
     ctx.tools.register(defineTool({
@@ -67,5 +65,5 @@ export async function apply(ctx, config = {}) {
     }));
   }
   sessionPolicy.register(ctx, memory);
-  registerRpcRoute(ctx, { dispatch, contextChars, dataRoot: root });
+  registerRpcRoute(ctx, { dispatch, dataRoot: root });
 }
