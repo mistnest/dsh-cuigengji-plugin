@@ -1,7 +1,5 @@
-export const MEMORY_ACTIONS = Object.freeze([
-  'graph.list', 'graph.get', 'graph.create', 'graph.update', 'graph.delete',
-  'edge.list', 'edge.create', 'edge.update', 'edge.delete', 'context.get',
-]);
+import { MEMORY_ACTIONS } from '../core/actions.js';
+export { MEMORY_ACTIONS };
 
 export const toolName = action => `memory_${action.replaceAll('.', '_')}`;
 

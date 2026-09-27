@@ -80,17 +80,18 @@ export class MemoryBridge {
     if (!sessionId || typeof sessionId !== 'string') throw new Error('缺少会话 ID');
     await this.start();
     const existing = this.sessions.get(sessionId);
-    if (existing) return existing;
-    const pending = this.connect(sessionId);
-    this.sessions.set(sessionId, pending);
-    try { return await pending; }
+    if (existing) return existing.pending ?? existing;
+    const entry = { pending: null };
+    entry.pending = this.connect(sessionId, entry);
+    this.sessions.set(sessionId, entry);
+    try { return await entry.pending; }
     catch (error) {
-      if (this.sessions.get(sessionId) === pending) this.sessions.delete(sessionId);
+      if (this.sessions.get(sessionId) === entry) this.sessions.delete(sessionId);
       throw error;
     }
   }
 
-  async connect(sessionId) {
+  async connect(sessionId, entry) {
     const token = randomBytes(32).toString('hex');
     this.tokens.set(token, sessionId);
     const env = { CUIGENGJI_MEMORY_ENDPOINT: this.endpoint, CUIGENGJI_MEMORY_TOKEN: token };
@@ -106,7 +107,9 @@ export class MemoryBridge {
     transport.stderr?.on('data', () => {});
     client.onclose = () => {
       this.tokens.delete(token);
-      this.sessions.delete(sessionId);
+      // A reconnect may have replaced this entry. Never tear down the new
+      // connection when an older MCP child exits asynchronously.
+      if (this.sessions.get(sessionId) === entry) this.sessions.delete(sessionId);
     };
     try {
       await client.connect(transport);
@@ -131,10 +134,10 @@ export class MemoryBridge {
   }
 
   async disconnect(sessionId) {
-    const pending = this.sessions.get(sessionId);
+    const entry = this.sessions.get(sessionId);
     this.sessions.delete(sessionId);
-    if (!pending) return;
-    const connection = await pending.catch(() => null);
+    if (!entry) return;
+    const connection = await (entry.pending ?? entry).catch(() => null);
     if (!connection) return;
     this.tokens.delete(connection.token);
     await connection.client.close();

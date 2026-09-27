@@ -19,6 +19,16 @@ async function fixture(t) {
   return { root, store, novel, human, agent, run };
 }
 
+test('active memory without summary remains discoverable within context budget', async t => {
+  const { run } = await fixture(t);
+  const visible = await run('graph.create', { type:'world_entry', name:'雨城', content:'雨'.repeat(800), status:'active' });
+  const hidden = await run('graph.create', { type:'world_entry', name:'待核对', content:'不应注入', status:'unconfirmed' });
+  const context = await run('context.get', {maxChars:600});
+  assert.equal(context.items.find(i=>i.id===visible.id).content.length,500);
+  assert.equal(context.items.some(i=>i.id===hidden.id),false);
+  assert.ok(context.usedChars<=600);
+});
+
 test('chapter windows, unique patches, CAS, history, soft deletion and restore', async t => {
   const { run } = await fixture(t);
   const volume = await run('volume.create', { title: '第一卷' });
@@ -71,6 +81,7 @@ test('bound sessions cannot accidentally write a different novel and agent canno
   await assert.rejects(run('plan.approve', { expectedRevision: plan.revision }, agent), { code: 'HUMAN_REQUIRED' });
   assert.equal((await run('plan.approve', { expectedRevision: plan.revision })).approved, true);
   assert.equal((await run('plan.set', { expectedRevision: 2, content: '改变主线' }, agent)).approved, false);
+  await assert.rejects(run('chapter.create', { title: '过期授权', content: '' }, agent), { code: 'PLAN_APPROVAL_REQUIRED' });
 });
 
 test('context budget uses current text and excludes stale and future-plan memory', async t => {

@@ -26,6 +26,7 @@ export function convertLegacyExport(input) {
   if (typeof title !== 'string' || !title.trim()) invalid('旧项目缺少 title 或 name');
   if (chapters.some(c => c.type !== 'volume' && typeof c.content !== 'string')) invalid('章节缺少正文；请导出包含正文的数据，不能仅导入文件路径或目录');
   const warnings = [];
+  warnings.push('模型配置、API 密钥和运行时设置不迁移；旧 preset 请从“写作预设”入口单独导入并检查兼容报告。');
   const timestamp = '1970-01-01T00:00:00.000Z';
   const entity = (id, fields) => ({ id, revision: 1, createdAt: timestamp, updatedAt: timestamp, deleted: false, ...fields });
   const n = entity(stableId('novel', project.id || project.novelId || workspace.novelId, title), {

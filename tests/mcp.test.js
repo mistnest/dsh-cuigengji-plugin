@@ -85,6 +85,10 @@ test('real persistent store CRUD over MCP preserves revision conflicts and delet
     nodeId: node.id, expectedRevision: node.revision, summary: '发现都市传说的人',
   });
   assert.equal(updated.revision, node.revision + 1);
+  const edge = await bridge.call('real-session', 'edge.create', {
+    from: node.id, to: node.id, name: '自省',
+  });
+  assert.deepEqual(await bridge.call('real-session', 'edge.get', { edgeId: edge.id }), edge);
   await assert.rejects(bridge.call('real-session', 'graph.update', {
     nodeId: node.id, expectedRevision: node.revision, content: '不应覆盖',
   }), /版本已变化/);

@@ -6,6 +6,7 @@
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
+    "./client": "./lib/client.js",
     "./core": "./src/core/store.js",
     "./package.json": "./package.json"
   },
@@ -25,6 +26,7 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-sidebar-right",
         "@deepseek-ai/dsh-client-ui-session"
       ]
@@ -33,11 +35,14 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.js",
+    "test:rpc": "node scripts/rpc-smoke.mjs",
+    "test:rpc-flow": "node scripts/rpc-flow.mjs",
     "test:live": "node scripts/live-smoke.mjs",
     "prepack": "npm run build"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24",
+    "dsh": "0.1.7-rc.2"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",

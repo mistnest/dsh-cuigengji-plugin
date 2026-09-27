@@ -1,6 +1,9 @@
 import { mkdir, readFile, writeFile, rename, unlink, rmdir, open } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { changesProse } from './actions.js';
+import { previewTavern } from './import-tavern.js';
+import { importPreset, validatePreset } from './preset.js';
 
 export class StoreError extends Error {
   constructor(code, message) { super(message); this.name = 'StoreError'; this.code = code; }
@@ -156,8 +159,19 @@ export class Store {
     await this.syncDirectory();
   }
   async syncDirectory() {
-    const handle = await open(this.root, 'r');
-    try { await handle.sync(); } finally { await handle.close(); }
+    // Directory handles are syncable on POSIX, but Windows commonly returns
+    // EPERM/EISDIR/ENOTSUP for fsync even when the rename itself succeeded.
+    // The staged file is still fsynced before each atomic promotion above, so
+    // treat an unsupported directory barrier as best-effort on Windows while
+    // surfacing real I/O failures everywhere else.
+    try {
+      const handle = await open(this.root, 'r');
+      try { await handle.sync(); } finally { await handle.close(); }
+    } catch (error) {
+      const unsupported = new Set(['EBADF', 'EISDIR', 'EINVAL', 'ENOSYS', 'ENOTSUP', 'EPERM']);
+      if (process.platform === 'win32' && unsupported.has(error?.code)) return;
+      throw error;
+    }
   }
 
   async dispatch(action, args = {}, actor = {}) {
@@ -205,7 +219,38 @@ export class Store {
     if (!novelId) fail('NOVEL_REQUIRED', '请先绑定小说或提供 novelId');
     if (actor.kind !== 'human' && binding && binding.novelId !== novelId) fail('NOVEL_MISMATCH', '当前会话已绑定另一本小说');
     const n = get(state.novels, novelId, '小说');
-    if (action === 'novel.get') return { ...n, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
+    if (action === 'tavern.preview' || action === 'tavern.import') {
+      if (actor.kind !== 'human') fail('HUMAN_REQUIRED', '酒馆文件导入需要作者操作');
+      const preview = previewTavern(a);
+      if (action === 'tavern.preview') {
+        const { raw, ...result } = preview;
+        return result;
+      }
+      if (a.confirm !== true) fail('CONFIRM_REQUIRED', '请先预览并确认导入');
+      if (a.fingerprint !== preview.fingerprint) fail('CONFLICT', '文件与预览不一致，请重新预览');
+      const selected = a.selected ?? preview.nodes.map((_, index) => index);
+      if (!Array.isArray(selected) || !selected.length || selected.some(i => !Number.isInteger(i) || !preview.nodes[i])) fail('INVALID_INPUT', '请选择有效的导入条目');
+      const imported = [], skipped = [];
+      for (const index of new Set(selected)) {
+        const id = `tavern-${preview.fingerprint}-${index}`;
+        if (own(n.nodes, id)) { skipped.push(id); continue; }
+        n.nodes[id] = record({ ...preview.nodes[index], id, deleted:false,
+          tavern: { fingerprint:preview.fingerprint, format:preview.format, index } });
+        imported.push(id);
+      }
+      if (imported.length) {
+        n.tavernSources ??= {};
+        n.tavernSources[preview.fingerprint] = { format:preview.format, raw:preview.raw };
+        touch(n);
+      }
+      return { imported:imported.length, skipped:skipped.length, nodeIds:imported };
+    }
+    // Recheck under the same lock as the write: a different author session may
+    // have changed the plan after the host's earlier policy check.
+    if (actor.kind === 'agent' && changesProse(action, a) && !n.plan?.approved) {
+      fail('PLAN_APPROVAL_REQUIRED', '请先在催更姬面板确认情节规划后写入正文');
+    }
+    if (action === 'novel.get') return { ...n, tavernSources: undefined, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
     if (action === 'novel.export') return { format: 'cuigengji', schemaVersion: 1, exportedAt: now(), novel: clone(n) };
     if (action === 'novel.update' || action === 'novel.archive') {
       cas(n, a);
@@ -339,6 +384,16 @@ export class Store {
       this.checkMemorySources(n, e);
       touch(n); return e;
     }
+    if (action === 'preset.get') return n.preset || null;
+    if (action === 'preset.preview' || action === 'preset.set') {
+      if (actor.kind !== 'human') fail('HUMAN_REQUIRED', '预设只能由作者配置');
+      if (action === 'preset.preview') return importPreset(a.input, a.orderId);
+      if (n.preset) cas(n.preset,a);
+      else if (a.expectedRevision !== 0) fail('CONFLICT','预设版本不匹配，请重新读取');
+      const value=validatePreset(a.preset);
+      n.preset=record({name:value.name,enabled:value.enabled,blocks:clone(value.blocks),raw:clone(value.raw ?? null),warnings:clone(value.warnings ?? []),revision:(n.preset?.revision||0)+1});
+      touch(n);return n.preset;
+    }
     if (action === 'plan.get') return n.plan;
     if (action === 'plan.set') {
       if (n.plan) cas(n.plan, a);
@@ -376,7 +431,7 @@ export class Store {
       if (this.memoryVisible(n, node, current, a.povNodeId)) add('memory', node, node.content || node.summary);
     }
     const available = Object.values(n.nodes).filter(v => this.memoryVisible(n, v, current, a.povNodeId) && !nodeIds.includes(v.id));
-    for (const node of available) add('memory_summary', node, node.summary);
+    for (const node of available) add('memory_summary', node, node.summary || node.content.slice(0, 500));
     return { novelId: n.id, title: n.title, maxChars: budget, usedChars: budget - remaining, items, omitted,
       staleMemory: Object.values(n.nodes).filter(v => !v.deleted && v.status === 'stale').slice(0, 100).map(v => ({ id: v.id, name: v.name.slice(0, 200), sources: v.sources.slice(0, 10) })) };
   }
@@ -419,6 +474,7 @@ export class Store {
     for (const node of Object.values(n.nodes)) { if (!kinds.has(node.type)) fail('INVALID_BACKUP', '节点类型无效'); Object.assign(node, memoryFields(node, n, true)); }
     for (const edge of Object.values(n.edges)) { if (!own(n.nodes, edge.from) || !own(n.nodes, edge.to)) fail('INVALID_BACKUP', '关系端点不存在'); Object.assign(edge, memoryFields(edge, n, true)); }
     if (n.plan && (typeof n.plan.content !== 'string' || !Number.isSafeInteger(n.plan.revision) || n.plan.revision < 1 || typeof n.plan.approved !== 'boolean')) fail('INVALID_BACKUP', '规划格式无效');
+    if (n.preset) { validatePreset(n.preset); if (!Number.isSafeInteger(n.preset.revision) || n.preset.revision < 1) fail('INVALID_BACKUP','预设版本无效'); }
     if (own(state.novels, n.id)) {
       if (JSON.stringify(state.novels[n.id]) === JSON.stringify(n)) return { id: n.id, imported: false, reason: 'identical' };
       fail('IMPORT_CONFLICT', '同 ID 小说已存在且内容不同；不会覆盖现有小说');
