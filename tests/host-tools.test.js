@@ -25,13 +25,9 @@ test('registered DSH tools execute through session policy and real MCP', async t
   const novel = await dispatch('novel.create', { title: '工具边界测试' });
   await dispatch('binding.set', { novelId: novel.id });
   assert.equal((await execute('cuigengji_project', 'novel.get')).id, novel.id);
-  for (const [action, args] of [
-    ['chapter.create', { title: '一', content: '' }], ['chapter.update', { content: '' }],
-    ['chapter.restore', {}], ['chapter.delete', {}], ['volume.delete', { chapterPolicy: 'delete' }],
-  ]) await assert.rejects(execute('cuigengji_project', action, args), /确认情节规划/);
-  await assert.rejects(execute('cuigengji_project', 'novel.get', { novelId: 'other' }), /另一部小说/);
-  const plan = await execute('cuigengji_plan', 'plan.set', { content: '雨夜来客' });
-  await dispatch('plan.approve', { expectedRevision: plan.revision });
+  await assert.rejects(execute('cuigengji_project','novel.get',{novelId:'other'}),/另一部小说/);
+  const tx=await execute('cuigengji_plan','planning.apply',{requestId:'host-planning',operations:[{op:'node.create',value:{title:'雨夜来客'}}]});
+  assert.equal(tx.changed.length,1);
   const chapter = await execute('cuigengji_project', 'chapter.create', { title: '第一章', content: '雨停了。' });
   const node = await execute('cuigengji_memory', 'graph.create', { type: 'character_card', name: '来客', sources: [{ chapterId: chapter.id, revision: chapter.revision }] });
   assert.equal((await execute('cuigengji_memory', 'graph.get', { nodeId: node.id })).name, '来客');

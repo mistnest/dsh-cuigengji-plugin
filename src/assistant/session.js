@@ -1,4 +1,4 @@
-import { isReadAction, changesProse, TOOL_ACTIONS } from '../core/actions.js';
+import { isReadAction, TOOL_ACTIONS } from '../core/actions.js';
 
 const novelTools = new Set([
   ...Object.keys(TOOL_ACTIONS), 'run_code', 'skill', 'ask_user_question',
@@ -39,10 +39,7 @@ export function createSessionPolicy({ store, audit }) {
       if (!binding) throw new Error('请先在催更姬面板绑定小说');
       if (args.novelId && args.novelId !== binding.novelId) throw new Error('不能访问另一部小说');
       args = { ...args, novelId: binding.novelId };
-      if (changesProse(action, args)) {
-        const plan = await store.dispatch('plan.get', {}, actor);
-        if (!plan?.approved) throw new Error('请先在催更姬面板确认情节规划后写入正文');
-      }
+
     }
     const result = await store.dispatch(action, args, actor);
     if (action === 'binding.set') remember(actor.sessionId, result);

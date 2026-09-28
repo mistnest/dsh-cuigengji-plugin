@@ -1,24 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useDialog } from '../dialog.jsx';
-import { useDraft, useResource } from '../shared/state.js';
-import { ResourceState, ReadingText, SaveBar, saveShortcut } from '../shared/ui.jsx';
-const message = error => error?.message || String(error);
-export function Manage({call,novelId,novel,run,busy}) {
-  const [preview,setPreview]=useState(null);
-  const [report,setReport]=useState(null);
-  const [success,setSuccess]=useState('');
-  const { ask } = useDialog();
-  return <><span className="eyebrow">作品管理</span><h2>作品与备份</h2><p className="muted">完整备份包含正文、历史版本、人物与世界设定。</p>{novelId&&<div className="row">
-    <button disabled={busy} onClick={async ()=>{const title=await ask('小说名称',novel?.title||'');if(title)run(async()=>{const n=await call('novel.get',{novelId});await call('novel.update',{novelId,title,expectedRevision:n.revision});});}}>重命名小说</button>
-    <button disabled={busy} onClick={()=>run(async()=>{const data=await call('novel.export',{novelId});const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`${novel?.title||'novel'}.cuigengji.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);})} className="primary">下载完整备份</button>
-    </div>}
-    <h3>从备份恢复</h3><p className="muted">选择本插件导出的 JSON 文件，检查内容后确认导入。</p><label>选择备份文件<input type="file" accept=".json,application/json" onChange={e=>{const f=e.target.files?.[0];setPreview(null);setReport(null);setSuccess('');if(f)run(async()=>{const data=JSON.parse(await f.text());if(data.format!=='cuigengji'||!data.novel)throw new Error('不是 cuigengji 备份文件');setPreview(data);});}}/></label>
-    <h3>迁移旧项目</h3><p className="muted">选择包含章节正文的旧项目导出。先查看迁移报告，再确认导入。</p><label>选择旧项目 JSON<input type="file" accept=".json,application/json" disabled={busy} onChange={e=>{const f=e.target.files?.[0];setPreview(null);setReport(null);setSuccess('');if(f)run(async()=>{const result=await call('legacy.preview',{input:JSON.parse(await f.text())});setPreview(result.backup);setReport(result.report);});}}/></label>
-    {success&&<p role="status" className="notice">{success}</p>}
-    {report&&<div role="status" className="notice"><strong>迁移预览</strong><p>{report.volumes} 卷 · {report.chapters} 章 · {report.nodes} 个节点 · {report.edges} 条关系</p>{report.warnings.map((w,i)=><p key={i}>{w}</p>)}</div>}
-    {preview&&<div className="notice">{preview.novel.title} · {Object.keys(preview.novel.chapters||{}).length} 章 · {Object.keys(preview.novel.nodes||{}).length} 个设定节点
-      <div className="row"><button disabled={busy} onClick={()=>run(async()=>{const n=await call('novel.import',{backup:preview});await call('binding.set',{novelId:n.id});setPreview(null);setReport(null);setSuccess('导入成功，作品已绑定到当前会话。');})}>确认导入</button></div>
-    </div>}
-    <p className="muted">同 ID 且内容不同的小说不会被导入覆盖。原作品和备份文件保留。</p>
-  </>;
+import React,{useState} from 'react';
+import {useDialog} from '../dialog.jsx';
+export function Manage({call,novelId,novel,run,busy,onOpen}) {
+ const [mode,setMode]=useState(''),[preview,setPreview]=useState(null),[report,setReport]=useState(null),[success,setSuccess]=useState(''),[importedId,setImportedId]=useState(null);
+ const {ask}=useDialog();
+ const reset=()=>{setMode('');setPreview(null);setReport(null);};
+ const choose=next=>{setMode(next);setPreview(null);setReport(null);setSuccess('');setImportedId(null);};
+ const read=event=>{const file=event.target.files?.[0];event.target.value='';if(!file)return;setPreview(null);setReport(null);setSuccess('');setImportedId(null);run(async()=>{const input=JSON.parse((await file.text()).replace(/^\uFEFF/,''));if(mode==='legacy'){const result=await call('legacy.preview',{input});setPreview(result.backup);setReport(result.report);}else{if(input.format!=='cuigengji'||!input.novel)throw new Error('不是支持的插件备份');setPreview(input);}});};
+ const download=()=>run(async()=>{const data=await call('novel.export',{novelId});const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`${novel?.title||'novel'}.cuigengji.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);setSuccess('已生成并触发下载，请在浏览器下载列表确认。');});
+ return <><h2>{mode?(mode==='backup'?'恢复插件备份':'迁移旧项目'):'作品与备份'}</h2>{!mode?<>
+  {novelId&&<section className="section-fold"><div className="row"><strong className="grow">{novel?.title}</strong><button disabled={busy} onClick={async()=>{const title=await ask('作品名称',novel?.title||'');if(title?.trim())run(async()=>{const current=await call('novel.get',{novelId});await call('novel.update',{novelId,title,expectedRevision:current.revision});});}}>重命名</button></div><p className="muted">完整备份包含正文、历史、设定、规划和预设。</p><button className="primary" disabled={busy} onClick={download}>下载完整备份</button></section>}
+  <div className="list action-list"><button disabled={busy} onClick={()=>choose('backup')}><strong>恢复插件备份</strong><span>从本插件导出的 JSON 恢复作品</span></button><button disabled={busy} onClick={()=>choose('legacy')}><strong>迁移旧项目</strong><span>预览旧项目内容与兼容报告</span></button></div>
+ </>:<><button disabled={busy} onClick={reset}>‹ 返回管理</button><p className="muted">{mode==='backup'?'选择插件备份，检查作品内容后导入。':'选择包含正文的旧项目 JSON，核对迁移报告后导入。'}</p><label>选择文件<input disabled={busy} type="file" accept=".json,application/json" onChange={read}/></label>
+ {report&&<details className="section-fold" open><summary>迁移报告</summary><p>{report.volumes} 卷 · {report.chapters} 章 · {report.nodes} 个设定 · {report.edges} 条关系</p>{report.warnings.map((w,i)=><p key={i}>{w}</p>)}</details>}
+ {preview&&<section className="section-fold"><h3>{preview.novel.title}</h3><p>{Object.keys(preview.novel.chapters||{}).length} 章 · {Object.keys(preview.novel.nodes||{}).length} 个设定 · {Object.keys(preview.novel.planning?.nodes||{}).length} 个规划节点</p><p className="muted">新增作品；相同内容跳过。同 ID 内容不同会拒绝导入，原作品不被覆盖。</p><div className="row"><button className="primary" disabled={busy} onClick={()=>run(async()=>{const result=await call('novel.import',{backup:preview});setImportedId(result.id);setSuccess(result.imported?'导入完成。':'作品已存在，未重复导入。');setPreview(null);setReport(null);})}>确认导入</button><button disabled={busy} onClick={()=>{setPreview(null);setReport(null);}}>取消</button></div></section>}
+ </>}{success&&<div className="notice" role="status">{success}{importedId&&<button disabled={busy} onClick={()=>onOpen?.(importedId)}>打开作品</button>}</div>}</>;
 }

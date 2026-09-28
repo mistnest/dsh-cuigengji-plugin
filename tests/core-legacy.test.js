@@ -24,7 +24,9 @@ test('legacy converter preserves inline prose and graph, omits runtime settings 
   assert.deepEqual(second.backup, backup);
   assert.equal((await store.dispatch('novel.import', { backup: second.backup })).imported, false);
   const novel = await store.dispatch('novel.get', { novelId: backup.novel.id });
-  assert.equal(novel.plan.approved, false);
+  const plans=await store.dispatch('planning.list',{novelId:novel.id});
+  assert.equal(plans.items.length,1);
+  assert.equal((await store.dispatch('planning.get',{novelId:novel.id,nodeId:plans.items[0].id})).node.content,'在都市相识。');
   assert.ok(novel.nodes.every(n => n.status === 'unconfirmed'));
 });
 

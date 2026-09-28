@@ -16,13 +16,13 @@ function png(chunks) {
 const textChunk = (key,data) => chunk('tEXt',Buffer.from(`${key}\0${Buffer.from(JSON.stringify(data)).toString('base64')}`));
 
 test('Tavern V1/V2 and world info preserve prose, disabled entries and raw extensions',()=>{
-  const p=previewTavern({json:card});assert.equal(p.nodes.length,4);
+  const p=previewTavern({json:card});assert.equal(p.nodes.length,3);
   assert.match(p.nodes[0].content,/性格\n\n沉静/);assert.doesNotMatch(p.nodes[0].content,/保留但不注入/);
-  assert.equal(p.nodes[3].status,'retired');assert.deepEqual(p.raw,card);
+  assert.equal(p.nodes[2].status,'retired');assert.deepEqual(p.raw,card);
   assert.equal(previewTavern({json:{name:'甲',description:'乙'}}).format,'chara_card_v1');
   const w=previewTavern({json:{entries:{'0':{key:['城'],comment:'城池',content:'城市',disable:true,keysecondary:['雨'],extensions:{custom:true}}}},fileName:'城市.json'});
-  assert.equal(w.nodes[0].name,'城市');assert.equal(w.nodes[1].name,'城池');assert.equal(w.nodes[1].status,'retired');
-  assert.deepEqual(w.nodes[1].aliases,['城']);
+  assert.equal(w.nodes.length,1);assert.equal(w.nodes[0].name,'城池');assert.equal(w.nodes[0].status,'retired');assert.equal(w.nodes[0].sourceIndex,1);
+  assert.deepEqual(w.nodes[0].aliases,['城']);
   assert.equal(previewTavern({json:{name:'书',description:'简介',entries:[]}}).format,'world_info');
 });
 test('PNG reads Unicode card data and prefers ccv3; corrupt and plain PNG fail clearly',()=>{
@@ -52,10 +52,17 @@ test('Import is human-only, confirmed, atomic, selected and idempotent; backup p
   assert.equal((await store.dispatch('graph.list',{novelId:novel.id},human)).length,0);
   await assert.rejects(store.dispatch('tavern.import',{...confirmed,fingerprint:'wrong'},human),{code:'CONFLICT'});
   const first=await store.dispatch('tavern.import',{...confirmed,selected:[0,2]},human);assert.equal(first.imported,2);
-  const second=await store.dispatch('tavern.import',confirmed,human);assert.equal(second.imported,2);assert.equal(second.skipped,2);
+  const second=await store.dispatch('tavern.import',confirmed,human);assert.equal(second.imported,1);assert.equal(second.skipped,2);
   const backup=await store.dispatch('novel.export',{novelId:novel.id},human);
   assert.deepEqual(backup.novel.tavernSources[preview.fingerprint].raw,card);
   const otherRoot=await mkdtemp(join(tmpdir(),'tavern-backup-'));t.after(()=>rm(otherRoot,{recursive:true,force:true}));
   const other=new Store(otherRoot);await other.dispatch('novel.import',{backup},human);
   assert.deepEqual((await other.dispatch('novel.export',{novelId:novel.id},human)).novel.tavernSources,backup.novel.tavernSources);
+});
+
+
+test('import skips empty containers, preserves book prose and stable legacy IDs',()=>{
+ const p=previewTavern({json:card});assert.deepEqual(p.nodes.map(n=>n.sourceIndex),[0,2,3]);assert.ok(p.nodes.every(n=>['character_card','world_entry'].includes(n.type)));
+ const book=previewTavern({json:{name:'设定集',description:'不可丢失的正文',entries:[{content:'条目正文'}]}});
+ assert.equal(book.nodes[0].content,'不可丢失的正文');assert.equal(book.nodes[0].type,'world_entry');assert.equal(book.nodes[1].sourceIndex,1);
 });

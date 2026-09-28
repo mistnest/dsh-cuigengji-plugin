@@ -47,16 +47,17 @@ export function previewTavern(args) {
   const data = raw.spec ? raw.data : raw;
   if (!object(data)) fail('角色卡缺少 data 对象');
   const card = !!raw.spec || (data.entries === undefined && typeof data.name === 'string' && typeof data.description === 'string');
-  const nodes = [];
+  const nodes = []; let sourceIndex=0;
   const warnings = ['导入的是写作资料。酒馆的关键词触发、概率、递归扫描、插入位置、宏和扩展脚本不在 DSH 中执行。', '原始 JSON 和扩展字段随完整备份保留；系统提示词不会替换 DSH 的系统指令。PNG 图片本身与外部素材不保存。'];
   const add = (type, name, content, aliases = [], status = 'unconfirmed') => {
-    nodes.push({ type, name, content, aliases, status, factType:'unconfirmed', summary:'', sources:[], knownBy:[], dependsOn:[], storyTime:'' });
+    nodes.push({ sourceIndex:sourceIndex++, type, name, content, aliases, status, factType:'unconfirmed', summary:'', sources:[], knownBy:[], dependsOn:[], storyTime:'' });
   };
   function book(value, fallback) {
     if (!object(value) || !(Array.isArray(value.entries) || object(value.entries))) fail('世界书缺少 entries 数组或对象');
     const entries = Object.values(value.entries);
     if (entries.length > 2000) fail('单本世界书最多支持 2000 条条目');
-    add('world_book', typeof value.name === 'string' && value.name.trim() ? value.name : fallback, typeof value.description === 'string' ? value.description : '从酒馆导入的世界书');
+    if(typeof value.description==='string'&&value.description.trim())add('world_entry',typeof value.name==='string'&&value.name.trim()?value.name:fallback,value.description);
+    else sourceIndex++; // Reserve the former book slot so old import IDs remain stable.
     for (const [index, entry] of entries.entries()) {
       if (!object(entry) || typeof entry.content !== 'string') fail(`世界书第 ${index + 1} 条缺少文本 content`);
       const keys = strings(entry.keys ?? entry.key);

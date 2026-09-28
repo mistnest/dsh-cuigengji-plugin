@@ -78,15 +78,12 @@ test('graph CRUD, source validation and stale memory after historical edits', as
   assert.equal((await run('edge.list', { includeDeleted: true }))[0].id, edge.id);
 });
 
-test('bound sessions cannot accidentally write a different novel and agent cannot approve plans', async t => {
+test('bound sessions cannot accidentally write a different novel and agent can write without a planning approval', async t => {
   const { run, agent } = await fixture(t);
   const other = await run('novel.create', { title: '另一部' });
   await assert.rejects(run('chapter.create', { novelId: other.id, title: '串库' }, agent), { code: 'NOVEL_MISMATCH' });
-  const plan = await run('plan.set', { content: '第一章遇见客人。' }, agent);
-  await assert.rejects(run('plan.approve', { expectedRevision: plan.revision }, agent), { code: 'HUMAN_REQUIRED' });
-  assert.equal((await run('plan.approve', { expectedRevision: plan.revision })).approved, true);
-  assert.equal((await run('plan.set', { expectedRevision: 2, content: '改变主线' }, agent)).approved, false);
-  await assert.rejects(run('chapter.create', { title: '过期授权', content: '' }, agent), { code: 'PLAN_APPROVAL_REQUIRED' });
+  await assert.rejects(run('plan.approve', {}, agent), {code:'MIGRATED_ACTION'});
+  assert.ok((await run('chapter.create', {title:'无需规划批准',content:'开始写作'}, agent)).id);
 });
 
 test('context returns complete current text and excludes automatic memory', async t => {

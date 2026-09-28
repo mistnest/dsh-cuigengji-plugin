@@ -5,12 +5,12 @@ const chapter=(id,order,content)=>({id,title:id,order,content,revision:1});
 test('complete long sections preserve stable order without a plugin budget',()=>{
   const novel={plan:{id:'plan',revision:2,approved:true,content:'规划'.repeat(10000)},chapters:{a:chapter('a',0,'A'.repeat(10000)),b:chapter('b',1,'B'.repeat(10000)),c:chapter('c',2,'正文'.repeat(20000))}};
   const selected=selectReference(novel,'c');
-  assert.deepEqual(selected.items.map(i=>i.id),['plan','a','b','c']);
-  assert.deepEqual(selected.items.map(i=>i.content.length),[20000,10000,10000,40000]);
-  assert.equal(selected.usedChars,80000);
+  assert.deepEqual(selected.items.map(i=>i.id),['a','b','c']);
+  assert.deepEqual(selected.items.map(i=>i.content.length),[10000,10000,40000]);
+  assert.equal(selected.usedChars,60000);
   assert.equal(selected.items.some(i=>i.truncated),false);
   const text=renderReference({...selected,task:{stage:'write',goal:'继续场景'}});
-  assert.ok(text.indexOf('已确认规划')<text.indexOf('前文片段'));
+  assert.equal(text.includes('规划'.repeat(10000)),false);
   assert.ok(text.indexOf('前文片段')<text.indexOf('当前参考章节'));
   assert.ok(text.indexOf('当前参考章节')<text.indexOf('当前任务'));
   assert.match(text,/ID: c.*版本: 1/);

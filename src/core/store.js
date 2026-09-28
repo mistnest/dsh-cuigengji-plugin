@@ -1,8 +1,8 @@
+import { ensurePlanning, planningAction, validatePlanning } from './planning/index.js';
 import { selectReference } from './context.js';
 import { mkdir, readFile, writeFile, rename, unlink, rmdir, open } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { changesProse } from './actions.js';
 import { previewTavern } from './import-tavern.js';
 import { importPreset, validatePreset } from './preset.js';
 
@@ -187,6 +187,11 @@ export class Store {
         if (previous.signature !== signature) fail('REQUEST_ID_REUSED', 'requestId 已用于其他请求');
         return clone(previous.result);
       }
+      const migrationNovelId=args.novelId||state.bindings[hash(actor.sessionId||'')]?.novelId;
+      const migrationNovel=migrationNovelId&&state.novels[migrationNovelId];
+      if ((action.startsWith('planning.')||action==='novel.export') && migrationNovel?.plan && !migrationNovel.planning) {
+        await writeFile(join(this.root, `before-planning-${hash(migrationNovelId)}.json`), JSON.stringify({format:'cuigengji',schemaVersion:1,novel:migrationNovel}), {flag:'wx',mode:0o600}).catch(error=>{if(error.code!=='EEXIST')throw error;});
+      }
       const before = JSON.stringify(state);
       const result = this.execute(state, action, args, actor);
       if (requestKey) state.requests[requestKey] = { signature, result: clone(result), timestamp: now() };
@@ -233,10 +238,11 @@ export class Store {
       if (!Array.isArray(selected) || !selected.length || selected.some(i => !Number.isInteger(i) || !preview.nodes[i])) fail('INVALID_INPUT', '请选择有效的导入条目');
       const imported = [], skipped = [];
       for (const index of new Set(selected)) {
-        const id = `tavern-${preview.fingerprint}-${index}`;
+        const sourceIndex=preview.nodes[index].sourceIndex??index;
+        const id = `tavern-${preview.fingerprint}-${sourceIndex}`;
         if (own(n.nodes, id)) { skipped.push(id); continue; }
         n.nodes[id] = record({ ...preview.nodes[index], id, deleted:false,
-          tavern: { fingerprint:preview.fingerprint, format:preview.format, index } });
+          tavern: { fingerprint:preview.fingerprint, format:preview.format, index:sourceIndex } });
         imported.push(id);
       }
       if (imported.length) {
@@ -246,13 +252,10 @@ export class Store {
       }
       return { imported:imported.length, skipped:skipped.length, nodeIds:imported };
     }
-    // Recheck under the same lock as the write: a different author session may
-    // have changed the plan after the host's earlier policy check.
-    if (actor.kind === 'agent' && changesProse(action, a) && !n.plan?.approved) {
-      fail('PLAN_APPROVAL_REQUIRED', '请先在催更姬面板确认情节规划后写入正文');
-    }
-    if (action === 'novel.get') return { ...n, tavernSources: undefined, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
-    if (action === 'novel.export') return { format: 'cuigengji', schemaVersion: 1, exportedAt: now(), novel: clone(n) };
+    if (action.startsWith('planning.')) { const previous=n.planning?.sequence; const result=planningAction(n,action,a,actor); if(previous!==n.planning.sequence)touch(n); return result; }
+    if (action.startsWith('plan.')) fail('MIGRATED_ACTION', '旧规划接口已迁移，请使用 cuigengji_plan 的 planning.list/get/apply');
+    if (action === 'novel.get') return { ...n, tavernSources: undefined, planning: undefined, plan: undefined, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
+    if (action === 'novel.export') { ensurePlanning(n); return { format: 'cuigengji', schemaVersion: 2, exportedAt: now(), novel: clone(n) }; }
     if (action === 'novel.update' || action === 'novel.archive') {
       cas(n, a);
       if (action === 'novel.archive') {
@@ -395,17 +398,6 @@ export class Store {
       n.preset=record({name:value.name,enabled:value.enabled,blocks:clone(value.blocks),raw:clone(value.raw ?? null),warnings:clone(value.warnings ?? []),revision:(n.preset?.revision||0)+1});
       touch(n);return n.preset;
     }
-    if (action === 'plan.get') return n.plan;
-    if (action === 'plan.set') {
-      if (n.plan) cas(n.plan, a);
-      n.plan = record({ ...n.plan, content: text(a.content, 'content'), revision: (n.plan?.revision ?? 0) + 1, approved: false, approvedAt: null, updatedAt: now() });
-      touch(n); return n.plan;
-    }
-    if (action === 'plan.approve') {
-      if (actor.kind !== 'human') fail('HUMAN_REQUIRED', '规划只能由作者确认');
-      if (!n.plan) fail('NOT_FOUND', '尚无规划'); cas(n.plan, a);
-      n.plan.approved = true; n.plan.approvedAt = now(); touch(n.plan); touch(n); return n.plan;
-    }
     if (action === 'context.get') return { ...this.context(n, { ...a, chapterId: a.chapterId || binding?.chapterId }), task: binding ? { stage: binding.stage, goal: binding.goal, chapterId: binding.chapterId } : null };
     fail('UNKNOWN_ACTION', `未知操作：${action}`);
   }
@@ -445,7 +437,7 @@ export class Store {
 
   importNovel(state, a) {
     const backup = a.backup;
-    if (!backup || backup.format !== 'cuigengji' || backup.schemaVersion !== 1 || !backup.novel) fail('INVALID_BACKUP', '不是 cuigengji v1 备份');
+    if (!backup || backup.format !== 'cuigengji' || ![1,2].includes(backup.schemaVersion) || !backup.novel) fail('INVALID_BACKUP', '不是支持的 cuigengji 备份');
     const n = clone(backup.novel);
     text(n.id, 'novel.id'); text(n.title, 'novel.title');
     if (!Number.isSafeInteger(n.revision) || n.revision < 1 || typeof n.archived !== 'boolean') fail('INVALID_BACKUP', '小说版本或归档状态无效');
@@ -466,6 +458,7 @@ export class Store {
     for (const node of Object.values(n.nodes)) { if (!kinds.has(node.type)) fail('INVALID_BACKUP', '节点类型无效'); Object.assign(node, memoryFields(node, n, true)); }
     for (const edge of Object.values(n.edges)) { if (!own(n.nodes, edge.from) || !own(n.nodes, edge.to)) fail('INVALID_BACKUP', '关系端点不存在'); Object.assign(edge, memoryFields(edge, n, true)); }
     if (n.plan && (typeof n.plan.content !== 'string' || !Number.isSafeInteger(n.plan.revision) || n.plan.revision < 1 || typeof n.plan.approved !== 'boolean')) fail('INVALID_BACKUP', '规划格式无效');
+    if (n.planning) validatePlanning(n.planning,n);
     if (n.preset) { validatePreset(n.preset); if (!Number.isSafeInteger(n.preset.revision) || n.preset.revision < 1) fail('INVALID_BACKUP','预设版本无效'); }
     if (own(state.novels, n.id)) {
       if (JSON.stringify(state.novels[n.id]) === JSON.stringify(n)) return { id: n.id, imported: false, reason: 'identical' };
