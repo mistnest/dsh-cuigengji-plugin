@@ -6,7 +6,7 @@
 - RPC 独立到 transport，改用 Connection 精确 Fetch route，与宿主 API Gateway 共存。
 - 工具动作共用契约；修复 edge.get、Agent 入口未定义 readAction。
 - 单独的会话策略与提示词模块，未绑定会话不注入小说 persona。
-- Agent 正文写入取消规划批准门槛；保留绑定隔离、CAS、历史与第三方工具允许列表。
+- Agent 正文写入取消规划批准门槛；保留绑定隔离、CAS 与正文历史。
 - 修复 Windows 目录 fsync 兼容、MCP 重连时旧进程清理竞态。
 - 旧项目 JSON 迁移预览、报告、确认导入和同 ID 冲突保护。
 - 弹窗提取为独立原生 dialog 组件，支持焦点约束、Escape 和卸载时取消。

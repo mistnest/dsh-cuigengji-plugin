@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSessionPolicy, novelToolDenial } from '../src/assistant/session.js';
+import { createSessionPolicy } from '../src/assistant/session.js';
 import { registerPrompt } from '../src/assistant/prompt.js';
 
-test('session policy permits unbound binding inspection and guards only real bypass tools', async () => {
+test('session policy scopes novel data access without restricting host tools', async () => {
   const calls = [];
   const store = { dispatch: async (action, args, actor) => {
     calls.push({ action, args, actor });
@@ -13,15 +13,20 @@ test('session policy permits unbound binding inspection and guards only real byp
   const policy = createSessionPolicy({ store, audit: async () => {} });
   assert.equal(await policy.dispatch('binding.get', {}, { kind: 'agent', sessionId: 's1' }), null);
   await assert.rejects(policy.dispatch('novel.get', {}, { kind: 'agent', sessionId: 's1' }), /先在催更姬/);
-  assert.match(novelToolDenial('bash'), /cuigengji/);
-  assert.match(novelToolDenial('str_replace_editor'), /cuigengji/);
-  assert.match(novelToolDenial('subagent'), /单 Agent/);
-  assert.match(novelToolDenial('spawn_teammate'), /单 Agent/);
-  assert.match(novelToolDenial('cordis_run'), /cuigengji/);
-  assert.equal(novelToolDenial('run_code'), undefined);
-  assert.equal(novelToolDenial('cuigengji_project'), undefined);
-  assert.match(novelToolDenial('unknown_plugin_writer'), /未启用此工具/);
   assert.equal(calls[0].actor.sessionId, 's1');
+});
+
+test('binding a novel does not register a host tool guard', () => {
+  const listeners = {};
+  let guards = 0;
+  const ctx = {
+    on: (name, fn) => { listeners[name] = fn; },
+    tools: { guard: () => { guards++; } },
+  };
+  const policy = createSessionPolicy({ store: { dispatch: async () => null }, audit: async () => {} });
+  policy.register(ctx, { disconnect: async () => {} });
+  assert.equal(guards, 0);
+  assert.ok(listeners['agent/pre-step']);
 });
 
 test('prompt adds persona and context only for a bound agent', async () => {
