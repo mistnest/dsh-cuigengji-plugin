@@ -347,12 +347,18 @@ export class Store {
     }
     if (action === 'graph.list') {
       const q = (a.query || '').toLocaleLowerCase();
-      return Object.values(n.nodes).filter(v => (a.includeDeleted || !v.deleted) && (!a.type || v.type === a.type) && (!q || [v.name, v.summary, v.content, ...v.aliases].join(' ').toLocaleLowerCase().includes(q))).map(({ content, ...v }) => v);
+      return Object.values(n.nodes).filter(v => (a.includeDeleted || !v.deleted) && (!a.type || v.type === a.type) && (!a.groupId || v.groupId === a.groupId) && (!q || [v.name, v.summary, v.content, ...v.aliases].join(' ').toLocaleLowerCase().includes(q))).map(({ content, ...v }) => v);
+    }
+    if (action === 'graph.groups') return Object.values(n.memoryGroups || {});
+    if (action === 'graph.group.create') {
+      n.memoryGroups ||= {};
+      const g = record({ name: text(a.name, 'name'), summary: a.summary || '' });
+      n.memoryGroups[g.id] = g; touch(n); return g;
     }
     if (action === 'graph.get') return get(n.nodes, a.nodeId, '节点');
     if (action === 'graph.create') {
       if (!kinds.has(a.type)) fail('INVALID_INPUT', '节点类型无效');
-      const v = record({ type: a.type, ...memoryFields(a, n, true), deleted: false });
+      const v = record({ type: a.type, groupId: a.groupId || null, ...memoryFields(a, n, true), deleted: false });
       this.checkMemorySources(n, v);
       n.nodes[v.id] = v; touch(n); return v;
     }
@@ -365,6 +371,7 @@ export class Store {
       } else {
         if (v.deleted) fail('DELETED', '节点已删除');
         if (a.type !== undefined) { if (!kinds.has(a.type)) fail('INVALID_INPUT', '节点类型无效'); v.type = a.type; }
+        if (a.groupId !== undefined) v.groupId = a.groupId || null;
         Object.assign(v, memoryFields(a, n));
         this.checkMemorySources(n, v);
       }

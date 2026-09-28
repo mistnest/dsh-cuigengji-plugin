@@ -3,8 +3,11 @@ const copy=v=>structuredClone(v);
 const record=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const own=(map,id)=>Object.prototype.hasOwnProperty.call(map,id);
 export function ensurePlanning(novel) {
-  if(novel.planning)return novel.planning;
-  const board={formatVersion:1,nodes:{},edges:{},sequence:0,transactions:[]};
+  if(novel.planning){
+    novel.planning.groups ??= {};
+    return novel.planning;
+  }
+  const board={formatVersion:2,nodes:{},edges:{},groups:{},sequence:0,transactions:[]};
   if(novel.plan){const id=`legacy-plan-${novel.plan.id}`;board.nodes[id]={id,revision:1,title:'原有规划',summary:'从旧规划完整迁移',content:novel.plan.content,scope:'unspecified',status:'idea',parentId:null,threads:[],chapterRefs:[],memoryRefs:[],deleted:false,updatedAt:novel.plan.updatedAt||new Date().toISOString(),actor:{kind:'migration'}};board.legacy=copy(novel.plan);}
   novel.planning=board;return board;
 }
@@ -15,11 +18,13 @@ function cycle(nodes,edges) {
   for(const node of nodes)visit(node.id);
 }
 export function validatePlanning(board,novel) {
-  if(!board||board.formatVersion!==1||!record(board.nodes)||!record(board.edges)||!Array.isArray(board.transactions)||(!Number.isSafeInteger(board.sequence)||board.sequence<0))fail('INVALID_PLANNING','规划数据格式无效');
+  if(!board||![1,2].includes(board.formatVersion)||!record(board.nodes)||!record(board.edges)||!Array.isArray(board.transactions)||(!Number.isSafeInteger(board.sequence)||board.sequence<0))fail('INVALID_PLANNING','规划数据格式无效');
+  board.groups ??= {};
+  for(const [id,g] of Object.entries(board.groups)) if(id!==g.id||typeof g.name!=='string'||!g.name.trim()||typeof g.summary!=='string'||!Number.isSafeInteger(g.revision)||g.revision<1) fail('INVALID_PLANNING','规划分组无效');
   if([...Object.values(board.nodes),...Object.values(board.edges)].some(v=>!record(v)))fail('INVALID_PLANNING','规划对象无效');
   const nodes=Object.values(board.nodes).filter(n=>!n.deleted),edges=Object.values(board.edges).filter(e=>!e.deleted);
   for(const [id,n] of Object.entries(board.nodes)){
-    if(typeof n.deleted!=='boolean'||(n.parentId!==null&&typeof n.parentId!=='string')||id!==n.id||!Number.isSafeInteger(n.revision)||n.revision<1||typeof n.title!=='string'||!n.title.trim()||typeof n.content!=='string'||typeof n.summary!=='string')fail('INVALID_PLANNING','规划标题、内容或版本无效');
+    if(typeof n.deleted!=='boolean'||(n.parentId!==null&&typeof n.parentId!=='string')||id!==n.id||!Number.isSafeInteger(n.revision)||n.revision<1||typeof n.title!=='string'||!n.title.trim()||typeof n.content!=='string'||typeof n.summary!=='string'||(n.groupId!==null&&n.groupId!==undefined&&!Object.hasOwn(board.groups,n.groupId)))fail('INVALID_PLANNING','规划标题、内容或版本无效');
     if(!['long','phase','near','unspecified'].includes(n.scope)||!['idea','selected','written','dropped'].includes(n.status))fail('INVALID_PLANNING','规划范围或状态无效');
     if(!Array.isArray(n.threads)||n.threads.some(t=>typeof t!=='string')||!Array.isArray(n.chapterRefs)||!Array.isArray(n.memoryRefs))fail('INVALID_PLANNING','关联字段无效');
     if(!n.deleted&&n.parentId&&(!own(board.nodes,n.parentId)||board.nodes[n.parentId].deleted))fail('INVALID_PLANNING','父规划不存在');

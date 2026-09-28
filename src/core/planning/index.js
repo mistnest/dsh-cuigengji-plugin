@@ -9,9 +9,11 @@ const check=(item,revision)=>{if(item.revision!==revision)fail('CONFLICT',`规�
 const page=(values,args)=>{const offset=args.offset??0,limit=args.limit??50;if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>200)fail('INVALID_INPUT','分页参数无效');return {items:values.slice(offset,offset+limit),total:values.length,nextOffset:offset+limit<values.length?offset+limit:null};};
 export function planningAction(novel,action,args,actor) {
   const board=ensurePlanning(novel);
+  if(action==='planning.groups') return Object.values(board.groups);
+  if(action==='planning.group.create') { const id=randomUUID(); board.groups[id]={id,revision:1,name:args.name,summary:args.summary||'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}; return board.groups[id]; }
   if(action==='planning.list'||action==='planning.search'){
     const q=(args.query||'').toLowerCase();
-    const rows=Object.values(board.nodes).filter(n=>(args.includeDeleted||!n.deleted)&&(args.parentId===undefined||n.parentId===args.parentId)&&(!args.status||n.status===args.status)&&(!args.thread||n.threads.includes(args.thread))&&(!q||`${n.title}\n${n.summary}\n${n.content}`.toLowerCase().includes(q))).map(({content,...n})=>n);
+    const rows=Object.values(board.nodes).filter(n=>(args.includeDeleted||!n.deleted)&&(args.parentId===undefined||n.parentId===args.parentId)&&(args.groupId===undefined||n.groupId===args.groupId)&&(!args.status||n.status===args.status)&&(!args.thread||n.threads.includes(args.thread))&&(!q||`${n.title}\n${n.summary}`.toLowerCase().includes(q))).map(({content,...n})=>n);
     return {...page(rows,args),edges:Object.values(board.edges).filter(e=>!e.deleted),sequence:board.sequence};
   }
   if(action==='planning.get'){const node=entity(board.nodes,args.nodeId);return {node,edges:Object.values(board.edges).filter(e=>!e.deleted&&(e.from===node.id||e.to===node.id)),children:Object.values(board.nodes).filter(n=>!n.deleted&&n.parentId===node.id).map(({content,...n})=>n),sequence:board.sequence};}
@@ -58,4 +60,4 @@ export function planningAction(novel,action,args,actor) {
   draft.sequence=transaction.sequence;draft.transactions.push(transaction);novel.planning=draft;
   return {transactionId:transaction.id,sequence:draft.sequence,mapping,changed:transaction.changes.map(c=>({id:c.id,collection:c.collection,revision:c.after.revision}))};
 }
-function pickNode(value={}) {return Object.fromEntries(['title','summary','content','scope','status','parentId','threads','chapterRefs','memoryRefs'].filter(k=>value[k]!==undefined).map(k=>[k,value[k]]));}
+function pickNode(value={}) {return Object.fromEntries(['title','summary','content','scope','status','parentId','groupId','threads','chapterRefs','memoryRefs'].filter(k=>value[k]!==undefined).map(k=>[k,value[k]]));}

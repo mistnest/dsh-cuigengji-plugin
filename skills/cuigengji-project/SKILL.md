@@ -32,7 +32,7 @@ description: 接手已绑定的小说项目，按任务读取正文、预设、�
 | 查完整目录或定位章节 | `cuigengji_project` | `chapter.list`（可按 `volumeId`）；`chapter.search`（`query`，可选 `limit`） |
 | 读取正文 | `cuigengji_project` | `chapter.get`（`chapterId`，可选 `start/maxChars`） |
 | 有效预设与会话任务 | `cuigengji_context` | `preset.read`；`binding.get` |
-| 查规划 | `cuigengji_plan` | `planning.search`（`query`）；`planning.list`（`parentId/status/thread/offset/limit`）；`planning.get`（`nodeId`） |
+| 查规划 | `cuigengji_plan` | `planning.search`（`query`）；`planning.list`（`parentId/groupId/status/thread/offset/limit`）；`planning.groups`；`planning.get`（`nodeId`） |
 | 查人物、世界与关系 | `cuigengji_memory` | `graph.list`（`query`）；`graph.get`（`nodeId`）；`edge.list`（`nodeId`）；`edge.get`（`edgeId`） |
 
 例如读取当前参考章：向 `cuigengji_project` 传入 `{"action":"chapter.get","args":{"chapterId":"从索引取得的ID","start":0,"maxChars":12000}}`。`nextStart` 非空表示尚有正文；继续读所需范围。分页期间版本发生变化时重新读取，不能拼接两个版本。

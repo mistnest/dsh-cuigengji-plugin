@@ -131,6 +131,9 @@ export const styles = `
 .cuigengji .planning-card.selected { outline:2px solid var(--dsw-focus-ring-color,#7187dc); }
 .cuigengji .planning-title { display:block; font-weight:600; border:0; background:none; text-align:left; width:100%; overflow-wrap:anywhere; }
 .cuigengji .planning-card p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:3px 0; font-size:12px; }
+.cuigengji .group-filter { display:flex; gap:6px; overflow:auto; padding:4px 0; scrollbar-width:thin; }
+.cuigengji .group-filter button { white-space:nowrap; border:1px solid var(--dsw-alias-border-l1,#8884); border-radius:999px; padding:5px 10px; background:transparent; }
+.cuigengji .group-filter button[aria-pressed=true] { background:var(--dsw-alias-bg-layer-1,#eef0f5); border-color:var(--dsw-focus-ring-color,#7187dc); font-weight:600; }
 .cuigengji .drag-handle { cursor:grab; touch-action:none; font-size:11px; opacity:.7; }
 .cuigengji .canvas-tools { padding:0 12px; flex:none; }
 .cuigengji .planning-history { position:absolute; inset:0; z-index:30; background:var(--dsw-alias-bg-base,#fff); }
