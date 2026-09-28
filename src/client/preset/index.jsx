@@ -35,7 +35,7 @@ function PresetEditor({call,novelId,run,busy,initial}) {
       <label>提示词内容<textarea className="prose" disabled={busy} value={block.content} onChange={e=>{const next={...block,content:e.target.value};update(i,{content:e.target.value,enabled:block.enabled&&!presetBlockReason(next)});}}/></label>
       <div className="row"><button disabled={busy||i===0} onClick={()=>move(i,-1)}>上移</button><button disabled={busy||i===value.blocks.length-1} onClick={()=>move(i,1)}>下移</button><button disabled={busy} onClick={()=>{change(v=>({...v,blocks:v.blocks.filter((_,j)=>j!==i)}));setSelected(value.blocks.length>1?Math.min(i,value.blocks.length-2):null);}}>移除条目</button></div>
     </details>;})}
-    </main></div><details className="card"><summary>当前草稿的生效文本预览 · {preview.length} 字符</summary><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{preview||'预设未启用或没有启用的文本条目。'}</pre><p className="muted">这是预设部分；DSH 自身指令、写作说明和小说参考资料另行组装。</p></details>
+    </main></div><details className="card"><summary>当前草稿的生效文本预览 · {preview.length} 字符</summary><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{preview||'预设未启用或没有启用的文本条目。'}</pre><p className="muted">保存并启用后，写作助手可按需读取这些文本；不会自动加入每轮提示词。</p></details>
     {dirty&&<div className="sticky-actions"><SaveBar {...{dirty,busy}} error={cacheError} invalid={invalid||(!value.name.trim()?'请填写预设名称':'')} onSave={save} label="保存预设"/></div>}
   </div>;
 }

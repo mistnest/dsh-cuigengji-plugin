@@ -14,6 +14,8 @@ const actor = {kind:'human',sessionId:'ui-smoke'};
 const novel = await store.dispatch('novel.create',{title:'浏览器测试小说'},actor);
 await store.dispatch('binding.set',{novelId:novel.id},actor);
 const chapter = await store.dispatch('chapter.create',{novelId:novel.id,title:'第一章',content:'门口有人敲门。'},actor);
+await store.dispatch('binding.set',{novelId:novel.id,chapterId:chapter.id,goal:'接续门外的相遇'},actor);
+const rpcActions=[];
   const output = await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{Workbench}from'./src/client/index.tsx';const rpc=async(action,args,sessionId)=>{const r=await fetch('/dispatch',{method:'POST',body:JSON.stringify({action,args,sessionId})});const value=await r.json();if(!r.ok)throw new Error(value.error);return value;};createRoot(document.getElementById('root')).render(<Workbench sessionId="ui-smoke" rpc={rpc}/>);`,resolveDir:root,loader:'tsx'},bundle:true,write:false,format:'iife',define:{'process.env.NODE_ENV':'"development"'}});
 const server = createServer(async(req,res)=>{
   try {
@@ -21,10 +23,11 @@ const server = createServer(async(req,res)=>{
     if(req.url==='/dispatch'){
       let body='';for await(const part of req)body+=part;
       const {action,args,sessionId}=JSON.parse(body);
+      rpcActions.push(action);
       res.setHeader('content-type','application/json');
       res.end(JSON.stringify(await store.dispatch(action,args,{kind:'human',sessionId})));return;
     }
-    res.setHeader('content-type','text/html');res.end('<!doctype html><html lang="zh"><meta charset="utf-8"><title>cuigengji UI smoke</title><body><div id="root"></div><script src="/bundle.js"></script></body></html>');
+    res.setHeader('content-type','text/html');res.end('<!doctype html><html lang="zh"><meta charset="utf-8"><title>cuigengji UI smoke</title><style>html,body,#root{height:100%;margin:0}</style><body><div id="root"></div><script src="/bundle.js"></script></body></html>');
   }catch(e){res.statusCode=400;res.end(JSON.stringify({error:e.message}));}
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -58,6 +61,26 @@ try {
   await page.getByRole('button',{name:/规划/}).first().click();
   await mkdir(join(root,'test-results'),{recursive:true});
   await page.screenshot({path:join(root,'test-results','ui-smoke.png'),fullPage:true});
+  await page.getByRole('button',{name:'AI 参考',exact:true}).click();
+  const drawer=page.locator('.reference-drawer');
+  await expect(drawer.getByRole('heading',{name:'项目接手信息'})).toBeVisible();
+  await expect(drawer.getByText('参考章节：第一章',{exact:true})).toBeVisible();
+  await expect(drawer.getByText('当前任务：接续门外的相遇',{exact:true})).toBeVisible();
+  await drawer.getByText('查看完整接手说明',{exact:true}).click();
+  await expect(drawer.getByText(/列出1\/1章/)).toBeVisible();
+  await expect(drawer).not.toContainText('门外站着一位陌生姑娘。');
+  await expect(drawer).not.toContainText('住在隔壁的剑仙。');
+  if(rpcActions.includes('context.get'))throw new Error('handoff preview must not fetch prose context');
+  await page.screenshot({path:join(root,'test-results','handoff-desktop.png'),fullPage:true});
+  await page.setViewportSize({width:420,height:900});
+  await expect(drawer.getByRole('heading',{name:'项目接手信息'})).toBeVisible();
+  if(await drawer.evaluate(el=>el.scrollWidth>el.clientWidth+1))throw new Error('handoff drawer overflows horizontally');
+  await page.screenshot({path:join(root,'test-results','handoff-narrow.png'),fullPage:true});
+  await drawer.getByRole('button',{name:'写作预设',exact:true}).click();
+  await expect(drawer).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();
+  await page.getByText(/当前草稿的生效文本预览/).click();
+  await expect(page.getByText('保存并启用后，写作助手可按需读取这些文本；不会自动加入每轮提示词。',{exact:true})).toBeVisible();
   if(errors.length)throw new Error(errors.join('\n'));
-  console.log(JSON.stringify({ok:true,checks:['chapter edit','draft survives reload','资料 CRUD create','planning entry'],dataDir:directory}));
+  console.log(JSON.stringify({ok:true,checks:['chapter edit','draft survives reload','资料 CRUD create','planning entry','metadata-only handoff drawer','narrow drawer fit','preset navigation and on-demand copy'],dataDir:directory}));
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

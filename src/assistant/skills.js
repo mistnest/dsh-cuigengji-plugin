@@ -1,26 +1,21 @@
 import { readFileSync } from 'node:fs';
 export const skillSpecs = [
+  ['cuigengji-project', '接手已绑定的小说项目，按任务读取正文、预设、规划和角色/世界资料。'],
   ['cuigengji-plan', '讨论小说创意、读者体验、人物关系和情节方向，先向作者汇报，协同维护分层故事规划。'],
   ['cuigengji-write', '依据作者方向写中文小说场景，重视人物视角、沉浸感、自然对话与手机阅读。'],
   ['cuigengji-revise', '审阅或修改现有正文，检查因果、人物选择、信息边界、章节衔接及机械表达。'],
   ['cuigengji-memory', '写作或修订后维护角色卡、世界书和关系，依据实际正文核对来源与过期记忆。'],
 ];
 export function registerSkills(ctx) {
+  const shared = readFileSync(new URL('../../skills/cuigengji-project/SKILL.md', import.meta.url), 'utf8');
+  const body = text => text.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, '').trim();
   for (const [name, description] of skillSpecs) {
+    const task = readFileSync(new URL(`../../skills/${name}/SKILL.md`, import.meta.url), 'utf8');
     ctx.skills.register({ name, description, source: 'cuigengji',
-      content: readFileSync(new URL(`../../skills/${name}/SKILL.md`, import.meta.url), 'utf8'),
+      content: name === 'cuigengji-project' ? task : `${task.trim()}\n\n${body(shared)}`,
     });
   }
 }
-export const persona = `你正在使用催更姬小说写作扩展。
-先读取当前会话绑定的小说与任务；没有绑定时请作者在催更姬面板选择小说。
-构思、写作、修订、记忆维护均由你完成，根据任务加载对应 cuigengji Skill。
-作者的方向优先。规划是可调整的未来意图，不是写入许可或已发生事实。没有规划也可以按作者要求写正文；重大偏离先讨论。使用 cuigengji_plan 的 planning.list/search/get 按需读取，planning.apply 协同调整节点和关系。批量操作提供 requestId、reason 和各对象 expectedRevision，删除明确 confirm 与 childPolicy。
-优先调用小说专用工具读取和修改作品，以保留正文版本、来源和审计记录。按任务需要使用其它可用工具。
-世界书、角色卡和关系不自动装填。涉及既有人物、地点、规则时，先用 graph.list 的 query 搜索名称、别名或正文关键词，再用 graph.get 读取相关资料，用 edge.list/get 查询关系；不要一口气读取整个图谱。
-检查资料的 status、factType、sources、knownBy 和 revision；未确认、过期、未来计划不能当成当前既定事实，人物知情范围也不能当成所有人共知。
-相关资料仍在当前上下文且无更新提示时可复用；压缩后缺失、出现冲突或版本更新提示时重新读取。没查到就说明或询问，不自行编成既定设定。
-已有正文是已经发生事件的来源；计划是未来意图。角色相信的事不等于客观事实。
-来源过期的记忆必须核对。需要历史情节时按需读原文，不把缺失信息编成既定事实。
-修改后简要报告修改点、正文版本与仍需处理的问题；不声称未完成的写入已完成。
-多个会话共享作品，冲突时重新读取并比较；不要自动强制覆盖。`;
+export const persona = `你是帮助用户创作和维护小说的写作助手。
+接手说明只提供项目索引。写作、修订、规划或记忆任务先加载对应的 cuigengji Skill（已包含项目接手指南）；其他小说任务加载 cuigengji-project，再按需读取资料。
+自然回应用户，遵循用户当前请求；不声称未读取的内容已知、未完成的写入已完成。`;

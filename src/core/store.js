@@ -1,10 +1,11 @@
 import { ensurePlanning, planningAction, validatePlanning } from './planning/index.js';
 import { selectReference } from './context.js';
+import { createHandoff } from './handoff.js';
 import { mkdir, readFile, writeFile, rename, unlink, rmdir, open } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { previewTavern } from './import-tavern.js';
-import { importPreset, validatePreset } from './preset.js';
+import { compilePreset, importPreset, validatePreset } from './preset.js';
 
 export class StoreError extends Error {
   constructor(code, message) { super(message); this.name = 'StoreError'; this.code = code; }
@@ -255,6 +256,7 @@ export class Store {
     if (action.startsWith('planning.')) { const previous=n.planning?.sequence; const result=planningAction(n,action,a,actor); if(previous!==n.planning.sequence)touch(n); return result; }
     if (action.startsWith('plan.')) fail('MIGRATED_ACTION', '旧规划接口已迁移，请使用 cuigengji_plan 的 planning.list/get/apply');
     if (action === 'novel.get') return { ...n, tavernSources: undefined, planning: undefined, plan: undefined, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
+    if (action === 'novel.handoff') return createHandoff(n, binding, a);
     if (action === 'novel.export') { ensurePlanning(n); return { format: 'cuigengji', schemaVersion: 2, exportedAt: now(), novel: clone(n) }; }
     if (action === 'novel.update' || action === 'novel.archive') {
       cas(n, a);
@@ -389,6 +391,12 @@ export class Store {
       touch(n); return e;
     }
     if (action === 'preset.get') return n.preset || null;
+    if (action === 'preset.read') return {
+      enabled: Boolean(n.preset?.enabled),
+      name: n.preset?.name || '',
+      revision: n.preset?.revision || 0,
+      content: compilePreset(n.preset),
+    };
     if (action === 'preset.preview' || action === 'preset.set') {
       if (actor.kind !== 'human') fail('HUMAN_REQUIRED', '预设只能由作者配置');
       if (action === 'preset.preview') return importPreset(a.input, a.orderId);
@@ -398,14 +406,19 @@ export class Store {
       n.preset=record({name:value.name,enabled:value.enabled,blocks:clone(value.blocks),raw:clone(value.raw ?? null),warnings:clone(value.warnings ?? []),revision:(n.preset?.revision||0)+1});
       touch(n);return n.preset;
     }
-    if (action === 'context.get') return { ...this.context(n, { ...a, chapterId: a.chapterId || binding?.chapterId }), task: binding ? { stage: binding.stage, goal: binding.goal, chapterId: binding.chapterId } : null };
+    if (action === 'context.get') return {
+      ...this.context(n, { ...a, chapterId: a.chapterId || (a.includeChapters === true ? binding?.chapterId : null) }),
+      task: binding ? { stage: binding.stage, goal: binding.goal, chapterId: binding.chapterId } : null,
+    };
     fail('UNKNOWN_ACTION', `未知操作：${action}`);
   }
 
   context(n, a) {
     if (a.chapterId) get(n.chapters, a.chapterId, '章节');
     const current = a.chapterId ? n.chapters[a.chapterId] : null;
-    const { items, omitted } = selectReference(n, a.chapterId);
+    const { items, omitted } = a.includeChapters === true || a.chapterId
+      ? selectReference(n, a.chapterId)
+      : { items: [], omitted: [] };
     const add = (kind, entity, content) => {
       if (!content) return;
       items.push({kind,id:entity.id,revision:entity.revision,title:entity.name,content,truncated:false});

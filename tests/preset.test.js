@@ -24,7 +24,7 @@ test('preset import preserves order, disables unsupported semantics, archives al
   assert.throws(()=>importPreset({temperature:1}),/prompts/);
   assert.throws(()=>importPreset({...raw,prompt_order:[{character_id:1,order:[]},{character_id:2,order:[]}]}),/选择排列/);
 });
-test('preset persistence enforces human authorship and CAS, and prompt assembly is scoped and actually injects text',async t=>{
+test('preset persistence enforces human authorship and CAS; Agent reads effective text on demand',async t=>{
   const root=await mkdtemp(join(tmpdir(),'preset-test-'));t.after(()=>rm(root,{recursive:true,force:true}));
   const store=new Store(root),human={kind:'human',sessionId:'author'};
   const novel=await store.dispatch('novel.create',{title:'预设验收'},human);
@@ -37,14 +37,22 @@ test('preset persistence enforces human authorship and CAS, and prompt assembly 
   const base={sections:[{name:'host',text:'DSH'}],contexts:[],tools:[],variables:{}};
   const assemble=id=>handlers['system-prompt/assemble'](base,{agent:{id}},async()=>base);
   assert.equal((await assemble('unbound')).sections.length,1);
-  const bound=await assemble('author');assert.equal(bound.sections.find(s=>s.name==='cuigengji:preset').text,'保持人物视角\n\n短句');
-  assert.match(bound.contexts[0].text,/^# 小说参考资料/);
-  assert.doesNotMatch(bound.contexts[0].text,/"usedChars"|"staleMemory"/);
-  assert.equal(base.sections.length,1);assert.equal(audit[0][1].preset.revision,1);
+  const bound=await assemble('author');
+  assert.ok(bound.sections.some(s=>s.name==='cuigengji:handoff'));
+  assert.ok(bound.sections.some(s=>s.name==='cuigengji:writing'));
+  assert.equal(bound.sections.some(s=>s.name==='cuigengji:preset'),false);
+  assert.deepEqual(bound.contexts,[]);
+  assert.equal(JSON.stringify(bound.sections).includes('保持人物视角'),false);
+  const effective=await store.dispatch('preset.read',{}, {kind:'agent',sessionId:'author'});
+  assert.equal(effective.content,'保持人物视角\n\n短句');
+  assert.equal(Object.hasOwn(effective,'raw'),false);
+  assert.equal(base.sections.length,1);assert.equal(audit[0][1].action,'handoff.assembled');
+  assert.equal(JSON.stringify(audit[0][1]).includes('保持人物视角'),false);
   const backup=await store.dispatch('novel.export',{},human);assert.deepEqual(backup.novel.preset.raw,raw);
   const root2=await mkdtemp(join(tmpdir(),'preset-restore-'));t.after(()=>rm(root2,{recursive:true,force:true}));
   const restored=new Store(root2);await restored.dispatch('novel.import',{backup},human);
   assert.deepEqual(await restored.dispatch('preset.get',{novelId:novel.id},human),saved);
   await store.dispatch('preset.set',{expectedRevision:1,preset:{...saved,enabled:false}},human);
+  assert.equal((await store.dispatch('preset.read',{},human)).content,'');
   assert.equal((await assemble('author')).sections.some(s=>s.name==='cuigengji:preset'),false);
 });

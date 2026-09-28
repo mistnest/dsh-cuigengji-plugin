@@ -21,9 +21,11 @@ async function fixture(t) {
 
 test('memory is available through search and explicit read but never auto-injected', async t => {
   const { run } = await fixture(t);
+  await run('chapter.create', { title:'未请求章节', content:'不得隐式塞入的正文' });
   const visible = await run('graph.create', { type:'world_entry', name:'雨城', content:'雨'.repeat(800), status:'active' });
   const hidden = await run('graph.create', { type:'world_entry', name:'待核对', content:'不应注入', status:'unconfirmed' });
   const context = await run('context.get', {maxChars:600});
+  assert.deepEqual(context.items, []);
   assert.equal(context.items.some(i=>i.id===visible.id),false);
   assert.equal((await run('graph.list',{query:'雨雨雨'}))[0].id,visible.id);
   assert.equal((await run('graph.get',{nodeId:visible.id})).content.length,800);
@@ -32,6 +34,28 @@ test('memory is available through search and explicit read but never auto-inject
   assert.equal(explicit.items.some(i=>i.id===hidden.id),false);
   assert.equal(context.items.some(i=>i.id===hidden.id),false);
   assert.equal(explicit.items[0].content.length,800);
+});
+
+test('handoff is a bounded project index and chapter context is explicit', async t => {
+  const { run, novel, agent } = await fixture(t);
+  const chapters = [];
+  for (let i = 0; i < 35; i++) chapters.push(await run('chapter.create', {
+    title: `第${i + 1}章`, order: i, content: `正文私密内容${i}`,
+  }));
+  await run('binding.set', { novelId: novel.id, chapterId: chapters[0].id }, agent);
+  const handoff = await run('novel.handoff', {}, agent);
+  assert.equal(handoff.chapterCount, 35);
+  assert.equal(handoff.chapters.length, 21);
+  assert.equal(handoff.chapters[1].id, chapters[15].id);
+  assert.ok(handoff.chapters.some(chapter => chapter.id === chapters[0].id));
+  assert.equal(handoff.chapters.some(chapter => Object.hasOwn(chapter, 'content')), false);
+  assert.equal(JSON.stringify(handoff).includes('正文私密内容'), false);
+
+  const implicit = await run('context.get', {}, agent);
+  assert.deepEqual(implicit.items, []);
+  const explicit = await run('context.get', { includeChapters: true }, agent);
+  assert.equal(explicit.items.some(item => item.id === chapters[0].id), true);
+  assert.equal(explicit.items.some(item => item.content === '正文私密内容0'), true);
 });
 
 test('chapter windows, unique patches, CAS, history, soft deletion and restore', async t => {

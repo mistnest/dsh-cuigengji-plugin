@@ -29,10 +29,15 @@ test('binding a novel does not register a host tool guard', () => {
   assert.ok(listeners['agent/pre-step']);
 });
 
-test('prompt adds persona and context only for a bound agent', async () => {
+test('prompt adds a content-free project handoff only for a bound agent', async () => {
   const listeners = {};
   const ctx = { on: (name, fn) => { listeners[name] = fn; } };
-  const store = { dispatch: async (action) => action === 'context.get' ? { novel: 'n1', items:[] } : { novelId: 'n1' } };
+  const calls = [];
+  const store = { dispatch: async (action) => {
+    calls.push(action);
+    assert.equal(action, 'novel.handoff', 'assembly may only fetch the project handoff');
+    return { novel: { id:'n1', title:'测试作品', revision:1 }, binding:{ stage:'write', goal:'续写' }, chapters:[], chapterCount:0, volumes:[], volumeCount:0, available:{ preset:false, planning:0, memory:0 } };
+  } };
   const audited = [];
   registerPrompt(ctx, { store, contextChars: 2000, audit: async (...args) => audited.push(args), resolveBinding: async id => id === 'bound' ? { novelId: 'n1' } : null });
   const next = async () => ({ sections: [{ name: 'base', text: 'base' }], contexts: [], tools: [], variables: {} });
@@ -40,6 +45,44 @@ test('prompt adds persona and context only for a bound agent', async () => {
   assert.equal(unbound.sections.length, 1);
   const bound = await listeners['system-prompt/assemble']({ sections: [], contexts: [] }, { agent: { id: 'bound' } }, next);
   assert.equal(bound.sections.some(section => section.name === 'cuigengji:writing'), true);
-  assert.equal(bound.contexts[0].name, 'cuigengji:novel');
+  assert.equal(bound.contexts.length, 0);
+  const handoff = bound.sections.find(section => section.name === 'cuigengji:handoff');
+  assert.match(handoff.text,/测试作品/);
+  assert.doesNotMatch(handoff.text,/章节正文内容/);
   assert.equal(audited.length, 1);
+  assert.deepEqual(calls, ['novel.handoff']);
+});
+
+test('reassembly removes old plugin content, preserves host entries and cleans up after unbind', async () => {
+  let assemble;
+  let binding = { novelId: 'n1' };
+  const store = { dispatch: async action => {
+    assert.equal(action, 'novel.handoff');
+    return { novel: { id: 'n1', title: '当前作品', revision: 2 }, binding: {}, chapters: [], chapterCount: 0, volumes: [], volumeCount: 0, available: {} };
+  } };
+  registerPrompt({ on: (_, handler) => { assemble = handler; } }, {
+    store, audit: async () => {}, resolveBinding: async () => binding,
+  });
+  const hostSection = { name: 'host', text: '宿主提示词' };
+  const hostContext = { name: 'host-data', text: '用户附件' };
+  const original = {
+    sections: [hostSection, { name: 'cuigengji:preset', text: 'OLD_PRESET' }, { name: 'cuigengji:writing', text: 'OLD_WRITING' }],
+    contexts: [hostContext, { name: 'cuigengji:novel', text: 'OLD_PROSE' }],
+    tools: [{ name: 'shell' }, { name: 'delegate' }], variables: { host: true },
+  };
+  const before = structuredClone(original);
+  const context = { agent: { id: 'bound' } };
+  const first = await assemble({}, context, async () => original);
+  const second = await assemble({}, context, async () => first);
+  assert.deepEqual(second, first);
+  assert.deepEqual(original, before);
+  assert.equal(first.sections[0], hostSection);
+  assert.deepEqual(first.contexts, [hostContext]);
+  assert.equal(first.tools, original.tools);
+  assert.equal(first.variables, original.variables);
+  assert.doesNotMatch(JSON.stringify(first), /OLD_/);
+  binding = null;
+  const unbound = await assemble({}, context, async () => second);
+  assert.deepEqual(unbound.sections, [hostSection]);
+  assert.deepEqual(unbound.contexts, [hostContext]);
 });

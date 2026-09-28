@@ -37,7 +37,7 @@ export function importPreset(input, orderId) {
   }
   for (const p of input.prompts) add(p,order?false:p.enabled===true);
   return {name:typeof input.name==='string'?input.name:'导入的酒馆预设',enabled:false,blocks,raw:input,
-    warnings:['导入后默认停用，请核对条目并保存启用。只按列表顺序注入普通 system 文本，位置在插件写作说明之后。', '温度、top_p、模型、token 上限等采样配置未应用；请在 DSH 模型设置中配置。', '聊天历史插入、消息角色模拟、动态占位和宏暂不兼容，对应条目保持停用；原始字段随备份保存。']};
+    warnings:['导入后默认停用，请核对条目并保存启用。启用的兼容文本按列表顺序提供给写作助手按需读取，不自动加入系统提示词。', '温度、top_p、模型、token 上限等采样配置未应用；请在 DSH 模型设置中配置。', '聊天历史插入、消息角色模拟、动态占位和宏暂不兼容，对应条目保持停用；原始字段随备份保存。']};
 }
 export function validatePreset(value) {
   if (JSON.stringify(value)?.length > 2_000_000) fail('预设总大小超过 2 MB');

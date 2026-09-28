@@ -1,9 +1,9 @@
-import { renderReference } from '../core/context.js';
 import { persona } from './skills.js';
-import { compilePreset } from '../core/preset.js';
+import { renderHandoff } from '../core/handoff-text.js';
 
-const CONTEXT_NAME = 'cuigengji:novel';
+const HANDOFF_NAME = 'cuigengji:handoff';
 const PERSONA_NAME = 'cuigengji:writing';
+const OWN_NAMES = new Set([HANDOFF_NAME, PERSONA_NAME, 'cuigengji:preset', 'cuigengji:novel']);
 
 export function registerPrompt(ctx, { store, audit, resolveBinding }) {
   // section/context text providers in DSH 0.1.7 are synchronous. The supported
@@ -16,28 +16,28 @@ export function registerPrompt(ctx, { store, audit, resolveBinding }) {
     const binding = resolveBinding
       ? await resolveBinding(actor.sessionId)
       : await store.dispatch('binding.get', {}, actor);
-    if (!binding) return result;
-    const material = await store.dispatch('context.get', {}, actor);
-    const preset = await store.dispatch('preset.get', {}, actor);
-    const presetText = compilePreset(preset);
+    // Remove only our entries, including legacy content on reassembly/unbind.
+    const clean = {
+      ...result,
+      sections: result.sections.filter(entry => !OWN_NAMES.has(entry.name)),
+      contexts: result.contexts.filter(entry => !OWN_NAMES.has(entry.name)),
+    };
+    if (!binding) return clean;
+    const handoff = await store.dispatch('novel.handoff', {}, actor);
     context.signal?.throwIfAborted();
     await audit(actor.sessionId, {
-      action: 'context.assembled',
-      binding,
-      skillVersion: '0.1.0',
-      context: material,
-      preset: presetText ? { revision:preset.revision, text:presetText } : null,
+      action: 'handoff.assembled',
+      novelId: handoff.novel.id,
+      skillVersion: '0.2.0',
+      novelRevision: handoff.novel.revision,
+      chapterIds: handoff.chapters.map(chapter => chapter.id),
     });
     return {
-      ...result,
+      ...clean,
       sections: [
-        ...result.sections.filter(entry => entry.name !== PERSONA_NAME && entry.name !== 'cuigengji:preset'),
+        ...clean.sections,
         { name: PERSONA_NAME, text: persona, interpolate: false },
-        ...(presetText ? [{name:'cuigengji:preset',text:presetText,interpolate:false}] : []),
-      ],
-      contexts: [
-        ...result.contexts.filter(entry => entry.name !== CONTEXT_NAME),
-        { name: CONTEXT_NAME, text: renderReference(material) },
+        { name: HANDOFF_NAME, text: renderHandoff(handoff), interpolate: false },
       ],
     };
   });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { apply } from '../src/index.js';
@@ -29,6 +29,19 @@ test('registered DSH tools execute through session policy and real MCP', async t
   const tx=await execute('cuigengji_plan','planning.apply',{requestId:'host-planning',operations:[{op:'node.create',value:{title:'雨夜来客'}}]});
   assert.equal(tx.changed.length,1);
   const chapter = await execute('cuigengji_project', 'chapter.create', { title: '第一章', content: '雨停了。' });
+  const savedPreset = await dispatch('preset.set', { expectedRevision: 0, preset: {
+    name: '文风', enabled: true, blocks: [{ identifier: 'style', name: '表达', enabled: true, role: 'system', content: '短句与留白' }],
+  } });
+  const beforeRead = await readFile(join(root, 'store.json'), 'utf8');
+  const handoff = await execute('cuigengji_project', 'novel.handoff');
+  assert.equal(handoff.novel.id, novel.id);
+  assert.equal(handoff.chapters[0].id, chapter.id);
+  assert.doesNotMatch(JSON.stringify(handoff), /雨停了|短句与留白/);
+  assert.equal((await execute('cuigengji_context', 'preset.read')).content, '短句与留白');
+  assert.deepEqual((await execute('cuigengji_context', 'context.get')).items, []);
+  assert.equal(await readFile(join(root, 'store.json'), 'utf8'), beforeRead, 'read tools must not create request-cache entries or rewrite the store');
+  await dispatch('preset.set', { expectedRevision: savedPreset.revision, preset: { ...savedPreset, enabled: false } });
+  assert.equal((await execute('cuigengji_context', 'preset.read')).content, '');
   const node = await execute('cuigengji_memory', 'graph.create', { type: 'character_card', name: '来客', sources: [{ chapterId: chapter.id, revision: chapter.revision }] });
   assert.equal((await execute('cuigengji_memory', 'graph.get', { nodeId: node.id })).name, '来客');
   await execute('cuigengji_project', 'chapter.update', { chapterId: chapter.id, expectedRevision: chapter.revision, content: '' });
