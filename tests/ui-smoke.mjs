@@ -6,10 +6,12 @@ import { mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { Store } from '../src/core/store.js';
+import { WorkData } from '../src/data/workspace.js';
 
 const root = resolve(import.meta.dirname, '..');
 const directory = await mkdtemp(join(tmpdir(), 'cuigengji-ui-'));
 const store = new Store(directory);
+const workData = new WorkData(store);
 const actor = {kind:'human',sessionId:'ui-smoke'};
 const novel = await store.dispatch('novel.create',{title:'浏览器测试小说'},actor);
 await store.dispatch('binding.set',{novelId:novel.id},actor);
@@ -25,7 +27,8 @@ const server = createServer(async(req,res)=>{
       const {action,args,sessionId}=JSON.parse(body);
       rpcActions.push(action);
       res.setHeader('content-type','application/json');
-      res.end(JSON.stringify(await store.dispatch(action,args,{kind:'human',sessionId})));return;
+      const value=action.startsWith('workspace.')?await workData[{'workspace.status':'status','workspace.export':'export','workspace.preview':'preview','workspace.import':'import'}[action]](args.backup):await store.dispatch(action,args,{kind:'human',sessionId});
+      res.end(JSON.stringify(value));return;
     }
     res.setHeader('content-type','text/html');res.end('<!doctype html><html lang="zh"><meta charset="utf-8"><title>cuigengji UI smoke</title><style>html,body,#root{height:100%;margin:0}</style><body><div id="root"></div><script src="/bundle.js"></script></body></html>');
   }catch(e){res.statusCode=400;res.end(JSON.stringify({error:e.message}));}
@@ -81,6 +84,17 @@ try {
   await expect(page.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();
   await page.getByText(/当前草稿的生效文本预览/).click();
   await expect(page.getByText('保存并启用后，写作助手可按需读取这些文本；不会自动加入每轮提示词。',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'工作数据 · 导入/导出',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'小说工作数据',exact:true})).toBeVisible();
+  await expect(page.getByText(directory,{exact:true})).toBeVisible();
+  const downloadEvent=page.waitForEvent('download');
+  await page.getByRole('button',{name:'导出全部工作数据',exact:true}).click();
+  const download=await downloadEvent;
+  await page.getByLabel('导入工作数据',{exact:true}).setInputFiles(await download.path());
+  await expect(page.getByRole('heading',{name:'导入预览',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'确认导入',exact:true}).click();
+  await expect(page.getByText(/导入完成。导入前备份/)).toBeVisible();
+  await page.screenshot({path:join(root,'test-results','work-data-narrow.png'),fullPage:true});
   if(errors.length)throw new Error(errors.join('\n'));
   console.log(JSON.stringify({ok:true,checks:['chapter edit','draft survives reload','资料 CRUD create','planning entry','metadata-only handoff drawer','narrow drawer fit','preset navigation and on-demand copy'],dataDir:directory}));
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

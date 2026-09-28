@@ -8,6 +8,7 @@ import { LocaleContext, registerLocale } from './locale.js';
 import { Memory } from './memory/index.jsx';
 import { Context } from './context/index.jsx';
 import { Manage } from './manage/index.jsx';
+import { WorkDataPage } from './data/index';
 import { Chapters } from './chapters/index.jsx';
 import { Planning } from './planning/index.jsx';
 import { Preset } from './preset/index.jsx';
@@ -92,7 +93,9 @@ function WorkbenchContent({ sessionId, rpc }) {
 
     </header>
     {error && <div className="notice error" role="alert">{error}<button onClick={()=>setError('')}>关闭提示</button></div>}
+    <div className="row" style={{padding:'4px 16px'}}><button onClick={()=>setTab('data')} aria-pressed={tab==='data'}>工作数据 · 导入/导出</button></div>
     <ResourceState resource={resource}>
+      {tab==='data'?<div className="page"><WorkDataPage {...{call,run,busy}}/></div>:<>
       {!novelId ? <div className="page">{tab==='manage'?<><button onClick={()=>setTab('chapters')}>‹ 返回作品选择</button><Manage {...{call,run,busy}} onOpen={openNovel}/></>:<div className="empty"><h2>从一本作品开始</h2><p>从上方选择作品，或创建一本。</p><div className="row"><button className="primary" onClick={create}>新建作品</button><button onClick={()=>setTab('manage')}>导入已有作品</button></div></div>}</div> : <div className="workbench-body" key={novelId}>{returnTarget&&<div className="return-strip"><button onClick={()=>{setTab(returnTarget);setReturnTarget(null);}}>‹ 返回{({plan:'规划',memory:'设定'})[returnTarget]||'上一页'}</button></div>}
         {tab==='chapters' && <Chapters {...{call,novelId,tick,run,busy,binding}} onReference={()=>setReferenceOpen(true)}/>} 
         {tab==='memory' && <div className="page"><Memory {...{call,novelId,tick,run,busy}} onChapter={id=>jump('chapters','chapter',id)}/></div>}
@@ -101,6 +104,7 @@ function WorkbenchContent({ sessionId, rpc }) {
         {tab==='context' && <div className="page"><Context {...{call,novelId,tick}} onNavigate={setTab}/></div>}
         {tab==='manage' && <div className="page"><Manage {...{call,novelId,novel,run,busy}} onOpen={openNovel}/></div>}
       </div>}
+      </>}
     </ResourceState>
     {referenceOpen && novelId && <aside className="reference-drawer"><div className="reference-drawer-head"><strong>AI 参考</strong><button aria-label="关闭 AI 参考" onClick={()=>setReferenceOpen(false)}>关闭</button></div><Context {...{call,novelId,tick}} onNavigate={next=>{setReferenceOpen(false);setTab(next);}}/></aside>}
   </section>;

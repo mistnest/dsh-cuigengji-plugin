@@ -11,6 +11,7 @@ import { registerPrompt } from './assistant/prompt.js';
 import { createSessionPolicy } from './assistant/session.js';
 import { TOOL_ACTIONS as allowed, isReadAction } from './core/actions.js';
 import { registerRpcRoute } from './transport/rpc.js';
+import { WorkData } from './data/workspace.js';
 
 export const name = 'cuigengji';
 export const inject = ['tools', 'systemPrompt', 'skills', 'connection'];
@@ -65,5 +66,5 @@ export async function apply(ctx, config = {}) {
     }));
   }
   sessionPolicy.register(ctx, memory);
-  registerRpcRoute(ctx, { dispatch, dataRoot: root });
+  registerRpcRoute(ctx, { dispatch, dataRoot: store.root, workData: new WorkData(store) });
 }
