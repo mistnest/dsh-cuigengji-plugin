@@ -8,7 +8,31 @@
 
 ## 安装
 
-先选择要安装的 DSH profile。默认使用 web：
+桌面版是当前主力运行方式。桌面端仍复用 DSH 的 Web client manifest，但插件要安装到 Electron 管理的 `desktop` profile；不要用 CLI 直接管理名为 `desktop` 的 profile。
+
+在官方 DSH 源码目录构建并启动桌面版：
+
+~~~powershell
+cd D:\deepseek-harness\dsh-upstream
+pnpm install --frozen-lockfile
+pnpm run build:official
+pnpm run build:desktop
+$env:DSH_HOME = 'D:\deepseek-harness\dsh-desktop\home'
+$env:DSH_DESKTOP_USER_DATA_DIR = 'D:\deepseek-harness\dsh-desktop\electron-user-data'
+$env:CUIGENGJI_DATA_ROOT = 'D:\deepseek-harness\dsh-desktop\cuigengji-data'
+pnpm run start:desktop
+~~~
+
+桌面端首次启动后，在另一个终端把插件安装到 Electron 的桌面 profile：
+
+~~~powershell
+cd D:\deepseek-harness\dsh-desktop\home\profiles\desktop
+pnpm add D:\deepseek-harness\cuigengji-plugin\dsh-cuigengji-0.1.0.tgz
+~~~
+
+然后将 `dsh-cuigengji` 加入该 profile 的 `dsh.profile.bundles`，重启桌面端。开发时每次源码或前端 bundle 更新后重新 `npm run build`、`npm pack`，再安装新的 tgz。
+
+如果仍使用浏览器版，选择要安装的 DSH profile。默认使用 web：
 
 ~~~powershell
 dsh plugin --profile web add D:\path\dsh-cuigengji-0.1.0.tgz
