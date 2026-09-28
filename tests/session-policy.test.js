@@ -29,40 +29,27 @@ test('binding a novel does not register a host tool guard', () => {
   assert.ok(listeners['agent/pre-step']);
 });
 
-test('prompt adds a content-free project handoff only for a bound agent', async () => {
+test('prompt stays static and does not fetch project data during assembly', async () => {
   const listeners = {};
   const ctx = { on: (name, fn) => { listeners[name] = fn; } };
   const calls = [];
-  const store = { dispatch: async (action) => {
-    calls.push(action);
-    assert.equal(action, 'novel.handoff', 'assembly may only fetch the project handoff');
-    return { novel: { id:'n1', title:'测试作品', revision:1 }, binding:{ stage:'write', goal:'续写' }, chapters:[], chapterCount:0, volumes:[], volumeCount:0, available:{ preset:false, planning:0, memory:0 } };
-  } };
+  const store = { dispatch: async action => calls.push(action) };
   const audited = [];
   registerPrompt(ctx, { store, contextChars: 2000, audit: async (...args) => audited.push(args), resolveBinding: async id => id === 'bound' ? { novelId: 'n1' } : null });
   const next = async () => ({ sections: [{ name: 'base', text: 'base' }], contexts: [], tools: [], variables: {} });
   const unbound = await listeners['system-prompt/assemble']({ sections: [], contexts: [] }, { agent: { id: 'none' } }, next);
-  assert.equal(unbound.sections.length, 1);
+  assert.equal(unbound.sections.length, 2);
   const bound = await listeners['system-prompt/assemble']({ sections: [], contexts: [] }, { agent: { id: 'bound' } }, next);
   assert.equal(bound.sections.some(section => section.name === 'cuigengji:writing'), true);
   assert.equal(bound.contexts.length, 0);
-  const handoff = bound.sections.find(section => section.name === 'cuigengji:handoff');
-  assert.match(handoff.text,/测试作品/);
-  assert.doesNotMatch(handoff.text,/章节正文内容/);
-  assert.equal(audited.length, 1);
-  assert.deepEqual(calls, ['novel.handoff']);
+  assert.equal(bound.sections.some(section => section.name === 'cuigengji:handoff'), false);
+  assert.deepEqual(audited, []);
+  assert.deepEqual(calls, []);
 });
 
-test('reassembly removes old plugin content, preserves host entries and cleans up after unbind', async () => {
+test('reassembly removes old plugin content and preserves host entries', async () => {
   let assemble;
-  let binding = { novelId: 'n1' };
-  const store = { dispatch: async action => {
-    assert.equal(action, 'novel.handoff');
-    return { novel: { id: 'n1', title: '当前作品', revision: 2 }, binding: {}, chapters: [], chapterCount: 0, volumes: [], volumeCount: 0, available: {} };
-  } };
-  registerPrompt({ on: (_, handler) => { assemble = handler; } }, {
-    store, audit: async () => {}, resolveBinding: async () => binding,
-  });
+  registerPrompt({ on: (_, handler) => { assemble = handler; } });
   const hostSection = { name: 'host', text: '宿主提示词' };
   const hostContext = { name: 'host-data', text: '用户附件' };
   const original = {
@@ -81,8 +68,7 @@ test('reassembly removes old plugin content, preserves host entries and cleans u
   assert.equal(first.tools, original.tools);
   assert.equal(first.variables, original.variables);
   assert.doesNotMatch(JSON.stringify(first), /OLD_/);
-  binding = null;
   const unbound = await assemble({}, context, async () => second);
-  assert.deepEqual(unbound.sections, [hostSection]);
+  assert.equal(unbound.sections.filter(section => section.name === 'cuigengji:writing').length, 1);
   assert.deepEqual(unbound.contexts, [hostContext]);
 });

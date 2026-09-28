@@ -36,9 +36,9 @@ test('preset persistence enforces human authorship and CAS; Agent reads effectiv
   const handlers={},audit=[];registerPrompt({on:(name,fn)=>handlers[name]=fn},{store,contextChars:2000,audit:async(...v)=>audit.push(v)});
   const base={sections:[{name:'host',text:'DSH'}],contexts:[],tools:[],variables:{}};
   const assemble=id=>handlers['system-prompt/assemble'](base,{agent:{id}},async()=>base);
-  assert.equal((await assemble('unbound')).sections.length,1);
+  assert.equal((await assemble('unbound')).sections.length,2);
   const bound=await assemble('author');
-  assert.ok(bound.sections.some(s=>s.name==='cuigengji:handoff'));
+  assert.equal(bound.sections.some(s=>s.name==='cuigengji:handoff'),false);
   assert.ok(bound.sections.some(s=>s.name==='cuigengji:writing'));
   assert.equal(bound.sections.some(s=>s.name==='cuigengji:preset'),false);
   assert.deepEqual(bound.contexts,[]);
@@ -46,8 +46,7 @@ test('preset persistence enforces human authorship and CAS; Agent reads effectiv
   const effective=await store.dispatch('preset.read',{}, {kind:'agent',sessionId:'author'});
   assert.equal(effective.content,'保持人物视角\n\n短句');
   assert.equal(Object.hasOwn(effective,'raw'),false);
-  assert.equal(base.sections.length,1);assert.equal(audit[0][1].action,'handoff.assembled');
-  assert.equal(JSON.stringify(audit[0][1]).includes('保持人物视角'),false);
+  assert.equal(base.sections.length,1);assert.deepEqual(audit,[]);
   const backup=await store.dispatch('novel.export',{},human);assert.deepEqual(backup.novel.preset.raw,raw);
   const root2=await mkdtemp(join(tmpdir(),'preset-restore-'));t.after(()=>rm(root2,{recursive:true,force:true}));
   const restored=new Store(root2);await restored.dispatch('novel.import',{backup},human);

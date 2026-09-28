@@ -6,6 +6,7 @@
 - `npm run build`、`npx tsc --noEmit`、`git diff --check` 通过。
 - `node tests/ui-smoke.mjs`：章节编辑与草稿恢复、资料 CRUD、规划入口、项目接手抽屉桌面/窄屏展示、预设导航和不自动读取正文通过。
 - 未验证真实模型自主写作行为；真实 DSH RPC 仍需在隔离实例中运行 `npm run test:rpc-flow`。
+- 提示词组装不再读取项目数据；缓存行为需以实际 DSH/模型服务的 usage 统计为准。
 
 日期：2026-09-26 至 2026-09-27。环境：Windows、Node 24.15、DSH 0.1.7-rc.2。
 
