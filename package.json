@@ -1,6 +1,6 @@
 {
   "name": "dsh-cuigengji",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "催更姬：DSH 小说正文、协同规划与资料工作台",
   "type": "module",
   "main": "runtime/index.js",
