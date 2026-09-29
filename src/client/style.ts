@@ -129,6 +129,8 @@ export const styles = `
 .cuigengji .planning-lines path { stroke:var(--dsw-alias-label-secondary,#889); stroke-width:1.5; }
 
 .cuigengji .planning-card.selected { outline:2px solid var(--dsw-focus-ring-color,#7187dc); }
+.cuigengji .planning-card.connect-source { outline:2px solid var(--dsw-focus-ring-color,#7187dc); box-shadow:0 0 0 4px #4c78dd33; }
+.cuigengji .prose-tools { display:flex; align-items:center; gap:8px; margin:8px 0; flex-wrap:wrap; }
 .cuigengji .planning-title { display:block; font-weight:600; border:0; background:none; text-align:left; width:100%; overflow-wrap:anywhere; }
 .cuigengji .planning-card p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:3px 0; font-size:12px; }
 .cuigengji .group-filter { display:flex; gap:6px; overflow:auto; padding:4px 0; scrollbar-width:thin; }

@@ -43,6 +43,14 @@ try {
   await page.getByRole('button',{name:/第一章/}).click();
   await page.getByRole('button',{name:'编辑',exact:true}).click();
   await expect(page.getByLabel('正文',{exact:true})).toHaveValue('门口有人敲门。');
+  await expect(page.getByRole('button',{name:'设为 Agent 当前参考章节'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'查看 AI 参考'})).toHaveCount(0);
+  await page.getByLabel('正文',{exact:true}).fill(' 第一段。  \n\n\n第二段。');
+  await page.getByRole('button',{name:'自动排版',exact:true}).click();
+  await expect(page.getByLabel('正文',{exact:true})).toHaveValue('　　第一段。\n\n　　第二段。');
+  await expect.poll(async()=> (await store.dispatch('chapter.get',{novelId:novel.id,chapterId:chapter.id},actor)).revision).toBe(1);
+  await page.getByRole('button',{name:'撤销排版',exact:true}).click();
+  await expect(page.getByLabel('正文',{exact:true})).toHaveValue(' 第一段。  \n\n\n第二段。');
   await page.getByLabel('正文',{exact:true}).fill('门外站着一位陌生姑娘。');
   await page.getByRole('button',{name:'保存修改',exact:true}).click();
   await expect(page.getByText(/版本2/)).toBeVisible();
@@ -77,12 +85,12 @@ try {
   }
   if(await page.getByRole('button',{name:'流程图'}).count())await page.getByRole('button',{name:'流程图'}).click();
   await expect(page.locator('.planning-card')).toHaveCount(2);
+  await page.getByRole('button',{name:'连线节点',exact:true}).click();
   await page.locator('.planning-card').filter({hasText:'敲门'}).getByRole('button',{name:'敲门'}).click();
-  await page.getByLabel('目标规划').selectOption({label:'邻居现身'});
-  await page.getByRole('button',{name:'连接',exact:true}).click();
-  await expect(page.locator('.source-row').filter({hasText:'剧情推进'})).toBeVisible();
-  await page.getByRole('button',{name:'‹ 返回规划'}).click();
+  await expect(page.locator('.planning-card.connect-source')).toHaveCount(1);
+  await page.locator('.planning-card').filter({hasText:'邻居现身'}).getByRole('button',{name:'邻居现身'}).click();
   await expect(page.locator('.planning-lines > g path')).toHaveCount(1);
+  await page.getByRole('button',{name:'退出连线',exact:true}).click();
   const handle=page.locator('.planning-card').filter({hasText:'敲门'}).locator('.drag-handle');
   const box=await handle.boundingBox();
   await page.mouse.move(box.x+12,box.y+8);

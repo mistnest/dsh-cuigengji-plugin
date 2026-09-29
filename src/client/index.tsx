@@ -97,7 +97,7 @@ function WorkbenchContent({ sessionId, rpc }) {
     <ResourceState resource={resource}>
       {tab==='data'?<div className="page"><WorkDataPage {...{call,run,busy}}/></div>:<>
       {!novelId ? <div className="page">{tab==='manage'?<><button onClick={()=>setTab('chapters')}>‹ 返回作品选择</button><Manage {...{call,run,busy}} onOpen={openNovel}/></>:<div className="empty"><h2>从一本作品开始</h2><p>从上方选择作品，或创建一本。</p><div className="row"><button className="primary" onClick={create}>新建作品</button><button onClick={()=>setTab('manage')}>导入已有作品</button></div></div>}</div> : <div className="workbench-body" key={novelId}>{returnTarget&&<div className="return-strip"><button onClick={()=>{setTab(returnTarget);setReturnTarget(null);}}>‹ 返回{({plan:'规划',memory:'设定'})[returnTarget]||'上一页'}</button></div>}
-        {tab==='chapters' && <Chapters {...{call,novelId,tick,run,busy,binding}} onReference={()=>setReferenceOpen(true)}/>} 
+        {tab==='chapters' && <Chapters {...{call,novelId,tick,run,busy}}/>}
         {tab==='memory' && <div className="page"><Memory {...{call,novelId,tick,run,busy}} onChapter={id=>jump('chapters','chapter',id)}/></div>}
         {tab==='plan' && <Planning {...{call,novelId,tick,run,busy}} onMemory={id=>jump('memory','memory-selected',id)} onChapter={id=>jump('chapters','chapter',id)}/>}
         {tab==='preset' && <Preset {...{call,novelId,run,busy}}/>}

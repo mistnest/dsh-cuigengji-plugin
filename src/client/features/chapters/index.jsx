@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useDialog } from '../../dialog.tsx';
 import { useDraft, usePreference, useResource, useScrollPosition } from '../../shared/state.js';
 import { ResourceState, SaveBar, saveShortcut } from '../../shared/ui.jsx';
+import { formatProse } from './format.ts';
 
 async function readChapter(call, novelId, chapterId) {
   const first = await call('chapter.get', { novelId, chapterId, maxChars: 200000 });
@@ -13,8 +14,8 @@ async function readChapter(call, novelId, chapterId) {
   }
   return { ...first, content };
 }
-export function Chapters({ call, novelId, tick, run, busy, binding, onReference }) {
-  const [id,setId] = usePreference(`${novelId}:chapter`, binding?.chapterId || '');
+export function Chapters({ call, novelId, tick, run, busy }) {
+  const [id,setId] = usePreference(`${novelId}:chapter`, '');
   const [directory,setDirectory] = useState(!id), [query,setQuery] = useState(''), [deleted,setDeleted] = useState(false);
   const [directoryCollapsed,setDirectoryCollapsed] = usePreference(`${novelId}:directory-collapsed`, false);
   const [collapsed,setCollapsed]=usePreference(`${novelId}:collapsed-volumes`,{});
@@ -45,7 +46,7 @@ export function Chapters({ call, novelId, tick, run, busy, binding, onReference 
       </ResourceState>
     </aside>
     <main className="chapter-main">
-      {id ? <ChapterLoader key={id} {...{call,novelId,tick,run,busy,volumes,binding,onReference}} chapterId={id} latest={chapters.find(c=>c.id===id)} back={()=>setDirectory(true)}/> : <div className="empty"><h2>选择一章，继续写作</h2><p>从目录打开章节，或新建一章。</p><button onClick={()=>setDirectory(true)}>打开目录</button></div>}
+      {id ? <ChapterLoader key={id} {...{call,novelId,tick,run,busy,volumes}} chapterId={id} latest={chapters.find(c=>c.id===id)} back={()=>setDirectory(true)}/> : <div className="empty"><h2>选择一章，继续写作</h2><p>从目录打开章节，或新建一章。</p><button onClick={()=>setDirectory(true)}>打开目录</button></div>}
     </main>
   </div>;
 }
@@ -53,12 +54,14 @@ function ChapterLoader(props) {
   const resource=useResource(()=>readChapter(props.call,props.novelId,props.chapterId),[props.call,props.novelId,props.chapterId]);
   return <>{!resource.value&&<button className="directory-back" onClick={props.back}>‹ 返回目录</button>}<ResourceState resource={resource}>{resource.value&&<ChapterEditor {...props} initial={resource.value}/>}</ResourceState></>;
 }
-function ChapterEditor({call,novelId,chapterId,latest,tick,run,busy,volumes,binding,back,initial,onReference}) {
+function ChapterEditor({call,novelId,chapterId,latest,tick,run,busy,volumes,back,initial}) {
   const {value:draft,base,change,accept,rebase,dirty,cacheError}=useDraft(`${novelId}:chapter:${chapterId}`,initial);
   const [editing,setEditing]=useState(dirty||(!initial.content&&initial.revision===1)),[comparison,setComparison]=useState(null),[historyOpen,setHistoryOpen]=useState(false);
   const [font,setFont]=usePreference('font',18);
   const scrollRef=useScrollPosition(`${novelId}:${chapterId}`);
   const {confirm}=useDialog();
+  const [formatUndo,setFormatUndo]=useState(null);
+  const format=()=>{const content=formatProse(draft.content);if(content!==draft.content){setFormatUndo({before:draft.content,after:content});change(d=>({...d,content}));}};
   const history=useResource(()=>call('chapter.history',{novelId,chapterId,includeContent:true}),[call,novelId,chapterId,tick]);
   const conflict=latest && latest.revision!==base.revision;
   const save=()=>{if(!dirty||busy||base.deleted||!draft.title.trim())return;run(async()=>{const meta=await call('chapter.update',{novelId,chapterId,content:draft.content,title:draft.title,volumeId:draft.volumeId||null,order:draft.order,expectedRevision:base.revision,expectedHash:base.contentHash,reason:'作者手动编辑'});accept({...meta,content:draft.content});});};
@@ -70,11 +73,11 @@ function ChapterEditor({call,novelId,chapterId,latest,tick,run,busy,volumes,bind
       <button onClick={()=>setHistoryOpen(true)}>版本历史</button><button onClick={reload} disabled={busy}>读取最新正文</button><button className="danger" disabled={busy||base.deleted} onClick={async()=>{if(await confirm('删除此章节？本地草稿会被替换，已保存的正文仍可从历史恢复。'))run(async()=>{await call('chapter.delete',{novelId,chapterId,expectedRevision:base.revision,confirm:true});accept(await readChapter(call,novelId,chapterId));});}}>删除章节</button>
     </div></details></div><h2>{draft.title}</h2>
     <div className="row compact"><div className="segmented"><button aria-pressed={!editing} onClick={()=>setEditing(false)}>阅读</button><button aria-pressed={editing} onClick={()=>setEditing(true)}>编辑</button></div><label className="inline-field">字号<select aria-label="正文字号" value={font} onChange={e=>setFont(Number(e.target.value))}>{[16,18,20].map(n=><option key={n} value={n}>{n}</option>)}</select></label></div>
-    <div className="binding-line"><span>{binding?.chapterId===chapterId?'Agent 当前参考章节':<button disabled={busy||base.deleted} onClick={()=>run(()=>call('binding.set',{novelId,chapterId}))}>设为 Agent 当前参考章节</button>}</span><button className="reference-inline" onClick={onReference}>查看 AI 参考</button></div>
     </header>
     <div className="editor-scroll" ref={scrollRef}>
       {conflict&&<div className="notice">作品已有新版本，你的草稿仍保留。<button disabled={busy} onClick={()=>run(async()=>setComparison(await readChapter(call,novelId,chapterId)))}>比较最新正文</button></div>}
       {base.deleted&&<div className="notice">本章已删除，可在章节设置的版本历史中恢复。</div>}
+      {editing&&<div className="prose-tools"><button type="button" disabled={busy||base.deleted||!draft.content.trim()} onClick={format}>自动排版</button>{formatUndo&&formatUndo.after===draft.content&&<button disabled={busy||base.deleted} onClick={()=>{set('content',formatUndo.before);setFormatUndo(null);}}>撤销排版</button>}<small>段首空两格，段间空一行；保存后生效</small></div>}
       {editing?<textarea className="prose manuscript" aria-label="正文" style={{fontSize:font}} disabled={busy||base.deleted} value={draft.content} onChange={e=>set('content',e.target.value)}/>:<article className="manuscript" style={{fontSize:font}} aria-label="正文阅读">{draft.content||'这一章还没有正文。点击“编辑”开始写作。'}</article>}
       {historyOpen&&<section className="history-panel"><div className="row"><h3 className="grow">历史版本</h3><button onClick={()=>setHistoryOpen(false)}>关闭历史</button></div><ResourceState resource={history}>{history.value?.slice().reverse().map(h=><div className="history-item" key={h.revision}><div><strong>版本 {h.revision}</strong><p className="muted">{h.actor?.kind==='agent'?'Agent':'作者'} · {h.timestamp ? new Date(h.timestamp).toLocaleString() : ''}<br/>{h.reason||'正文修改'}</p></div><div className="row"><button onClick={()=>{setComparison(h);setHistoryOpen(false);}}>比较</button><button disabled={busy} onClick={async()=>{if(await confirm(`恢复版本${h.revision}？当前草稿会被替换，已保存的历史仍保留。`))run(async()=>{await call('chapter.restore',{novelId,chapterId,targetRevision:h.revision,expectedRevision:base.revision});accept(await readChapter(call,novelId,chapterId));});}}>恢复</button></div></div>)}</ResourceState></section>}
       {comparison&&<section className="history-panel comparison"><div className="row"><h3 className="grow">版本比较</h3><button onClick={()=>setComparison(null)}>关闭比较</button></div><div className="split"><div><h3>本地内容（可直接合并）</h3><textarea className="prose" aria-label="合并正文" disabled={busy||base.deleted} value={draft.content} onChange={e=>set('content',e.target.value)}/></div><div><h3>版本 {comparison.revision}</h3><pre>{comparison.content}</pre></div></div><p className="muted">可在这里合并需要的正文，再更新保存基准；关闭比较后保存。后续写入仍检查版本。</p>{comparison.revision===latest?.revision&&!comparison.deleted&&<button onClick={async()=>{if(await confirm('确认已将需要的内容合并到本地正文？将以这版作为保存基准，后续更新仍会检查冲突。')){rebase(comparison);setComparison(null);setEditing(true);}}}>已合并，更新保存基准</button>}<button onClick={reload}>放弃草稿，读取最新</button></section>}
