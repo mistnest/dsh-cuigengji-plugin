@@ -4,7 +4,7 @@
 
 ## 试用状态
 
-当前提供试用版本。最新构建、50 项自动测试和浏览器工作台烟测通过；真实 DSH RPC 流程仍需使用隔离实例验收。酒馆格式兼容范围见文末说明。
+当前版本为 0.2.0。工作台以正文、规划和资料三个入口为主，预设与备份放在作品操作和工作数据入口。浏览器烟测使用独立临时小说，不会改动正式作品；真实 DSH 宿主与桌面版仍应在升级后分别验收。
 
 ## 安装
 
@@ -27,7 +27,7 @@ pnpm run start:desktop
 
 ~~~powershell
 cd D:\deepseek-harness\dsh-desktop\home\profiles\desktop
-pnpm add D:\deepseek-harness\cuigengji-plugin\dsh-cuigengji-0.1.0.tgz
+pnpm add D:\deepseek-harness\cuigengji-plugin\dsh-cuigengji-0.2.0.tgz
 ~~~
 
 然后将 `dsh-cuigengji` 加入该 profile 的 `dsh.profile.bundles`，重启桌面端。开发时每次源码或前端 bundle 更新后重新 `npm run build`、`npm pack`，再安装新的 tgz。
@@ -35,7 +35,7 @@ pnpm add D:\deepseek-harness\cuigengji-plugin\dsh-cuigengji-0.1.0.tgz
 如果仍使用浏览器版，选择要安装的 DSH profile。默认使用 web：
 
 ~~~powershell
-dsh plugin --profile web add D:\path\dsh-cuigengji-0.1.0.tgz
+dsh plugin --profile web add D:\path\dsh-cuigengji-0.2.0.tgz
 dsh web
 ~~~
 
@@ -60,7 +60,7 @@ npm install
 npm run build
 ~~~
 
-本机可双击 `D:\deepseek-harness\start-dsh.cmd` 启动。保持终端窗口开启，在浏览器使用终端打印的 URL；关闭终端会停止服务。认证 token 每次启动变化。
+本机桌面版可双击 `D:\deepseek-harness\start-dsh-desktop.cmd` 启动。浏览器版使用 `D:\deepseek-harness\start-dsh.cmd`；保持终端开启，使用终端打印的 URL，认证 token 每次启动变化。
 
 本地包升级：退出 DSH，重新 `npm pack`，再用 `plugin --profile web add <新 tgz 路径>` 安装并重启。回滚时安装之前保存的 tgz。开发 link 修改宿主源码后需要重启，修改前端后先 build 再刷新页面。
 
@@ -82,20 +82,27 @@ dsh web
 
 ## 使用约束
 
-1. 在右侧“催更姬”面板创建或选择小说，并绑定当前会话。
-2. 在“规划”中整理长期方向、阶段和场景。作者与 AI 均可读取修改；规划通过工具按需获取，不自动装填，也不再要求批准后才能写正文。
+1. 在右侧“催更姬”面板创建或选择小说，并绑定当前会话。章节目录可收起。
+2. 规划节点由标题、摘要和自由正文组成；分组用于查找，连线表示顺序、依赖或备选。作者与 AI 共用，按需获取，不自动装填，也不要求批准后才能写正文。
 3. 正文修改必须携带 revision；冲突不会覆盖另一会话的版本。
-4. 世界书、世界条目、角色卡和关系都经过图谱工具维护；章节修改会使依赖旧正文的记忆标为 stale。
+4. 世界书、世界条目、角色卡和关系都经过图谱工具维护；资料可分组和批量移动。章节修改会使依赖旧正文的记忆标为 stale。
+5. “工作数据”导出/导入包含催更姬的小说、版本历史、绑定和插件日志；不包含 DSH 聊天记录、凭据或浏览器未保存草稿。迁移整台 DSH 时这些数据需另行备份。
 
 ## 开发与测试
 
+源码按职责划分：`src/domain` 管规划、资料分组和预设规则；`src/application` 管项目命令、接手查询和工作数据；`src/infrastructure` 管原子持久化与旧格式转换；`src/adapters` 管 DSH RPC/MCP/技能接入；`src/client/features` 管正文、规划、资料等界面。`src/contracts` 放共享契约，旧 `src/core`、`src/mcp` 等入口暂保留为兼容转发。TypeScript 已覆盖规划领域、分组、持久化和部分界面，其他模块仍为 JavaScript/JSX；不要把 `strict` 误认为整个源码已完成 TS 迁移。
+
+Node 运行时不能直接依赖包内 `.ts` 源码。`npm run build` 生成前端 `lib/client.js` 和服务端 `runtime/`；`npm pack` 的 prepack 会先类型检查和构建。修改源码后要重新打包、安装并重启宿主。
+
 ~~~powershell
 npm test
+npm run typecheck
 npm run build
+npm run test:ui
 npm pack
 ~~~
 
-npm test 覆盖 Store、MCP、导入转换器、宿主工具执行和 Windows 持久化。npm run test:live 检查当前 DSH_HOME 的 web profile 是否包含插件。
+npm test 覆盖 Store、MCP、导入转换器、分组、宿主工具执行和 Windows 持久化。`test:ui` 使用隔离的临时数据目录。npm run test:live 检查当前 DSH_HOME 的 web profile 是否包含插件。
 
 真实 DSH RPC smoke 需要先启动 dsh web，并把打印出的带 token URL 放入 DSH_URL：
 

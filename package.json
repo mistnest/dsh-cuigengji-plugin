@@ -1,13 +1,13 @@
 {
   "name": "dsh-cuigengji",
-  "version": "0.1.0",
-  "description": "催更姬：DSH 单 Agent 小说写作、正文管理与图谱记忆插件",
+  "version": "0.2.0",
+  "description": "催更姬：DSH 小说正文、协同规划与资料工作台",
   "type": "module",
-  "main": "src/index.js",
+  "main": "runtime/index.js",
   "exports": {
-    ".": "./src/index.js",
+    ".": "./runtime/index.js",
     "./client": "./lib/client.js",
-    "./core": "./src/core/store.js",
+    "./core": "./runtime/core/store.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -16,7 +16,8 @@
     "skills",
     "cordis.patch.yml",
     "README.md",
-    "docs"
+    "docs",
+    "runtime"
   ],
   "dsh": {
     "bundle": {
@@ -38,7 +39,9 @@
     "test:rpc": "node scripts/rpc-smoke.mjs",
     "test:rpc-flow": "node scripts/rpc-flow.mjs",
     "test:live": "node scripts/live-smoke.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run typecheck && npm run build",
+    "typecheck": "tsc --noEmit",
+    "test:ui": "node tests/ui-smoke.mjs"
   },
   "engines": {
     "node": ">=24",
@@ -66,6 +69,7 @@
     "esbuild": "^0.25.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "@types/node": "^24.0.0"
   }
 }

@@ -1,5 +1,5 @@
 import React,{useState} from 'react';
-import {useDialog} from '../dialog.jsx';
+import {useDialog} from '../../dialog.tsx';
 export function Manage({call,novelId,novel,run,busy,onOpen}) {
  const [mode,setMode]=useState(''),[preview,setPreview]=useState(null),[report,setReport]=useState(null),[success,setSuccess]=useState(''),[importedId,setImportedId]=useState(null);
  const {ask}=useDialog();

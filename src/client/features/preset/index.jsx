@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { useDraft, useResource, usePreference } from '../shared/state.js';
-import { ResourceState, SaveBar } from '../shared/ui.jsx';
-import { compilePreset, presetBlockReason } from '../../core/preset.js';
-import { useDialog } from '../dialog.jsx';
+import { useDraft, useResource, usePreference } from '../../shared/state.js';
+import { ResourceState, SaveBar } from '../../shared/ui.jsx';
+import { compilePreset, presetBlockReason } from '../../../domain/preset/index.js';
+import { useDialog } from '../../dialog.tsx';
 
 export function Preset(props) {
   const resource=useResource(()=>props.call('preset.get',{novelId:props.novelId}).then(v=>v||{name:'写作预设',enabled:false,blocks:[],revision:0}),[props.call,props.novelId]);

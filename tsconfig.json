@@ -8,8 +8,17 @@
     "checkJs": false,
     "noEmit": true,
     "skipLibCheck": true,
-    "strict": false,
-    "noImplicitAny": false
+    "strict": true,
+    "noImplicitAny": true,
+    "allowImportingTsExtensions": true,
+    "types": [
+      "node",
+      "react",
+      "react-dom"
+    ]
   },
-  "include": ["src/client/**/*.ts", "src/client/**/*.tsx"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ]
 }

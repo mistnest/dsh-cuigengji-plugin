@@ -60,10 +60,44 @@ try {
   await page.getByLabel('全文',{exact:true}).fill('她刚刚搬进这栋楼。');
   await page.getByRole('button',{name:'保存资料',exact:true}).click();
   await expect(page.getByRole('heading',{name:'夜班姑娘',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'‹ 所有设定'}).click();
+  await page.locator('.memory-overview details.menu').filter({hasText:'管理分组'}).locator('summary').click();
+  await page.getByRole('button',{name:'新建分组'}).click();
+  await page.getByRole('dialog',{name:'新建分组名称'}).getByLabel('输入值').fill('街坊');
+  await page.getByRole('dialog',{name:'新建分组名称'}).getByRole('button',{name:'确定'}).click();
+  await expect(page.getByLabel('资料分组')).toContainText('街坊');
   await page.getByRole('button',{name:'规划',exact:true}).click();
-  await page.getByRole('button',{name:/规划/}).first().click();
+  for(const title of ['敲门','邻居现身']){
+    await page.getByRole('button',{name:'＋ 规划'}).click();
+    const dialog=page.getByRole('dialog',{name:'规划标题'});
+    await dialog.getByLabel('输入值').fill(title);
+    await dialog.getByRole('button',{name:'确定'}).click();
+    await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'‹ 返回规划'}).click();
+  }
+  if(await page.getByRole('button',{name:'流程图'}).count())await page.getByRole('button',{name:'流程图'}).click();
+  await expect(page.locator('.planning-card')).toHaveCount(2);
+  await page.locator('.planning-card').filter({hasText:'敲门'}).getByRole('button',{name:'敲门'}).click();
+  await page.getByLabel('目标规划').selectOption({label:'邻居现身'});
+  await page.getByRole('button',{name:'连接',exact:true}).click();
+  await expect(page.locator('.source-row').filter({hasText:'剧情推进'})).toBeVisible();
+  await page.getByRole('button',{name:'‹ 返回规划'}).click();
+  await expect(page.locator('.planning-lines > g path')).toHaveCount(1);
+  const handle=page.locator('.planning-card').filter({hasText:'敲门'}).locator('.drag-handle');
+  const box=await handle.boundingBox();
+  await page.mouse.move(box.x+12,box.y+8);
+  await page.mouse.down();
+  await page.mouse.move(box.x+45,box.y+28,{steps:5});
+  await page.mouse.up();
+  await page.getByRole('button',{name:'保存布局'}).click();
+  await expect.poll(async()=>store.dispatch('planning.get',{novelId:novel.id,nodeId:(await store.dispatch('planning.list',{novelId:novel.id},actor)).items.find(n=>n.title==='敲门').id},actor).then(result=>result.node.position?.x)).toBeGreaterThan(32);
+  await page.locator('.group-toolbar details.menu summary').click();
+  await page.getByRole('button',{name:'新建分组'}).click();
+  await page.getByRole('dialog',{name:'新建分组名称'}).getByLabel('输入值').fill('第一幕');
+  await page.getByRole('dialog',{name:'新建分组名称'}).getByRole('button',{name:'确定'}).click();
+  await expect(page.getByLabel('规划分组')).toContainText('第一幕');
   await mkdir(join(root,'test-results'),{recursive:true});
-  await page.screenshot({path:join(root,'test-results','ui-smoke.png'),fullPage:true});
+  await page.screenshot({path:join(root,'test-results','planning-desktop.png'),fullPage:true});
   await page.getByRole('button',{name:'AI 参考',exact:true}).click();
   const drawer=page.locator('.reference-drawer');
   await expect(drawer.getByRole('heading',{name:'项目接手信息'})).toBeVisible();
@@ -96,5 +130,5 @@ try {
   await expect(page.getByText(/导入完成。导入前备份/)).toBeVisible();
   await page.screenshot({path:join(root,'test-results','work-data-narrow.png'),fullPage:true});
   if(errors.length)throw new Error(errors.join('\n'));
-  console.log(JSON.stringify({ok:true,checks:['chapter edit','draft survives reload','资料 CRUD create','planning entry','metadata-only handoff drawer','narrow drawer fit','preset navigation and on-demand copy'],dataDir:directory}));
+  console.log(JSON.stringify({ok:true,checks:['chapter edit','draft survives reload','资料 create and group','planning nodes, edge, persisted position and group','metadata-only handoff drawer','narrow drawer fit','preset navigation','work-data export and import'],dataDir:directory}));
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

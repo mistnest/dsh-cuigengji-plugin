@@ -199,4 +199,17 @@ export const styles = `
  .cuigengji .directory-collapsed .chapter-directory { display:none; }
  .cuigengji .directory-collapsed.show-directory .chapter-directory { display:block; width:100%; }
 }
+
+.cuigengji .group-toolbar,.cuigengji .batch-toolbar {display:flex;align-items:end;flex-wrap:wrap;gap:8px;margin:12px 0;}
+.cuigengji .group-description {flex-basis:100%;margin:0;}
+.cuigengji .group-toolbar label {max-width:340px;}
+.cuigengji .selectable-entry {display:flex;align-items:center;gap:8px;}
+.cuigengji .selectable-entry > button {flex:1;min-width:0;text-align:left;}
+.cuigengji .selectable-entry > input,.cuigengji .selection-label input {width:auto;}
+.cuigengji .selection-label {font-size:12px;display:flex;align-items:center;gap:4px;float:right;}
+.cuigengji .batch-toolbar {padding:10px;background:color-mix(in srgb,#5269c9 8%,transparent);border-radius:10px;}
+.cuigengji .planning-group-frame {position:absolute;border:1px solid color-mix(in srgb,#5269c9 28%,transparent);border-radius:12px;background:color-mix(in srgb,#5269c9 3%,transparent);pointer-events:none;}
+.cuigengji .planning-group-frame > button {pointer-events:auto;position:relative;z-index:1;margin:2px 6px;padding:4px 8px;background:transparent;border:0;font-weight:600;}
+.cuigengji .planning-lines {pointer-events:none;}
+.cuigengji .planning-directory details > button {display:block;width:100%;text-align:left;margin:4px 0;}
 `;

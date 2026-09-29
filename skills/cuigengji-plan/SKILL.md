@@ -17,4 +17,4 @@ description: 讨论创意、读者体验、人物关系和情节方向，协同�
 
 
 ## 规划板新接口（替代旧审批流程）
-规划是一张由作者和 Agent 共用的自由流程图。每个节点只要求标题、摘要、正文，正文可自由组织；分组只用于整理和查找，关系才表达剧情顺序、依赖或备选。先用 planning.search/list 查看标题、摘要、分组和关系，再用 planning.get 按需读取正文。修改已有想法优先 node.update，不要因同一章的新讨论重复创建节点；独立内容才 node.create。新节点与旧节点有真实关系时，在同一 planning.apply 批次创建 edge.create。分组先 planning.groups，复用已有分组，必要时再 planning.group.create。修改必须提供 requestId 和版本；规划不自动注入，也不需要批准后才能写正文，规划是意图而不是事实。
+规划是一张由作者和 Agent 共用的自由流程图。每个节点以标题、摘要和正文为核心，正文可自由组织；分组只用于整理和查找，关系才表达剧情顺序、依赖或备选。先用 planning.search/list 查看标题、摘要、分组和关系，再用 planning.get 按需读取正文。修改已有想法优先 node.update，不要因同一章的新讨论重复创建节点；独立内容才 node.create。新节点与旧节点有真实关系时，在同一 planning.apply 批次创建 edge.create。分组先 planning.groups，复用已有分组，必要时再 planning.group.create；改名、改描述用 planning.group.update，删除前核对成员并用 planning.group.delete，成员会移至未分组。节点更换 groupId 即移动分组。修改必须提供 requestId 和版本；规划不自动注入，也不需要批准后才能写正文，规划是意图而不是事实。

@@ -2,16 +2,16 @@
 // consumed without declaration generation while they are migrated incrementally.
 // @ts-nocheck
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { styles } from './style';
-import { DialogProvider, useDialog } from './dialog.jsx';
+import { styles } from './style.ts';
+import { DialogProvider, useDialog } from './dialog.tsx';
 import { LocaleContext, registerLocale } from './locale.js';
-import { Memory } from './memory/index.jsx';
-import { Context } from './context/index.jsx';
-import { Manage } from './manage/index.jsx';
-import { WorkDataPage } from './data/index';
-import { Chapters } from './chapters/index.jsx';
-import { Planning } from './planning/index.jsx';
-import { Preset } from './preset/index.jsx';
+import { Memory } from './features/memory/index.jsx';
+import { Context } from './features/context/index.jsx';
+import { Manage } from './features/manage/index.jsx';
+import { WorkDataPage } from './features/work-data/index.tsx';
+import { Chapters } from './features/chapters/index.jsx';
+import { Planning } from './features/planning/index.jsx';
+import { Preset } from './features/preset/index.jsx';
 import { SessionScope, usePreference, useResource } from './shared/state.js';
 import { ResourceState } from './shared/ui.jsx';
 

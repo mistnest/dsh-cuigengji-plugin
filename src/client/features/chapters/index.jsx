@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useDialog } from '../dialog.jsx';
-import { useDraft, usePreference, useResource, useScrollPosition } from '../shared/state.js';
-import { ResourceState, SaveBar, saveShortcut } from '../shared/ui.jsx';
+import { useDialog } from '../../dialog.tsx';
+import { useDraft, usePreference, useResource, useScrollPosition } from '../../shared/state.js';
+import { ResourceState, SaveBar, saveShortcut } from '../../shared/ui.jsx';
 
 async function readChapter(call, novelId, chapterId) {
   const first = await call('chapter.get', { novelId, chapterId, maxChars: 200000 });

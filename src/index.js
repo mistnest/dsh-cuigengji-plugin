@@ -4,14 +4,14 @@ import { mkdir, appendFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import z from '@deepseek-ai/schemastery';
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { Store } from './core/store.js';
-import { MemoryBridge } from './mcp/client.js';
-import { registerSkills } from './assistant/skills.js';
-import { registerPrompt } from './assistant/prompt.js';
-import { createSessionPolicy } from './assistant/session.js';
-import { TOOL_ACTIONS as allowed, isReadAction } from './core/actions.js';
-import { registerRpcRoute } from './transport/rpc.js';
-import { WorkData } from './data/workspace.js';
+import { Store } from './application/store.js';
+import { MemoryBridge } from './adapters/mcp/client.js';
+import { registerSkills } from './adapters/dsh/skills.js';
+import { registerPrompt } from './adapters/dsh/prompt.js';
+import { createSessionPolicy } from './application/bindings/session.js';
+import { TOOL_ACTIONS as allowed, isReadAction } from './contracts/actions.js';
+import { registerRpcRoute } from './adapters/dsh/rpc.js';
+import { WorkData } from './application/backup/workspace.js';
 
 export const name = 'cuigengji';
 export const inject = ['tools', 'systemPrompt', 'skills', 'connection'];
@@ -20,8 +20,8 @@ export const Config = z.object({
 });
 const descriptions = {
   cuigengji_project: '接手本会话绑定的小说并读取或修改卷、章、正文。novel.handoff 只返回作品索引、当前章节/任务、章节目录摘要和资料入口，不返回正文；需要正文时用 chapter.get。读操作返回 revision；修改必须提供 expectedRevision。chapter.update 用 content、append 或 patch:{oldText,newText} 三选一。删除需 confirm:true；非空卷还需 chapterPolicy:detach/delete。chapter.get 支持 start/maxChars。',
-  cuigengji_memory: '通过本地 stdio MCP 检索与维护本会话小说图谱。先用 graph.groups 查看人物/世界资料分组，再用 graph.list 的 query/type/groupId 搜索名称、别名和摘要；列表不返回正文，命中后用 graph.get 读取详情，edge.list 用 nodeId 查关系。补充已有资料优先 graph.update，不要重复创建同一人物或设定；新资料才 graph.create，并复用已有分组或先 graph.group.create。检查 status/factType/sources/knownBy，未确认或过期内容不当作既定事实。资料分 character_card 与 world_entry；graph.get/update/delete 必须用 nodeId，edge.get/update/delete 必须用 edgeId。修改需 expectedRevision，删除 confirm:true。',
-  cuigengji_plan: '作者与 AI 共用自由规划流程图。先用 planning.search/list 查询标题、摘要、分组和关系摘要，必要时 planning.get 读取单个节点正文及邻接；正文不在列表中。修改已有想法优先 node.update，不要为同一章或同一想法重复 node.create；新增节点只有在内容确实独立时使用。新节点与已有节点有剧情顺序、依赖或备选关系时，在同一 planning.apply 批次建立 edge.create；无意义的连接不要补。分组用 planning.groups 查看，必要时 planning.group.create 创建，再在 node.create/node.update 设置 groupId。planning.history/changes 读取并可 planning.revert 撤销。planning.apply 提供 requestId、reason、operations：node.create {ref,value:{title,summary,content,groupId}}，node.update {id,expectedRevision,value}，node.delete {id,expectedRevision,confirm:true,childPolicy:detach/subtree}，edge.create {value:{from,to,type:next/requires/alternative,label}}，edge.delete {id,expectedRevision,confirm:true}。标题和摘要用于检索，正文按需读取；正文发生变化时检查摘要是否仍准确。规划是意图，不是已发生事实。',
+  cuigengji_memory: '通过本地 stdio MCP 检索与维护本会话小说图谱。先用 graph.groups 查看人物/世界资料分组，再用 graph.list 的 query/type/groupId 搜索名称、别名和摘要；groupId:null 筛选未分组。列表不返回正文，命中后用 graph.get 读取详情，edge.list 用 nodeId 查关系。补充已有资料优先 graph.update；分组支持 graph.group.create/update/delete 和 graph.move 批量移动，删除分组保留条目。检查 status/factType/sources/knownBy，未确认或过期内容不当作既定事实。资料分 character_card 与 world_entry；graph.get/update/delete 必须用 nodeId，edge.get/update/delete 必须用 edgeId。修改需 expectedRevision，删除 confirm:true。',
+  cuigengji_plan: '作者与 AI 共用自由规划流程图。先用 planning.search/list 查询标题、摘要和分组，planning.get 按需读取单个节点正文、关系及邻居摘要；正文不在列表中。已有想法优先 node.update，同一章不必拆成多个节点。独立新节点用 node.create，存在剧情顺序、依赖或备选关系时在同一 planning.apply 批次建立 edge.create，无意义的连接不补。planning.groups 查看分组；planning.group.create/update/delete 管理分组，删除分组保留节点；node.update 设置 groupId 或 position。planning.history/changes 与 planning.revert 可查看和撤销事务。planning.apply 提供 requestId、reason、operations：node.create {ref,value:{title,summary,content,groupId}}，node.update {id,expectedRevision,value}，node.delete {id,expectedRevision,confirm:true,childPolicy:detach/subtree}，edge.create/update/delete 与 group.create/update/delete 同样支持事务。标题和摘要用于检索，正文按需读取；改正文时检查摘要。规划是意图，不是已发生事实。',
   cuigengji_context: '读取会话任务信息、按需参考预览和已启用预设的有效文本。Agent 接手作品优先调用 cuigengji_project 的 novel.handoff；正文、预设、规划和设定分别按任务读取。preset.read 只返回作者启用且可用的预设文本，不返回原始导入文件。',
 };
 function defaultDataRoot() {

@@ -1,7 +1,7 @@
 import React from 'react';
-import { useResource } from '../shared/state.js';
-import { ResourceState, ReadingText } from '../shared/ui.jsx';
-import { renderHandoff } from '../../core/handoff-text.js';
+import { useResource } from '../../shared/state.js';
+import { ResourceState, ReadingText } from '../../shared/ui.jsx';
+import { renderHandoff } from '../../../application/queries/handoff-text.js';
 export function Context({call,novelId,tick,onNavigate}) {
   const resource=useResource(()=>call('novel.handoff',{novelId}),[call,novelId,tick]);
   const value=resource.value;
