@@ -1,5 +1,5 @@
 export const styles = `
-.cuigengji { color:var(--dsw-alias-label-primary,inherit); font-family:inherit; font-size:13px; padding:14px; height:100%; overflow:auto; box-sizing:border-box; }
+.cuigengji { color:var(--dsw-alias-label-primary,#252936); font-family:var(--dsw-font-family,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif); font-size:13px; padding:14px; height:100%; overflow:auto; box-sizing:border-box; }
 .cuigengji * { box-sizing:border-box; }
 
 
@@ -205,9 +205,9 @@ export const styles = `
  .cuigengji .directory-collapsed.show-directory .chapter-directory { display:block; width:100%; }
 }
 
-.cuigengji .group-toolbar,.cuigengji .batch-toolbar {display:flex;align-items:end;flex-wrap:wrap;gap:8px;margin:12px 0;}
+.cuigengji .group-toolbar,.cuigengji .batch-toolbar {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0;}
 .cuigengji .group-description {flex-basis:100%;margin:0;}
-.cuigengji .group-toolbar label {max-width:340px;}
+.cuigengji .group-toolbar label {max-width:240px;margin:0;}
 .cuigengji .selectable-entry {display:flex;align-items:center;gap:8px;}
 .cuigengji .selectable-entry > button {flex:1;min-width:0;text-align:left;}
 .cuigengji .selectable-entry > input,.cuigengji .selection-label input {width:auto;}
@@ -217,4 +217,23 @@ export const styles = `
 .cuigengji .planning-group-frame > button {pointer-events:auto;position:relative;z-index:1;margin:2px 6px;padding:4px 8px;background:transparent;border:0;font-weight:600;}
 .cuigengji .planning-lines {pointer-events:none;}
 .cuigengji .planning-directory details > button {display:block;width:100%;text-align:left;margin:4px 0;}
+
+/* Keep navigation quiet and give the document the largest share of the panel. */
+.cuigengji .workbench-header {padding-top:6px;}
+.cuigengji .page {padding-top:16px;}
+.cuigengji .module-heading {padding-top:8px;padding-bottom:10px;}
+.cuigengji .module-heading > .muted {margin:4px 0 10px;}
+.cuigengji .row > h2 {margin:0;}
+.cuigengji .menu-panel button {border:0;background:transparent;}
+.cuigengji button:not(:disabled):hover,.cuigengji .menu>summary:hover {background:var(--dsw-alias-bg-layer-1,#f0f2f7);}
+.cuigengji button.primary:hover {background:var(--dsw-alias-state-business-primary,#465dba);filter:brightness(.95);}
+.cuigengji .memory-detail article.manuscript {min-height:0;padding-bottom:16px;}
+.cuigengji .memory-overview .segmented {width:fit-content;max-width:100%;}
+.cuigengji .planning-list .card {margin-bottom:0;padding:10px 0;}
+.cuigengji .planning-list .card > p:empty {display:none;}
+.cuigengji .prose-tools {margin:0 0 8px;}
+.cuigengji .prose-tools button {min-height:30px;padding:4px 8px;font-size:12px;}
+.cuigengji .editor-heading {padding-top:8px;padding-bottom:10px;}
+.cuigengji .preset-layout {margin-top:12px;}
+.cuigengji .directory-collapsed .directory-heading > .primary {display:none;}
 `;

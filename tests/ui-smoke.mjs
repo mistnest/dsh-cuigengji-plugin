@@ -38,9 +38,12 @@ let browser;
 try {
   browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE||undefined,args:['--no-sandbox']});
   const page=await browser.newPage({viewport:{width:900,height:1000}});
+  await mkdir(join(root,'test-results',process.env.UI_REVIEW || 'review'),{recursive:true});
+  const capture=async name=>{for(const width of [900,420]){await page.setViewportSize({width,height:900});await page.waitForTimeout(150);await page.screenshot({path:join(root,'test-results',process.env.UI_REVIEW || 'review',`${name}-${width}.png`),fullPage:true});}await page.setViewportSize({width:900,height:1000});};
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.getByRole('button',{name:/第一章/}).click();
+  await capture('chapter');
   await page.getByRole('button',{name:'编辑',exact:true}).click();
   await expect(page.getByLabel('正文',{exact:true})).toHaveValue('门口有人敲门。');
   await expect(page.getByRole('button',{name:'设为 Agent 当前参考章节'})).toHaveCount(0);
@@ -60,6 +63,7 @@ try {
   await page.getByRole('button',{name:/第一章/}).click();
   await page.getByRole('button',{name:'编辑',exact:true}).click();
   await expect(page.getByLabel('正文',{exact:true})).toHaveValue('作者的未保存草稿。');
+  await capture('chapter-editor');
   await page.getByRole('button',{name:'资料',exact:true}).click();
   await page.locator('details.menu summary.primary').click();
   await page.locator('details.menu[open] .menu-panel button').filter({hasText:'人物'}).click();
@@ -68,12 +72,14 @@ try {
   await page.getByLabel('全文',{exact:true}).fill('她刚刚搬进这栋楼。');
   await page.getByRole('button',{name:'保存资料',exact:true}).click();
   await expect(page.getByRole('heading',{name:'夜班姑娘',exact:true})).toBeVisible();
+  await capture('memory-detail');
   await page.getByRole('button',{name:'‹ 所有设定'}).click();
   await page.locator('.memory-overview details.menu').filter({hasText:'管理分组'}).locator('summary').click();
   await page.getByRole('button',{name:'新建分组'}).click();
   await page.getByRole('dialog',{name:'新建分组名称'}).getByLabel('输入值').fill('街坊');
   await page.getByRole('dialog',{name:'新建分组名称'}).getByRole('button',{name:'确定'}).click();
   await expect(page.getByLabel('资料分组')).toContainText('街坊');
+  await capture('memory');
   await page.getByRole('button',{name:'规划',exact:true}).click();
   for(const title of ['敲门','邻居现身']){
     await page.getByRole('button',{name:'＋ 规划'}).click();
@@ -81,6 +87,7 @@ try {
     await dialog.getByLabel('输入值').fill(title);
     await dialog.getByRole('button',{name:'确定'}).click();
     await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
+    if(title==='敲门')await capture('planning-detail');
     await page.getByRole('button',{name:'‹ 返回规划'}).click();
   }
   if(await page.getByRole('button',{name:'流程图'}).count())await page.getByRole('button',{name:'流程图'}).click();
@@ -122,6 +129,7 @@ try {
   await expect(page.getByLabel('规划分组')).toContainText('第一幕');
   await mkdir(join(root,'test-results'),{recursive:true});
   await page.screenshot({path:join(root,'test-results','planning-desktop.png'),fullPage:true});
+  await capture('planning');
   await page.getByRole('button',{name:'AI 参考',exact:true}).click();
   const drawer=page.locator('.reference-drawer');
   await expect(drawer.getByRole('heading',{name:'项目接手信息'})).toBeVisible();
@@ -132,6 +140,7 @@ try {
   await expect(drawer).not.toContainText('门外站着一位陌生姑娘。');
   await expect(drawer).not.toContainText('住在隔壁的剑仙。');
   if(rpcActions.includes('context.get'))throw new Error('handoff preview must not fetch prose context');
+  await capture('reference');
   await page.screenshot({path:join(root,'test-results','handoff-desktop.png'),fullPage:true});
   await page.setViewportSize({width:420,height:900});
   await expect(drawer.getByRole('heading',{name:'项目接手信息'})).toBeVisible();
@@ -140,11 +149,14 @@ try {
   await drawer.getByRole('button',{name:'写作预设',exact:true}).click();
   await expect(drawer).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();
+  await capture('preset');
   await page.getByText(/当前草稿的生效文本预览/).click();
   await expect(page.getByText('保存并启用后，写作助手可按需读取这些文本；不会自动加入每轮提示词。',{exact:true})).toBeVisible();
+  await page.getByLabel('作品操作',{exact:true}).click();
   await page.getByRole('button',{name:'工作数据 · 导入/导出',exact:true}).click();
   await expect(page.getByRole('heading',{name:'小说工作数据',exact:true})).toBeVisible();
   await expect(page.getByText(directory,{exact:true})).toBeVisible();
+  await capture('work-data');
   const downloadEvent=page.waitForEvent('download');
   await page.getByRole('button',{name:'导出全部工作数据',exact:true}).click();
   const download=await downloadEvent;
@@ -153,6 +165,9 @@ try {
   await page.getByRole('button',{name:'确认导入',exact:true}).click();
   await expect(page.getByText(/导入完成。导入前备份/)).toBeVisible();
   await page.screenshot({path:join(root,'test-results','work-data-narrow.png'),fullPage:true});
+  await page.getByLabel('作品操作',{exact:true}).click();
+  await page.getByRole('button',{name:'作品与备份',exact:true}).click();
+  await capture('manage');
   if(errors.length)throw new Error(errors.join('\n'));
   console.log(JSON.stringify({ok:true,checks:['chapter edit','draft survives reload','资料 create and group','planning nodes, edge, persisted position and group','metadata-only handoff drawer','narrow drawer fit','preset navigation','work-data export and import'],dataDir:directory}));
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

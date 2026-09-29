@@ -4,7 +4,7 @@
 
 ## 试用状态
 
-当前版本为 0.2.2。工作台以正文、规划和资料三个入口为主，预设与备份放在作品操作和工作数据入口。浏览器烟测使用独立临时小说，不会改动正式作品；真实 DSH 宿主与桌面版仍应在升级后分别验收。
+当前版本为 0.2.3。工作台以正文、规划和资料三个入口为主，预设与备份放在作品操作和工作数据入口。浏览器烟测使用独立临时小说，不会改动正式作品；真实 DSH 宿主与桌面版仍应在升级后分别验收。
 
 ## 安装
 
@@ -27,7 +27,7 @@ pnpm run start:desktop
 
 ~~~powershell
 cd D:\deepseek-harness\dsh-desktop\home\profiles\desktop
-pnpm add D:\deepseek-harness\cuigengji-plugin\dsh-cuigengji-0.2.2.tgz
+pnpm add D:\deepseek-harness\cuigengji-plugin\dsh-cuigengji-0.2.3.tgz
 ~~~
 
 然后将 `dsh-cuigengji` 加入该 profile 的 `dsh.profile.bundles`，重启桌面端。开发时每次源码或前端 bundle 更新后重新 `npm run build`、`npm pack`，再安装新的 tgz。
@@ -35,7 +35,7 @@ pnpm add D:\deepseek-harness\cuigengji-plugin\dsh-cuigengji-0.2.2.tgz
 如果仍使用浏览器版，选择要安装的 DSH profile。默认使用 web：
 
 ~~~powershell
-dsh plugin --profile web add D:\path\dsh-cuigengji-0.2.2.tgz
+dsh plugin --profile web add D:\path\dsh-cuigengji-0.2.3.tgz
 dsh web
 ~~~
 

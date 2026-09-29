@@ -87,13 +87,13 @@ function WorkbenchContent({ sessionId, rpc }) {
       <div className="identity"><div className="row compact header-row">
         <select aria-label="绑定小说" className="book-picker grow" disabled={busy || !resource.value} value={novelId || ''} onChange={e => { if(e.target.value) openNovel(e.target.value); }}>
           <option value="">选择作品</option>{books.map(n => <option key={n.id} value={n.id}>{n.title}</option>)}
-        </select>{novelId&&<button className={`reference-link ${referenceOpen?'active':''}`} onClick={()=>setReferenceOpen(v=>!v)}>{referenceOpen?'关闭参考':'AI 参考'}</button>}<details className="menu"><summary aria-label="作品操作">···</summary><div className="menu-panel"><button onClick={create} disabled={busy}>新建作品</button><button onClick={()=>setTab('manage')}>作品与备份</button><button onClick={()=>setTab('preset')}>写作预设</button><button onClick={resource.retry}>刷新作品</button></div></details>
+        </select>{novelId&&<button className={`reference-link ${referenceOpen?'active':''}`} onClick={()=>setReferenceOpen(v=>!v)}>{referenceOpen?'关闭参考':'AI 参考'}</button>}<details className="menu"><summary aria-label="作品操作">···</summary><div className="menu-panel"><button onClick={create} disabled={busy}>新建作品</button><button onClick={()=>setTab('manage')}>作品与备份</button><button onClick={()=>setTab('preset')}>写作预设</button><button onClick={()=>setTab('data')}>工作数据 · 导入/导出</button><button onClick={resource.retry}>刷新作品</button></div></details>
       </div></div>
       {novelId && <nav aria-label="小说功能">{[['chapters','正文'],['plan','规划'],['memory','资料']].map(([id,label]) => <button key={id} aria-pressed={tab===id} className={tab===id?'selected':''} onClick={()=>{setReturnTarget(null);setReferenceOpen(false);setTab(id);}}>{label}</button>)}</nav>}
 
     </header>
     {error && <div className="notice error" role="alert">{error}<button onClick={()=>setError('')}>关闭提示</button></div>}
-    <div className="row" style={{padding:'4px 16px'}}><button onClick={()=>setTab('data')} aria-pressed={tab==='data'}>工作数据 · 导入/导出</button></div>
+
     <ResourceState resource={resource}>
       {tab==='data'?<div className="page"><WorkDataPage {...{call,run,busy}}/></div>:<>
       {!novelId ? <div className="page">{tab==='manage'?<><button onClick={()=>setTab('chapters')}>‹ 返回作品选择</button><Manage {...{call,run,busy}} onOpen={openNovel}/></>:<div className="empty"><h2>从一本作品开始</h2><p>从上方选择作品，或创建一本。</p><div className="row"><button className="primary" onClick={create}>新建作品</button><button onClick={()=>setTab('manage')}>导入已有作品</button></div></div>}</div> : <div className="workbench-body" key={novelId}>{returnTarget&&<div className="return-strip"><button onClick={()=>{setTab(returnTarget);setReturnTarget(null);}}>‹ 返回{({plan:'规划',memory:'设定'})[returnTarget]||'上一页'}</button></div>}

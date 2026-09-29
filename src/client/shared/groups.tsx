@@ -22,7 +22,7 @@ export function Groups({ groups, value, onChange, prefix, novelId, busy, call, r
   const selected = groups.find(g => g.id === value);
   const mutate = (action: string, args: Record<string, unknown>) => call(`${prefix}.group.${action}`, { novelId, requestId: crypto.randomUUID(), ...args });
   return <div className="group-toolbar">
-    <label className="grow">分组<select aria-label={prefix === 'planning' ? '规划分组' : '资料分组'} value={value} onChange={e => onChange(e.target.value)}><option value="">全部分组</option><option value="__ungrouped">未分组</option>{groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
+    <label className="grow"><select aria-label={prefix === 'planning' ? '规划分组' : '资料分组'} value={value} onChange={e => onChange(e.target.value)}><option value="">全部分组</option><option value="__ungrouped">未分组</option>{groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
     <details className="menu"><summary>管理分组</summary><div className="menu-panel">
       <button disabled={busy} onClick={async () => { const name = await ask('新建分组名称'); if (name?.trim()) run(() => mutate('create', { name })); }}>新建分组</button>
       {selected && <><button disabled={busy} onClick={async () => { const name = await ask('分组名称', selected.name); if (name?.trim()) run(() => mutate('update', { groupId: selected.id, expectedRevision: selected.revision, name })); }}>重命名</button>
