@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {Store} from '../src/core/store.js';
+import {WorkData} from '../src/data/workspace.js';
+async function fixture(t){const root=await mkdtemp(join(tmpdir(),'planning-pages-'));t.after(()=>rm(root,{recursive:true,force:true}));const store=new Store(root),actor={kind:'agent',sessionId:'planner'};const novel=await store.dispatch('novel.create',{title:'分页面讨论'},{kind:'human'});await store.dispatch('binding.set',{novelId:novel.id},{kind:'human',sessionId:actor.sessionId});const run=(action,args={})=>store.dispatch(action,args,actor);const apply=operations=>run('planning.apply',{requestId:crypto.randomUUID(),operations});return{root,store,novel,run,apply};}
+test('pages isolate scene indexes, edges, continuation, and annotations; CRUD is revision checked',async t=>{
+ const {run,apply}=await fixture(t);
+ const original=await apply([{op:'node.create',ref:'main',value:{title:'原来情节',content:'保留正文'}}]);
+ const p=await run('planning.page.create',{name:'远行篇',summary:'独立路线',requestId:crypto.randomUUID()});
+ const tx=await apply([{op:'node.create',ref:'a',value:{title:'港口',pageId:p.id,content:'完整规划'}},{op:'decoration.create',ref:'note',value:{pageId:p.id,kind:'note',content:'这是疑问，非正文事实',position:{x:400,y:90}}}]);
+ const next=await run('planning.continue',{nodeId:tx.mapping.a,expectedRevision:1,requestId:crypto.randomUUID(),value:{title:'下一步',pageId:null}});
+ assert.equal(next.node.pageId,p.id);
+ const main=await run('planning.list',{pageId:null}),scoped=await run('planning.list',{pageId:p.id});
+ assert.equal(main.total,1);assert.equal(main.edges.length,0);assert.equal(scoped.total,2);assert.equal(scoped.edges.length,1);
+ assert.equal((await run('planning.decorations',{pageId:null})).total,0);
+ assert.equal((await run('planning.pages')).find(n=>n.id===p.id).decorationCount,1);
+ const revised=await run('planning.page.update',{pageId:p.id,name:'港口篇',expectedRevision:p.revision,requestId:crypto.randomUUID()});
+ await assert.rejects(run('planning.page.update',{pageId:p.id,name:'旧修改',expectedRevision:p.revision,requestId:crypto.randomUUID()}),{code:'CONFLICT'});
+ await assert.rejects(run('planning.page.delete',{pageId:p.id,expectedRevision:revised.revision,confirm:true,requestId:crypto.randomUUID()}),{code:'PAGE_NOT_EMPTY'});
+ await assert.rejects(apply([{op:'edge.create',value:{from:original.mapping.main,to:tx.mapping.a}}]),{code:'INVALID_PLANNING'});
+ await assert.rejects(apply([{op:'node.update',id:tx.mapping.a,expectedRevision:1,value:{pageId:null}}]),{code:'INVALID_PLANNING'});
+ assert.equal((await run('planning.get',{nodeId:tx.mapping.a})).node.content,'完整规划');
+});
+test('page/annotation changes are atomic, undoable and portable including styles and coordinates',async t=>{
+ const {root,store,novel,run,apply}=await fixture(t);
+ const tx=await apply([{op:'page.create',ref:'page',value:{name:'讨论草图'}},{op:'decoration.create',ref:'frame',value:{pageId:'page',kind:'frame',title:'动机待讨论',width:500,height:330,color:'sky',fontSize:24,fontFamily:'serif',position:{x:100,y:80}}}]);
+ const id=tx.mapping.frame,pageId=tx.mapping.page;
+ for(const value of [{fontSize:999},{color:'url(malicious)'},{width:-1},{position:{x:NaN,y:0}},{pageId:'missing'}])await assert.rejects(apply([{op:'decoration.update',id,expectedRevision:1,value}]),{code:'INVALID_PLANNING'});
+ assert.equal((await run('planning.decorations',{pageId})).items[0].revision,1);
+ const moved=await apply([{op:'decoration.update',id,expectedRevision:1,value:{position:{x:240,y:200},width:660,content:'待确认动机'}}]);
+ await assert.rejects(apply([{op:'decoration.update',id,expectedRevision:1,value:{title:'过期'}}]),{code:'CONFLICT'});
+ const archive=await new WorkData(store).export(),target=new Store(join(root,'restored'));
+ await new WorkData(target).import(archive);
+ assert.deepEqual((await target.load()).novels[novel.id],(await store.load()).novels[novel.id]);
+ await run('planning.revert',{transactionId:moved.transactionId,requestId:crypto.randomUUID()});
+ let frame=(await run('planning.decorations',{pageId})).items[0];assert.deepEqual(frame.position,{x:100,y:80});assert.equal(frame.width,500);
+ const removed=await apply([{op:'decoration.delete',id,expectedRevision:frame.revision,confirm:true},{op:'page.delete',id:pageId,expectedRevision:1,confirm:true}]);
+ assert.equal((await run('planning.pages')).length,1);
+ await run('planning.revert',{transactionId:removed.transactionId,requestId:crypto.randomUUID()});
+ assert.equal((await run('planning.decorations',{pageId})).items[0].fontFamily,'serif');
+});
+test('legacy planning records stay on the default page without changing their exported content',async t=>{
+ const {root,run,apply}=await fixture(t);
+ await apply([{op:'node.create',value:{title:'原有规划',content:'旧作品的完整规划'}}]);
+ const backup=await run('novel.export');delete backup.novel.planning.pages;delete backup.novel.planning.decorations;
+ for(const node of Object.values(backup.novel.planning.nodes))delete node.pageId;
+ const store=new Store(join(root,'legacy'));await store.dispatch('novel.import',{backup});
+ const before=(await store.load()).novels[backup.novel.id];
+ const pages=await store.dispatch('planning.pages',{novelId:backup.novel.id});
+ assert.equal(pages.length,1);assert.equal(pages[0].nodeCount,1);
+ assert.equal((await store.dispatch('planning.decorations',{novelId:backup.novel.id,pageId:null})).total,0);
+ assert.deepEqual((await store.load()).novels[backup.novel.id],before);
+});

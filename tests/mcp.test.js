@@ -5,6 +5,25 @@ import { Store } from '../src/core/store.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { memoryRuntime } from '../src/adapters/mcp/client.js';
+
+test('desktop child runs as Node without inheriting host credentials', () => {
+  const runtime = {
+    execPath: 'D:/Apps/DeepSeek Harness/DeepSeek Harness.exe',
+    versions: { electron: '40.0.0' },
+    env: { NODE_HOME: 'stale/path', NODE_OPTIONS: '--expose-internals', API_KEY: 'must-not-inherit' },
+  };
+  assert.deepEqual(memoryRuntime({}, runtime), {
+    command: runtime.execPath,
+    env: { NODE_OPTIONS: '--expose-internals', ELECTRON_RUN_AS_NODE: '1' },
+  });
+  runtime.env.CUIGENGJI_DSH_NODE = '/custom/node-host.sh';
+  assert.equal(memoryRuntime({}, runtime).command, '/custom/node-host.sh');
+  assert.equal(memoryRuntime({ nodeCommand: '/explicit/node' }, runtime).command, '/explicit/node');
+  assert.deepEqual(memoryRuntime({}, { execPath: '/bin/node', versions: {}, env: {} }), {
+    command: '/bin/node', env: {},
+  });
+});
 
 function fixture(options = {}) {
   const bindings = new Map([['session-a', 'novel-a'], ['session-b', 'novel-b']]);

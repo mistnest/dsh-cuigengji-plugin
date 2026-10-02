@@ -19,6 +19,26 @@ async function fixture(t) {
   return { root, store, novel, human, agent, run };
 }
 
+test('unnamed relationships retain optional metadata, CAS and archive roundtrip', async t => {
+  const {run} = await fixture(t);
+  const a = await run('graph.create', {type:'character_card', name:'人物'});
+  const b = await run('graph.create', {type:'world_entry', name:'地点'});
+  const empty = await run('edge.create', {from:a.id,to:b.id});
+  assert.equal(empty.name,''); assert.equal(empty.content,'');
+  const named = await run('edge.update', {edgeId:empty.id,expectedRevision:empty.revision,name:'居住',content:'城南'});
+  await assert.rejects(run('edge.update', {edgeId:empty.id,expectedRevision:empty.revision,name:''}), {code:'CONFLICT'});
+  const cleared = await run('edge.update', {edgeId:named.id,expectedRevision:named.revision,name:''});
+  assert.equal(cleared.name,''); assert.equal(cleared.content,'城南');
+  await assert.rejects(run('graph.create', {type:'world_entry',name:''}), {code:'INVALID_INPUT'});
+  const backup = await run('novel.export');
+  const destination = await mkdtemp(join(tmpdir(),'cuigengji-relations-'));
+  t.after(()=>rm(destination,{recursive:true,force:true}));
+  const store = new Store(destination);
+  const imported = await store.dispatch('novel.import',{backup});
+  const restored = await store.dispatch('edge.get',{novelId:imported.id,edgeId:cleared.id});
+  assert.equal(restored.name,''); assert.equal(restored.content,'城南');
+});
+
 test('memory is available through search and explicit read but never auto-injected', async t => {
   const { run } = await fixture(t);
   await run('chapter.create', { title:'未请求章节', content:'不得隐式塞入的正文' });
@@ -34,6 +54,33 @@ test('memory is available through search and explicit read but never auto-inject
   assert.equal(explicit.items.some(i=>i.id===hidden.id),false);
   assert.equal(context.items.some(i=>i.id===hidden.id),false);
   assert.equal(explicit.items[0].content.length,800);
+});
+
+test('memory card positions are validated, revision checked, and portable without changing text or sources', async t => {
+  const {run} = await fixture(t);
+  const ch = await run('chapter.create',{title:'一',content:'雨城'});
+  const original = await run('graph.create',{type:'world_entry',name:'雨城',content:'保留全文',summary:'摘要',aliases:['城'],sources:[{chapterId:ch.id,revision:ch.revision}]});
+  assert.equal(original.position,undefined);
+  const position={x:371.5,y:260};
+  const moved=await run('graph.update',{nodeId:original.id,expectedRevision:original.revision,position});
+  for (const key of ['content','summary','aliases','sources','status']) assert.deepEqual(moved[key],original[key]);
+  assert.deepEqual(moved.position,position);
+  assert.deepEqual((await run('graph.list'))[0].position,position);
+  await assert.rejects(run('graph.update',{nodeId:original.id,expectedRevision:original.revision,position:{x:1,y:1}}),{code:'CONFLICT'});
+  for (const value of [{x:-1,y:0},{x:Infinity,y:0},{x:'3',y:0},{x:1},[],false]) {
+    await assert.rejects(run('graph.update',{nodeId:moved.id,expectedRevision:moved.revision,position:value}),{code:'INVALID_INPUT'});
+  }
+  assert.equal((await run('graph.get',{nodeId:moved.id})).revision,moved.revision);
+  const backup=await run('novel.export');
+  const destination=await mkdtemp(join(tmpdir(),'cuigengji-layout-'));
+  t.after(()=>rm(destination,{recursive:true,force:true}));
+  const restored=new Store(destination);
+  const imported=await restored.dispatch('novel.import',{backup});
+  assert.deepEqual((await restored.dispatch('graph.get',{novelId:imported.id,nodeId:moved.id})).position,position);
+  const corrupt=structuredClone(backup);corrupt.novel.nodes[moved.id].position={x:-1,y:0};
+  await assert.rejects(restored.dispatch('novel.import',{backup:corrupt}),{code:'INVALID_INPUT'});
+  const reset=await run('graph.update',{nodeId:moved.id,expectedRevision:moved.revision,position:null});
+  assert.equal(reset.position,null);
 });
 
 test('handoff is a bounded project index and chapter context is explicit', async t => {

@@ -1,20 +1,72 @@
 ---
 name: cuigengji-memory
-description: 从实际正文维护角色、世界规则、关系与来源，核对过期记录。
+description: 与作者共同创建、修订和分组角色卡、世界书及关系，区分作者设定、正文事实与未决提案。
 ---
 
-# 小说记忆维护
+# 共同维护设定与关系图
 
-维护资料前先核对正文依据。按 `cuigengji-project` 的取材顺序读取来源章节，再搜索名称、别名和摘要，并按需读取完整设定与相邻关系。更新已有节点优先于创建重复角色。
+设定区和正文、规划一样，由作者与 Agent 共用。支持提前构建世界观，也支持从已写正文维护连续性；并非必须先写出章节才能建人物或世界规则。
 
-先用 `graph.groups` 查看已有分组；`graph.list` 可传 groupId 缩小范围，未分组用 null。按内容归类时更新节点的 groupId；批量归类用 `graph.move`，每个成员提供 id 和 expectedRevision。`graph.group.create/update/delete` 管理分组，更新和删除带 expectedRevision，删除还需 confirm:true；删除分组只把成员移至未分组，不删除人物或设定。分组是检索目录，不代表世界观中的归属关系。
+## 先分清信息的性质
 
-节点正文保持作者易读的自然文本。摘要只收录关键辨识信息与当前状态，不将整个正文复制进去。角色卡和世界书是记忆；审阅预设和 Skill 不属于小说图谱。
+| 来源 | 如何记录 |
+| --- | --- |
+| 作者明确规定的世界规则、人物背景 | 可作为作品设定保存；在正文内容中注明作者设定，尚未在故事中揭示的部分不写成角色已经知道的事。没有章节证据时不编造 sources |
+| 已保存正文中明确发生的事件 | 核对相关片段，用真实章节 ID 和 revision 记录 sources |
+| 作者正在比较的方案、Agent 提议、推测 | 保持未确认；未来情节优先留在规划，不冒充当前人物事实 |
+| 角色的认知、谎言或误解 | 在正文中明确是谁的认知，区分 belief / misunderstanding 与客观事实 |
 
-对从正文提取的记忆记录来源章节与版本。清楚区分：客观事实、角色认知或误解、未确认推测、未来计划。没有证据就保留未确认，不自行补成事实。
+作者的新设定与已发生正文冲突时，指出具体冲突，再判断是未来补充、角色误解还是作者要修订前文。不要悄悄覆盖正文来迁就设定。
 
-人物关系有方向、阶段和知情范围。将读者知道的信息赋给角色前，检查他在何处获知。伏笔记录提出的位置及当前是否回应，不凭大纲提前标成已经兑现。
+## 查找、复用、更新
 
-来源章节被修改后，待核对记录不能继续作为确定事实。读取最新来源，修正或删除失效信息，再恢复为有效。不能仅为了消除提示而更换来源版本。
+所有下述 action 调用 `cuigengji_memory`，用 `{action,args}` 包装。
 
-维护失败时说明剩余工作；正文已保存而记忆未更新，可以继续恢复，不谎称二者同步完成。
+1. 根据人物名称、别名或场景关键词用 `graph.list {query,type?,groupId?}` 查找。query 会搜索名称、摘要、别名和正文，但列表不返回正文。没有命中时换合理别名；空结果不等于人物一定不存在。
+2. 用 `graph.get {nodeId}` 读取命中的全文和 revision；需要关系时 `edge.list {nodeId}`，详细核对某条边用 `edge.get {edgeId}`。不用每轮遍历整个图谱。
+3. 补充同一个人物或规则优先 `graph.update`。只有新的独立对象才 `graph.create {type,name,summary,content,...}`；新角色用 character_card，世界规则、地点、组织等用 world_entry。旧 world_book 数据可以读取，日常新增使用前两类。
+4. 保留作者的表述、别名、来源、知情范围和分组。只改本次涉及的字段；更新 content 是替换整个条目正文，必须先读完整条目并合并，不拿一段摘要覆盖全文。
+5. name 是界面标题，summary 用于扫列表与检索，content 是自由正文。不要把每条聊天消息拆成一张卡，也不要把审阅指令、预设或 skill 写入世界书。
+
+## 分组与关系各司其职
+
+- 用 `graph.groups` 读已有目录。创建组：`graph.group.create {name,summary?}`；修改/删除：`graph.group.update/delete {groupId,expectedRevision,...}`，删除还需 confirm:true。
+- 单条归组：graph.update 的 groupId；多条归组：`graph.move {groupId,members:[{id,expectedRevision}]}`。groupId:null 表示未分组；删除组不会删人物或设定。分组操作可能更新成员 revision，后续写入重读版本。
+- 分组用于查找，例如“雨城人物”“帝国制度”；人物“隶属某组织”属于世界关系，需要组织条目与连线，不能只靠文件夹位置表达。
+- 连线：`edge.create {from,to,name?,content?}`。有准确的信息才填名称/说明，文字会直接显示在关系图的边上；无信息时允许只有箭头，不硬编关系属性。
+- 更新/断线：`edge.update/delete {edgeId,expectedRevision,...}`；删除带 confirm:true。删除一条边不删除两个端点。已存在相同语义的关系时更新旧边，不反复创建；不要为了对称而机械补一条反向边。
+- 规划箭头表示情节推进，设定箭头表示人物或世界关系，两个图的 ID 与工具不混用。
+
+## 状态、来源与人物知情
+
+`status` 可用 active（当前可用）、stale（来源变化待核对）、unconfirmed（待确认）、retired（不再使用）。`factType` 可用 fact、belief、misunderstanding、unconfirmed、plan。状态与事实性质是两回事：默认创建可能是 active + unconfirmed，不能把 active 自动理解为已证实。
+
+作者明确采纳的规则可用 active + fact；未定构思用 unconfirmed + unconfirmed。角色卡同时含事实和猜测时，在 content 中清楚区分，不用一个笼统标签掩盖不确定部分。
+
+`sources` 是 `[{chapterId,revision}]`，版本必须真实存在；`knownBy` 可放知情角色卡 ID；`dependsOn` 放依赖的设定节点 ID；`storyTime` 用文本说明适用阶段。knownBy 为空不等于所有人物都知道，仍需结合正文核对。直接 graph.get 不会替你过滤未来信息或角色秘密，取材时自己检查。
+
+正文更新会把引用该章及依赖它的资料标为 stale。只对当前任务相关记录核对最新来源，修正文案并更新 sources 后再恢复 active；不要批量消除提示。retired 用于保留不再使用的内容；graph.delete 会软删除条目及其连线，先核对作者是否真的要连关系一起删除。
+
+## 调用示例
+
+大写 ID 必须换成真实查询结果；revision=1 是示例读取值。每个操作生成唯一 requestId，只有原样重试复用它。
+
+作者要求补充一名已有角色的身份，用原节点保存。此例假设已合并完原文；其他字段省略即保留：
+
+```json
+{"action":"graph.update","args":{"nodeId":"CHARACTER_ID","expectedRevision":1,"requestId":"update-character-unique","summary":"经营夜间书铺，熟悉旧账册的修复。","content":"她继承了母亲留下的书铺。作者补充：她以书铺为生，擅长修补受潮的账册；这项能力尚未在正文中展示。","status":"active","factType":"fact"}}
+```
+
+将已查明的几条资料移动到已有分组，不改正文和关系：
+
+```json
+{"action":"graph.move","args":{"groupId":"MEMORY_GROUP_ID","requestId":"move-settings-unique","members":[{"id":"CHARACTER_ID","expectedRevision":1},{"id":"PLACE_ID","expectedRevision":1}]}}
+```
+
+只在已有连线检查后建立人物与地点的关系。来源必须来自已经保存并读过的章节；若关系只是作者新设定，省略 sources 并在说明中注明：
+
+```json
+{"action":"edge.create","args":{"from":"CHARACTER_ID","to":"PLACE_ID","name":"经营","content":"在本章时点负责书铺日常经营。","factType":"fact","status":"active","sources":[{"chapterId":"CHAPTER_ID","revision":1}],"requestId":"connect-settings-unique"}}
+```
+
+保存后回读相关条目或关系，报告新增/更新/归组了什么。不要因为整理了设定就声称正文已改；若正文保存成功而设定维护失败，说明具体剩余工作。

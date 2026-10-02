@@ -47,4 +47,10 @@ test('registered DSH tools execute through session policy and real MCP', async t
   await execute('cuigengji_project', 'chapter.update', { chapterId: chapter.id, expectedRevision: chapter.revision, content: '' });
   assert.equal((await execute('cuigengji_project', 'chapter.get', { chapterId: chapter.id })).content, '');
   assert.equal((await execute('cuigengji_memory', 'graph.get', { nodeId: node.id })).status, 'stale');
+  const seed=await execute('cuigengji_plan','planning.apply',{operations:[{op:'node.create',ref:'start',value:{title:'收到密信'}}]});
+  const next=await execute('cuigengji_plan','planning.continue',{nodeId:seed.mapping.start,expectedRevision:1,value:{title:'秘密赴约',summary:'循线寻找写信人'}});
+  assert.equal(next.from,seed.mapping.start);
+  const flow=await execute('cuigengji_plan','planning.get',{nodeId:seed.mapping.start});
+  assert.equal(flow.flow.next[0].id,next.node.id);
+  assert.equal(flow.flow.next[0].content,undefined);
 });

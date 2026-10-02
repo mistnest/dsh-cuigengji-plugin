@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHandoff } from '../src/core/handoff.js';
 import { renderHandoff } from '../src/core/handoff-text.js';
 import { registerSkills, skillSpecs } from '../src/assistant/skills.js';
+import { readFileSync } from 'node:fs';
 
 function project() {
   return {
@@ -53,6 +54,8 @@ test('handoff excludes unrelated bindings and distinguishes missing from unselec
 
 test('each registered task skill includes the operational guide with one metadata header', () => {
   const skills = [];
+  const shared = readFileSync(new URL('../skills/cuigengji-project/SKILL.md', import.meta.url), 'utf8')
+    .replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, '').trim();
   registerSkills({ skills: { register: skill => skills.push(skill) } });
   assert.equal(skills.length, skillSpecs.length);
   for (const skill of skills) {
@@ -62,6 +65,6 @@ test('each registered task skill includes the operational guide with one metadat
     assert.match(skill.content, /preset.read/);
     assert.match(skill.content, /nextStart/);
     assert.match(skill.content, /expectedRevision/);
-    assert.match(skill.content, /只读取了片段时不要用该片段替换整章/);
+    assert.equal(skill.content.split(shared).length, 2, 'include the complete shared guide exactly once');
   }
 });

@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 export const skillSpecs = [
-  ['cuigengji-project', '接手已绑定的小说项目，按任务读取正文、预设、规划和角色/世界资料。'],
-  ['cuigengji-plan', '讨论小说创意、人物关系和情节方向，与作者协同维护自由规划流程图。'],
-  ['cuigengji-write', '依据作者方向写中文小说场景，重视人物视角、沉浸感、自然对话与手机阅读。'],
-  ['cuigengji-revise', '审阅或修改现有正文，检查因果、人物选择、信息边界、章节衔接及机械表达。'],
-  ['cuigengji-memory', '写作或修订后维护角色卡、世界书和关系，依据实际正文核对来源与过期记忆。'],
+  ['cuigengji-project', '接手催更姬小说项目，定位作者的协作目标，按需读取资料并安全保存正文、规划与设定。'],
+  ['cuigengji-plan', '和作者讨论情节走向，更新或续接共享流程图，处理分支、分组、正文关联与协作冲突。'],
+  ['cuigengji-write', '按作者意图写作或续写小说正文，用章节工具保存，并按实际结果维护相关规划与设定。'],
+  ['cuigengji-revise', '审阅或修订已保存正文，定位具体问题，用版本检查保留作者并行修改，并核对受影响的规划与设定。'],
+  ['cuigengji-memory', '与作者共同创建、修订和分组角色卡、世界书及关系，区分作者设定、正文事实与未决提案。'],
 ];
 export function registerSkills(ctx) {
   const shared = readFileSync(new URL('../../../skills/cuigengji-project/SKILL.md', import.meta.url), 'utf8');

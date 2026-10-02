@@ -1,4 +1,4 @@
-import type { Board, Collection, Change, PlanningEntity, PlanningNode, PlanningNovel, PlanningArgs, Operation } from '../../contracts/planning.ts';
+import type { Board, Collection, Change, Decoration, PlanningEntity, PlanningNode, PlanningNovel, PlanningArgs, Operation } from '../../contracts/planning.ts';
 import { ensurePlanning, validatePlanning } from './model.ts';
 export { ensurePlanning, validatePlanning } from './model.ts';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +10,26 @@ const check=(item:{revision:number},revision:number|undefined)=>{if(item.revisio
 const page=<T>(values:T[],args:PlanningArgs)=>{const offset=args.offset??0,limit=args.limit??50;if(!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>200)fail('INVALID_INPUT','分页参数无效');return {items:values.slice(offset,offset+limit),total:values.length,nextOffset:offset+limit<values.length?offset+limit:null};};
 export function planningAction(novel:PlanningNovel,action:string,args:PlanningArgs,actor:{kind?:string;sessionId?:string}): unknown {
   const board=ensurePlanning(novel);
+  const inPage=(node:{pageId?:string|null})=>args.pageId===undefined||(node.pageId??null)===args.pageId;
+  if(args.pageId!==undefined&&args.pageId!==null&&(!own(board.pages||{},args.pageId)||board.pages[args.pageId].deleted))fail('NOT_FOUND','规划页面不存在');
+  if(action==='planning.pages')return [{id:null,name:'主线规划',summary:'原有规划与默认页面',revision:0},...Object.values(board.pages||{}).filter(p=>!p.deleted)].map(p=>({...p,nodeCount:Object.values(board.nodes).filter(n=>!n.deleted&&(n.pageId??null)===p.id).length,decorationCount:Object.values(board.decorations||{}).filter(d=>!d.deleted&&d.pageId===p.id).length}));
+  if(action==='planning.decorations')return {...page(Object.values(board.decorations||{}).filter(d=>(args.includeDeleted||!d.deleted)&&inPage(d)),args),sequence:board.sequence};
+  if(action.startsWith('planning.page.')){
+    const op=action.slice('planning.'.length) as 'page.create'|'page.update'|'page.delete';
+    const result=planningAction(novel,'planning.apply',{...args,operations:[{op,id:args.pageId,expectedRevision:args.expectedRevision,confirm:args.confirm,ref:'page',value:{name:args.name,summary:args.summary}} as Operation]},actor) as {mapping:Record<string,string>;sequence:number;transactionId:string};
+    return {...novel.planning!.pages[result.mapping.page||args.pageId||''],sequence:result.sequence,transactionId:result.transactionId};
+  }
+  if(action==='planning.continue'){
+    const source=entity(board.nodes,args.nodeId);check(source,args.expectedRevision);
+    if(source.deleted)fail('DELETED','起点已删除');
+    if(typeof args.value?.title!=='string'||!args.value.title.trim())fail('INVALID_INPUT','请填写下一步情节标题');
+    const result=planningAction(novel,'planning.apply',{...args,reason:args.reason||`从「${source.title}」继续推进`,operations:[
+      {op:'node.create',ref:'continuation',value:{...args.value,pageId:source.pageId??null,groupId:args.value?.groupId===undefined?source.groupId??null:args.value.groupId}},
+      {op:'edge.create',value:{from:source.id,to:'continuation',type:'next'}},
+    ]},actor) as {mapping:Record<string,string>;transactionId:string;sequence:number};
+    const {content,...node}=novel.planning!.nodes[result.mapping.continuation];
+    return {...result,node,from:source.id};
+  }
   if(action==='planning.groups') return Object.values(board.groups).filter(g=>!g.deleted);
   if(action.startsWith('planning.group.')) {
     const op=action.slice('planning.'.length) as 'group.create'|'group.update'|'group.delete';
@@ -18,10 +38,10 @@ export function planningAction(novel:PlanningNovel,action:string,args:PlanningAr
   }
   if(action==='planning.list'||action==='planning.search'){
     const q=(args.query||'').toLowerCase();
-    const rows=Object.values(board.nodes).filter(n=>(args.includeDeleted||!n.deleted)&&(args.parentId===undefined||n.parentId===args.parentId)&&(args.groupId===undefined||(n.groupId??null)===args.groupId)&&(!args.status||n.status===args.status)&&(!args.thread||n.threads.includes(args.thread))&&(!q||`${n.title}\n${n.summary}`.toLowerCase().includes(q))).map(({content,...n})=>n);
-    return {...page(rows,args),edges:Object.values(board.edges).filter(e=>!e.deleted),sequence:board.sequence};
+    const rows=Object.values(board.nodes).filter(n=>inPage(n)&&(args.includeDeleted||!n.deleted)&&(args.parentId===undefined||n.parentId===args.parentId)&&(args.groupId===undefined||(n.groupId??null)===args.groupId)&&(!args.status||n.status===args.status)&&(!args.thread||n.threads.includes(args.thread))&&(!q||`${n.title}\n${n.summary}`.toLowerCase().includes(q))).map(({content,...n})=>n);
+    return {...page(rows,args),edges:Object.values(board.edges).filter(e=>!e.deleted&&inPage(board.nodes[e.from])),sequence:board.sequence};
   }
-  if(action==='planning.get'){const node=entity(board.nodes,args.nodeId),edges=Object.values(board.edges).filter(e=>!e.deleted&&(e.from===node.id||e.to===node.id));return {node,edges,neighbors:Object.values(board.nodes).filter(n=>!n.deleted&&n.id!==node.id&&edges.some(e=>e.from===n.id||e.to===n.id)).map(({content,...n})=>n),children:Object.values(board.nodes).filter(n=>!n.deleted&&n.parentId===node.id).map(({content,...n})=>n),sequence:board.sequence};}
+  if(action==='planning.get'){const node=entity(board.nodes,args.nodeId),edges=Object.values(board.edges).filter(e=>!e.deleted&&(e.from===node.id||e.to===node.id));const neighbors=Object.values(board.nodes).filter(n=>!n.deleted&&n.id!==node.id&&edges.some(e=>e.from===n.id||e.to===n.id)).map(({content,...n})=>n);return {node,edges,neighbors,flow:{previous:neighbors.filter(n=>edges.some(e=>e.from===n.id&&e.to===node.id)),next:neighbors.filter(n=>edges.some(e=>e.from===node.id&&e.to===n.id))},children:Object.values(board.nodes).filter(n=>!n.deleted&&n.parentId===node.id).map(({content,...n})=>n),sequence:board.sequence};}
   if(action==='planning.changes'||action==='planning.history'){
     const values=board.transactions.filter(t=>(args.after===undefined||t.sequence>args.after)&&(!args.nodeId||t.changes.some(c=>c.id===args.nodeId)));
     return {...page(action==='planning.history'?values.reverse():values,args),sequence:board.sequence};
@@ -30,6 +50,7 @@ export function planningAction(novel:PlanningNovel,action:string,args:PlanningAr
   if(typeof args.requestId!=='string'||!args.requestId)fail('INVALID_INPUT','规划修改必须提供 requestId');
   if(args.expectedSequence!==undefined&&args.expectedSequence!==board.sequence)fail('CONFLICT','规划结构在确认期间已变化，请重新核对删除范围');
   const draft=copy(board), touched=new Map<string,Omit<Change,'after'>>(),mapping:Record<string,string>={};
+  draft.pages??={};draft.decorations??={};
   const remember=(collection:Collection,id:string)=>{const key=`${collection}:${id}`;if(!touched.has(key))touched.set(key,{collection,id,before:copy(draft[collection][id]??null)});};
   const stamp=()=>({lastSequence:board.sequence+1,updatedAt:new Date().toISOString(),actor:{kind:actor.kind==='human'?'human':'agent',sessionId:actor.sessionId||null}});
   const update=<K extends Collection>(collection:K,id:string,patch:Partial<Board[K][string]>)=>{remember(collection,id);const previous=draft[collection][id];(draft[collection] as Record<string,PlanningEntity>)[id]={...previous,...patch,id,revision:(previous?.revision||0)+1,...stamp()} as PlanningEntity;};
@@ -40,7 +61,24 @@ export function planningAction(novel:PlanningNovel,action:string,args:PlanningAr
   }else{
     if(!Array.isArray(args.operations)||!args.operations.length||args.operations.length>200)fail('INVALID_INPUT','请提供 1–200 个规划操作');
     for(const op of args.operations!){
-      if(op.op==='group.create'){
+      if(op.op==='page.create'){
+        const id=randomUUID();if(op.ref){if(own(mapping,op.ref))fail('INVALID_INPUT','临时引用重复');Object.defineProperty(mapping,op.ref,{value:id,enumerable:true});}
+        update('pages',id,{name:op.value?.name,summary:op.value?.summary??'',deleted:false});
+      }else if(op.op==='page.update'||op.op==='page.delete'){
+        const id=resolve(op.id),p=entity(draft.pages,id);check(p,op.expectedRevision);if(p.deleted)fail('DELETED','页面已删除');
+        if(op.op==='page.delete'){
+          if(op.confirm!==true)fail('CONFIRM_REQUIRED','删除页面需要确认');
+          if([...Object.values(draft.nodes),...Object.values(draft.decorations)].some(n=>!n.deleted&&n.pageId===id))fail('PAGE_NOT_EMPTY','请先移出情节并移除批注，再删除空页面');
+          update('pages',id,{deleted:true});
+        }else update('pages',id,Object.fromEntries((['name','summary'] as const).filter(k=>op.value?.[k]!==undefined).map(k=>[k,op.value![k]])));
+      }else if(op.op==='decoration.create'){
+        const id=randomUUID();if(op.ref){if(own(mapping,op.ref))fail('INVALID_INPUT','临时引用重复');Object.defineProperty(mapping,op.ref,{value:id,enumerable:true});}
+        update('decorations',id,{kind:'note',title:'',content:'',position:{x:40,y:60},width:280,height:160,color:'sand',fontSize:18,fontFamily:'sans',...pickDecoration(op.value),pageId:resolve(op.value?.pageId)||null,deleted:false});
+      }else if(op.op==='decoration.update'||op.op==='decoration.delete'){
+        const id=resolve(op.id),d=entity(draft.decorations,id);check(d,op.expectedRevision);if(d.deleted)fail('DELETED','批注已删除');
+        if(op.op==='decoration.delete'){if(op.confirm!==true)fail('CONFIRM_REQUIRED','删除批注需要确认');update('decorations',id,{deleted:true});}
+        else {const value=pickDecoration(op.value);if(value.pageId)value.pageId=resolve(value.pageId);update('decorations',id,value);}
+      }else if(op.op==='group.create'){
         const id=randomUUID();if(op.ref){if(own(mapping,op.ref))fail('INVALID_INPUT','临时引用重复');Object.defineProperty(mapping,op.ref,{value:id,enumerable:true});}
         update('groups',id,{name:op.value?.name,summary:op.value?.summary??'',deleted:false});
       }else if(op.op==='group.update'||op.op==='group.delete'){
@@ -52,9 +90,9 @@ export function planningAction(novel:PlanningNovel,action:string,args:PlanningAr
         }else update('groups',id,Object.fromEntries((['name','summary'] as const).filter(k=>op.value?.[k]!==undefined).map(k=>[k,op.value![k]])));
       }else if(op.op==='node.create'){
         const id=randomUUID();if(op.ref){if(own(mapping,op.ref))fail('INVALID_INPUT','临时引用重复');Object.defineProperty(mapping,op.ref,{value:id,enumerable:true});}
-        update('nodes',id,{title:'新规划',summary:'',content:'',scope:'unspecified',status:'idea',threads:[],chapterRefs:[],memoryRefs:[],...pickNode(op.value),groupId:resolve(op.value?.groupId)||null,parentId:resolve(op.value?.parentId)||null,deleted:false});
+        update('nodes',id,{title:'新规划',summary:'',content:'',scope:'unspecified',status:'idea',threads:[],chapterRefs:[],memoryRefs:[],...pickNode(op.value),pageId:resolve(op.value?.pageId)||null,groupId:resolve(op.value?.groupId)||null,parentId:resolve(op.value?.parentId)||null,deleted:false});
       }else if(op.op==='node.update'){
-        const id=resolve(op.id),node=entity(draft.nodes,id);check(node,op.expectedRevision);if(node.deleted)fail('DELETED','规划已删除');const value=pickNode(op.value);if(value.parentId)value.parentId=resolve(value.parentId);if(value.groupId)value.groupId=resolve(value.groupId);update('nodes',id,value);
+        const id=resolve(op.id),node=entity(draft.nodes,id);check(node,op.expectedRevision);if(node.deleted)fail('DELETED','规划已删除');const value=pickNode(op.value);if(value.parentId)value.parentId=resolve(value.parentId);if(value.groupId)value.groupId=resolve(value.groupId);if(value.pageId)value.pageId=resolve(value.pageId);update('nodes',id,value);
       }else if(op.op==='node.delete'){
         const id=resolve(op.id),node=entity(draft.nodes,id);check(node,op.expectedRevision);if(op.confirm!==true)fail('CONFIRM_REQUIRED','删除需要确认');
         const children=Object.values(draft.nodes).filter(n=>!n.deleted&&n.parentId===id);
@@ -78,4 +116,5 @@ export function planningAction(novel:PlanningNovel,action:string,args:PlanningAr
   draft.sequence=transaction.sequence;draft.transactions.push(transaction);novel.planning=draft;
   return {transactionId:transaction.id,sequence:draft.sequence,mapping,changed:transaction.changes.map(c=>({id:c.id,collection:c.collection,revision:c.after.revision}))};
 }
-function pickNode(value:Partial<PlanningNode>={}):Partial<PlanningNode> {return Object.fromEntries((['title','summary','content','scope','status','parentId','groupId','position','threads','chapterRefs','memoryRefs'] as const).filter(k=>value[k]!==undefined).map(k=>[k,value[k]]));}
+function pickNode(value:Partial<PlanningNode>={}):Partial<PlanningNode> {return Object.fromEntries((['title','summary','content','scope','status','parentId','groupId','pageId','position','threads','chapterRefs','memoryRefs'] as const).filter(k=>value[k]!==undefined).map(k=>[k,value[k]]));}
+function pickDecoration(value:Partial<Decoration>={}):Partial<Decoration>{return Object.fromEntries((['pageId','kind','title','content','position','width','height','color','fontSize','fontFamily'] as const).filter(k=>value[k]!==undefined).map(k=>[k,value[k]]));}

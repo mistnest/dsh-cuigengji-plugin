@@ -6,6 +6,22 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {Store} from '../src/core/store.js';
 async function setup(t){const root=await mkdtemp(join(tmpdir(),'planning-'));t.after(()=>rm(root,{recursive:true,force:true}));const store=new Store(root);const novel=await store.dispatch('novel.create',{title:'协同规划'});const actor={kind:'human',sessionId:'author'};await store.dispatch('binding.set',{novelId:novel.id},actor);return {root,store,novel,actor,run:(action,args={},a=actor)=>store.dispatch(action,args,a),apply:operations=>store.dispatch('planning.apply',{operations,requestId:randomUUID()},actor)};}
+
+test('discussion continuation atomically links a new scene, inherits group and exposes directional context',async t=>{
+ const {run,apply}=await setup(t);
+ const start=await apply([{op:'group.create',ref:'act',value:{name:'追查'}},{op:'node.create',ref:'start',value:{title:'发现假账',groupId:'act',content:'起点全文'}}]);
+ const args={nodeId:start.mapping.start,expectedRevision:1,requestId:'continue-once',value:{title:'暗中跟踪',summary:'避免惊动幕后主使',content:'后续全文'}};
+ const branch=await run('planning.continue',args);assert.equal(branch.node.groupId,start.mapping.act);assert.equal(branch.node.status,'idea');assert.equal(branch.node.content,undefined);
+ assert.deepEqual(await run('planning.continue',args),branch);
+ await run('planning.continue',{...args,requestId:'second-option',value:{title:'当场质问'}});
+ const source=await run('planning.get',{nodeId:start.mapping.start});assert.equal(source.flow.next.length,2);assert.ok(source.flow.next.every(n=>n.content===undefined));
+ const target=await run('planning.get',{nodeId:branch.node.id});assert.equal(target.flow.previous[0].id,start.mapping.start);assert.equal(target.node.content,'后续全文');
+ await assert.rejects(run('planning.continue',{...args,requestId:'stale',expectedRevision:0}),{code:'CONFLICT'});
+ await assert.rejects(run('planning.continue',{...args,requestId:'invalid',value:{title:'   '}}),{code:'INVALID_INPUT'});
+ assert.equal((await run('planning.list')).total,3);
+ await run('planning.revert',{requestId:randomUUID(),transactionId:branch.transactionId});
+ assert.equal((await run('planning.get',{nodeId:start.mapping.start})).flow.next.length,1);
+});
 test('planning atomic batch, references, cycle validation, retry and revision conflicts',async t=>{
  const {run,apply}=await setup(t);
  const operations=[{op:'node.create',ref:'a',value:{title:'主线',scope:'long'}},{op:'node.create',ref:'b',value:{title:'来客',parentId:'a'}},{op:'edge.create',value:{from:'a',to:'b',type:'next'}}];

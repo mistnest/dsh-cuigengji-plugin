@@ -29,7 +29,7 @@ test('binding a novel does not register a host tool guard', () => {
   assert.ok(listeners['agent/pre-step']);
 });
 
-test('prompt stays static and does not fetch project data during assembly', async () => {
+test('prompt only reads the bound writing preset, without fetching story context', async () => {
   const listeners = {};
   const ctx = { on: (name, fn) => { listeners[name] = fn; } };
   const calls = [];
@@ -44,7 +44,7 @@ test('prompt stays static and does not fetch project data during assembly', asyn
   assert.equal(bound.contexts.length, 0);
   assert.equal(bound.sections.some(section => section.name === 'cuigengji:handoff'), false);
   assert.deepEqual(audited, []);
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls, ['preset.read']);
 });
 
 test('reassembly removes old plugin content and preserves host entries', async () => {

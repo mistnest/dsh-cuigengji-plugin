@@ -4,3 +4,13 @@ test-results/
 playwright-report/
 *.tgz
 runtime/
+.env
+.env.*
+# Keep novels, exports and personal migration data outside the source repository.
+/test-data/
+/novel-data/
+/data/
+/backups/
+/migration/
+/releases/
+*.cuigengji.json

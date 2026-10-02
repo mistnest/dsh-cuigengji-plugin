@@ -1,0 +1,6 @@
+import React,{useEffect,useRef} from 'react';
+export function CanvasMenu({x,y,close,items}:{x:number;y:number;close:()=>void;items:{label:string;action:()=>void}[]}){
+ const ref=useRef<HTMLDivElement>(null);
+ useEffect(()=>{ref.current?.querySelector('button')?.focus();const outside=(e:PointerEvent)=>{if(!ref.current?.contains(e.target as Node))close();};const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();close();}};window.addEventListener('pointerdown',outside);window.addEventListener('keydown',key);return()=>{window.removeEventListener('pointerdown',outside);window.removeEventListener('keydown',key);};},[]);
+ return <div ref={ref} role="menu" aria-label="画布操作" className="graph-context-menu" style={{left:x,top:y}} onKeyDown={e=>{if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const buttons=[...ref.current!.querySelectorAll('button')],index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length].focus();}}}>{items.map(item=><button role="menuitem" key={item.label} onClick={()=>{close();item.action();}}>{item.label}</button>)}</div>;
+}

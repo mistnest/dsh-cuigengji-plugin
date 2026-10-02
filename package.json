@@ -1,7 +1,7 @@
 {
   "name": "dsh-cuigengji",
-  "version": "0.2.3",
-  "description": "催更姬：DSH 小说正文、协同规划与资料工作台",
+  "version": "0.3.12",
+  "description": "催更姬：给大肥鱼一个小说工作台，一起写正文、讨论情节、整理人物与世界设定。",
   "type": "module",
   "main": "runtime/index.js",
   "exports": {
@@ -29,7 +29,9 @@
         "@deepseek-ai/dsh-client-connection",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-sidebar-right",
-        "@deepseek-ai/dsh-client-ui-session"
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-workspace"
       ]
     }
   },
@@ -41,11 +43,18 @@
     "test:live": "node scripts/live-smoke.mjs",
     "prepack": "npm run typecheck && npm run build",
     "typecheck": "tsc --noEmit",
-    "test:ui": "node tests/ui-smoke.mjs"
+    "test:ui": "node tests/ui-smoke.mjs",
+    "preview:workbench": "node scripts/preview-workbench.mjs",
+    "test:layout": "node tests/ui-layout.mjs",
+    "test:controls": "node tests/ui-controls.mjs",
+    "test:graph": "node tests/ui-graph.mjs",
+    "test:pages": "node tests/ui-pages.mjs",
+    "test:directory": "node tests/ui-directory.mjs",
+    "test:presets": "node tests/ui-presets.mjs"
   },
   "engines": {
     "node": ">=24",
-    "dsh": "0.1.7-rc.2"
+    "dsh": "0.2.0-rc.2"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
@@ -53,16 +62,16 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
-    "@deepseek-ai/dsh-tools": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@deepseek-ai/schemastery": "~3.18.4"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-connection": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-mcp-client": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-skill": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-system-prompt": "0.1.7-rc.2",
+    "@deepseek-ai/dsh": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-mcp-client": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
     "@playwright/test": "^1.55.0",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
@@ -71,5 +80,20 @@
     "react-dom": "^18.3.1",
     "typescript": "^7.0.2",
     "@types/node": "^24.0.0"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mistnest/dsh-cuigengji-plugin.git"
+  },
+  "homepage": "https://github.com/mistnest/dsh-cuigengji-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/mistnest/dsh-cuigengji-plugin/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "novel-writing",
+    "writing-assistant"
+  ]
 }

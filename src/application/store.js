@@ -7,6 +7,7 @@ import { AtomicStore } from '../infrastructure/persistence/atomic-store.ts';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { previewTavern } from '../infrastructure/migrations/tavern.js';
+import { countManuscript } from '../domain/manuscript.ts';
 import { compilePreset, importPreset, validatePreset } from '../domain/preset/index.js';
 
 export class StoreError extends Error {
@@ -31,7 +32,7 @@ function cas(entity, args) {
 }
 function touch(entity) { entity.revision++; entity.updatedAt = now(); }
 function record(fields) { return { id: randomUUID(), revision: 1, createdAt: now(), updatedAt: now(), ...fields }; }
-function meta(chapter) { const { content, versions, ...metadata } = chapter; return { ...metadata, charCount: content.length }; }
+function meta(chapter) { const { content, versions, ...metadata } = chapter; return { ...metadata, charCount: content.length, textCount: countManuscript(content) }; }
 function source(actor) { return { kind: actor.kind === 'human' ? 'human' : 'agent', sessionId: actor.sessionId || null }; }
 function version(chapter, actor, reason) {
   chapter.contentHash = hash(chapter.content);
@@ -64,11 +65,18 @@ function ordering(value) {
   if (!Number.isFinite(value)) fail('INVALID_INPUT', 'order 必须是有限数字');
   return value;
 }
-function memoryFields(args, novel, creating = false) {
+function nodePosition(args) {
+  if (args.position === undefined) return {};
+  const p = args.position;
+  if (p === null) return { position: null };
+  if (!p || Array.isArray(p) || typeof p !== 'object' || !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < 0 || p.y < 0) fail('INVALID_INPUT', 'position 必须是非负有限坐标或 null');
+  return { position: { x: p.x, y: p.y } };
+}
+function memoryFields(args, novel, creating = false, optionalName = false) {
   const result = {};
   for (const field of ['name', 'summary', 'content', 'storyTime']) {
-    if (args[field] !== undefined) result[field] = text(args[field], field, field !== 'name');
-    else if (creating) result[field] = field === 'name' ? text(args[field], field) : '';
+    if (args[field] !== undefined) result[field] = text(args[field], field, field !== 'name' || optionalName);
+    else if (creating) result[field] = field === 'name' && !optionalName ? text(args[field], field) : '';
   }
   for (const [field, allowed, fallback] of [
     ['status', ['active', 'stale', 'unconfirmed', 'retired'], 'active'],
@@ -276,7 +284,7 @@ export class Store extends AtomicStore {
     if (action === 'graph.get') return get(n.nodes, a.nodeId, '节点');
     if (action === 'graph.create') {
       if (!kinds.has(a.type)) fail('INVALID_INPUT', '节点类型无效');
-      const v = record({ type: a.type, groupId: groupId(n, a.groupId), ...memoryFields(a, n, true), deleted: false });
+      const v = record({ type: a.type, groupId: groupId(n, a.groupId), ...memoryFields(a, n, true), ...nodePosition(a), deleted: false });
       this.checkMemorySources(n, v);
       n.nodes[v.id] = v; touch(n); return v;
     }
@@ -290,7 +298,7 @@ export class Store extends AtomicStore {
         if (v.deleted) fail('DELETED', '节点已删除');
         if (a.type !== undefined) { if (!kinds.has(a.type)) fail('INVALID_INPUT', '节点类型无效'); v.type = a.type; }
         if (a.groupId !== undefined) v.groupId = groupId(n, a.groupId);
-        Object.assign(v, memoryFields(a, n));
+        Object.assign(v, memoryFields(a, n), nodePosition(a));
         this.checkMemorySources(n, v);
       }
       touch(v); touch(n); return v;
@@ -301,14 +309,14 @@ export class Store extends AtomicStore {
       let e;
       if (action === 'edge.create') {
         for (const id of [a.from, a.to]) if (get(n.nodes, id, '关系端点').deleted) fail('DELETED', '关系端点已删除');
-        e = record({ from: a.from, to: a.to, ...memoryFields({ ...a, name: a.name || a.relation }, n, true), deleted: false }); n.edges[e.id] = e;
+        e = record({ from: a.from, to: a.to, ...memoryFields({ ...a, name: a.name ?? a.relation ?? '' }, n, true, true), deleted: false }); n.edges[e.id] = e;
       } else {
         e = get(n.edges, a.edgeId, '关系'); cas(e, a);
         if (action === 'edge.delete') { if (a.confirm !== true) fail('CONFIRM_REQUIRED', '删除需要 confirm:true'); e.deleted = true; }
         else {
           if (e.deleted) fail('DELETED', '关系已删除');
           for (const field of ['from', 'to']) if (a[field] !== undefined) { if (get(n.nodes, a[field], '关系端点').deleted) fail('DELETED', '关系端点已删除'); e[field] = a[field]; }
-          Object.assign(e, memoryFields(a, n));
+          Object.assign(e, memoryFields(a, n, false, true));
         }
         touch(e);
       }
@@ -328,7 +336,7 @@ export class Store extends AtomicStore {
       if (n.preset) cas(n.preset,a);
       else if (a.expectedRevision !== 0) fail('CONFLICT','预设版本不匹配，请重新读取');
       const value=validatePreset(a.preset);
-      n.preset=record({name:value.name,enabled:value.enabled,blocks:clone(value.blocks),raw:clone(value.raw ?? null),warnings:clone(value.warnings ?? []),revision:(n.preset?.revision||0)+1});
+      n.preset=record({name:value.name,enabled:value.enabled,blocks:clone(value.blocks),raw:clone(value.raw ?? null),warnings:clone(value.warnings ?? []),...(value.importFormat?{importFormat:value.importFormat}:{}),revision:(n.preset?.revision||0)+1});
       touch(n);return n.preset;
     }
     if (action === 'context.get') return {
@@ -393,8 +401,8 @@ export class Store extends AtomicStore {
       const latest = c.versions.at(-1);
       if (latest.revision !== c.revision || latest.contentHash !== c.contentHash) fail('INVALID_BACKUP', '最新历史版本与正文不一致');
     }
-    for (const node of Object.values(n.nodes)) { if (!kinds.has(node.type)) fail('INVALID_BACKUP', '节点类型无效'); Object.assign(node, memoryFields(node, n, true)); }
-    for (const edge of Object.values(n.edges)) { if (!own(n.nodes, edge.from) || !own(n.nodes, edge.to)) fail('INVALID_BACKUP', '关系端点不存在'); Object.assign(edge, memoryFields(edge, n, true)); }
+    for (const node of Object.values(n.nodes)) { if (!kinds.has(node.type)) fail('INVALID_BACKUP', '节点类型无效'); Object.assign(node, memoryFields(node, n, true), nodePosition(node)); }
+    for (const edge of Object.values(n.edges)) { if (!own(n.nodes, edge.from) || !own(n.nodes, edge.to)) fail('INVALID_BACKUP', '关系端点不存在'); Object.assign(edge, memoryFields(edge, n, true, true)); }
     if (n.plan && (typeof n.plan.content !== 'string' || !Number.isSafeInteger(n.plan.revision) || n.plan.revision < 1 || typeof n.plan.approved !== 'boolean')) fail('INVALID_BACKUP', '规划格式无效');
     validateMemoryGroups(n);
     if (n.planning) validatePlanning(n.planning,n);

@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TD
-    UI[写作界面：正文 / 规划 / 资料] --> RPC[DSH RPC 适配层]
+    UI[写作界面：正文 / 规划 / 设定] --> RPC[DSH RPC 适配层]
     DATAUI[工作数据区：位置 / 清单 / 导入导出] --> RPC
     AGENT[Agent 工具与技能] --> POLICY[会话绑定与操作记录]
     RPC --> POLICY
@@ -14,7 +14,7 @@ flowchart TD
     MCP --> STORE
 ```
 
-- `src/client/features`：正文、规划、资料、预设与工作数据界面，仅使用 RPC。
+- `src/client/features`：正文、规划、设定、预设与工作数据界面，仅使用 RPC。
 - `src/adapters/dsh`、`src/adapters/mcp`：宿主通信、技能注册与工具边界；全库导入导出仅供作者界面。
 - `src/application/backup`：全库备份格式、SHA-256 校验、冲突预览、合并与导入前备份。
 - `src/application/bindings`、`src/application/queries`：会话绑定和按需接手信息；不会自动塞小说全文或全库资料。
@@ -24,7 +24,7 @@ flowchart TD
 
 ## 独立数据目录
 
-配置优先级：插件 `dataRoot` > `CUIGENGJI_DATA_ROOT` > 系统默认目录。桌面启动脚本固定设置 `D:\deepseek-harness\dsh-desktop\cuigengji-data`，与源码、DSH Home 和 Electron 浏览器数据分开。工作数据页显示服务实际使用的绝对路径，迁移应核对作品名称清单，不能只按文件是否复制成功判断。
+配置优先级：插件 `dataRoot` > `CUIGENGJI_DATA_ROOT` > 系统默认目录。小说数据应存放在仓库之外，与源码、DSH Home 和 Electron 浏览器数据分开；公开仓库不提供个人作品或运行数据。工作数据页显示服务实际使用的绝对路径，迁移应核对作品名称清单，不能只按文件是否复制成功判断。
 
 ## 备份契约
 

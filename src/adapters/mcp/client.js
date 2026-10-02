@@ -1,12 +1,23 @@
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { assertMemoryAction, toolName } from './actions.js';
 
 const MAX_BODY_BYTES = 1024 * 1024;
+
+export function memoryRuntime(options = {}, runtime = process) {
+  const command = options.nodeCommand ?? runtime.env.CUIGENGJI_DSH_NODE ?? runtime.execPath;
+  const env = {};
+  if (runtime.env.NODE_OPTIONS) env.NODE_OPTIONS = runtime.env.NODE_OPTIONS;
+  // Desktop hosts use the Electron executable as Node. The SDK's default
+  // environment omits this switch, which otherwise launches a second GUI.
+  if (runtime.versions.electron || runtime.env.ELECTRON_RUN_AS_NODE === '1') {
+    env.ELECTRON_RUN_AS_NODE = '1';
+  }
+  return { command, env };
+}
 
 export class MemoryBridge {
   constructor(store, options = {}) {
@@ -14,8 +25,9 @@ export class MemoryBridge {
     this.dispatch = options.dispatch ?? ((action, args, actor) => store.dispatch(action, args, actor));
     this.resolveNovel = options.resolveNovel;
     this.timeoutMs = options.timeoutMs ?? 30_000;
-    this.nodeCommand = options.nodeCommand ?? process.env.CUIGENGJI_DSH_NODE ??
-      (process.env.NODE_HOME ? join(process.env.NODE_HOME, 'bin/node') : process.execPath);
+    const runtime = memoryRuntime(options);
+    this.nodeCommand = runtime.command;
+    this.runtimeEnv = runtime.env;
     this.sessions = new Map();
     this.tokens = new Map();
     this.closed = false;
@@ -94,8 +106,7 @@ export class MemoryBridge {
   async connect(sessionId, entry) {
     const token = randomBytes(32).toString('hex');
     this.tokens.set(token, sessionId);
-    const env = { CUIGENGJI_MEMORY_ENDPOINT: this.endpoint, CUIGENGJI_MEMORY_TOKEN: token };
-    if (process.env.NODE_OPTIONS) env.NODE_OPTIONS = process.env.NODE_OPTIONS;
+    const env = { ...this.runtimeEnv, CUIGENGJI_MEMORY_ENDPOINT: this.endpoint, CUIGENGJI_MEMORY_TOKEN: token };
     const transport = new StdioClientTransport({
       command: this.nodeCommand,
       args: [fileURLToPath(new URL('./server.js', import.meta.url))],
