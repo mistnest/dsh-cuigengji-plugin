@@ -37,6 +37,22 @@ description: 与作者共同创建、修订和分组角色卡、世界书及关�
 - 更新/断线：`edge.update/delete {edgeId,expectedRevision,...}`；删除带 confirm:true。删除一条边不删除两个端点。已存在相同语义的关系时更新旧边，不反复创建；不要为了对称而机械补一条反向边。
 - 规划箭头表示情节推进，设定箭头表示人物或世界关系，两个图的 ID 与工具不混用。
 
+## 共同操作关系画布
+
+卡片的 position 为有限的 `{x,y}` 世界坐标，可正可负。作者平移和缩放视图不会修改作品数据，视图也不作为 Agent 上下文。默认保留作者布局，只有本次要求整理位置时才移动已有卡片；判断关系依据连线和正文，不依赖空间距离。
+
+以下批量动作均先检查所有对象的 expectedRevision，再一次提交，最多 200 个对象。每次写入带唯一 requestId；只有原样重试复用它。遇到冲突先重读并合并意图，不自动替换版本号覆盖作者后续修改。
+
+| 需要做的事 | 操作 |
+| --- | --- |
+| 移动多张卡片 | `graph.layout {positions:[{nodeId,expectedRevision,position}],requestId}`；只更新坐标，保留全文、来源与关系 |
+| 新建卡片并与已有对象连接 | `graph.continue {nodeId,expectedRevision,side,value,requestId}`；value 是 graph.create 的字段，默认继承源节点分组；out 为源→新，in 为新→源。返回 node、edge |
+| 明确要求复制一组卡片 | `graph.duplicate {members:[{id,expectedRevision,position?}],requestId}`；复制全文与组内连线，返回 nodes、edges；不要用它记录同一人物的补充 |
+| 删除多张卡片 | `graph.remove {members:[{id,expectedRevision}],confirm:true,requestId}`；软删除卡片及相连关系，先核对范围 |
+| 断开多条关系 | `edge.disconnect {edges:[{id,expectedRevision}],confirm:true,requestId}`；保留两端卡片 |
+
+创建并连接不会只留下孤立卡片。关系名称和说明仍可在创建后用 edge.update 按已读版本补充；有信息才填写，未确认的联系保留相应状态。
+
 ## 状态、来源与人物知情
 
 `status` 可用 active（当前可用）、stale（来源变化待核对）、unconfirmed（待确认）、retired（不再使用）。`factType` 可用 fact、belief、misunderstanding、unconfirmed、plan。状态与事实性质是两回事：默认创建可能是 active + unconfirmed，不能把 active 自动理解为已证实。

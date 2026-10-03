@@ -18,7 +18,7 @@ description: 和作者讨论情节走向，更新或续接共享流程图，处�
 | 需要做的事 | 操作 |
 | --- | --- |
 | 补充原有情节 | `planning.apply` 中 `node.update {id,expectedRevision,value}`；只提交要改的字段 |
-| 接续独立的下一步 | `planning.continue {nodeId,expectedRevision,requestId,value}`，同时创建新节点和普通箭头，默认继承起点页面与分组 |
+| 接续独立的下一步 | `planning.continue {nodeId,expectedRevision,requestId,value}`，同时创建新节点和普通箭头，默认继承起点页面与分组；`side:"in"` 可补前置事件，默认 out 续接后续 |
 | 两种未定走向 | 同一起点连接两个具体事件；新节点用 `idea`，标题/摘要交代差别；不要要求作者填写边类型 |
 | 连上已有节点 | 先检查是否已有边，再 `planning.apply` 的 `edge.create {value:{from,to}}` |
 | 取消连线 | `edge.delete {id,expectedRevision,confirm:true}`，不删除两个节点 |
@@ -45,8 +45,10 @@ description: 和作者讨论情节走向，更新或续接共享流程图，处�
 - `planning.pages {}` 返回页面 ID、名称、用途摘要和内容数量。默认“主线规划”的 pageId 为 null；未传 pageId 的 list/search 为全局检索，日常讨论用选定的 pageId 只读这一页。UI 当前选页不是 Agent 隐式上下文，不要猜测，应根据作者提到的情节、页名和摘要定位。
 - 与旧情节关系不大的新篇章或独立讨论，用 `planning.page.create {name,summary,requestId}` 创建独立页；同一事件的补充留在原页原节点。创建节点明确带 value.pageId；`planning.continue` 强制继承起点页面，避免续接散落。
 - 页面用于隔离画布，分组用于页内筛选，不能互相替代。跨页不能连线或建立父子层级。迁移完整路线时在同一 apply 更新所有相关节点的 pageId；迁移局部时先核对并删除跨页边、断开跨页 parentId。保留节点正文、引用和页内边。改名/摘要用 `planning.page.update {pageId,expectedRevision,name?,summary?,requestId}`；page.delete 仅删除空页，仍需 expectedRevision、confirm:true、requestId。
-- `planning.decorations {pageId,offset,limit}` 读取本页文字批注和背景框（items、nextOffset）。它们放讨论疑问、备选说明和区域标题，不是正式情节节点或已发生事实。不能用批注代替情节节点，也不要无目的地调整作者的字体/布局。
-- `planning.apply` 支持 `decoration.create {ref?,value}`、`decoration.update {id,expectedRevision,value}`、`decoration.delete {id,expectedRevision,confirm:true}`。value 可含 pageId、kind:note/frame、title、content、position:{x,y}、width、height、color:neutral/sand/sage/sky/rose、fontSize:14/18/24/32、fontFamily:sans/serif。坐标非负；宽度 160–6000，高度 80–6000。更新只提交需要的字段；同样支持事务撤销、版本冲突和导入导出。
+- `planning.decorations {pageId,offset,limit}` 读取本页文字批注和讨论框（items、nextOffset）。讨论时按需读作者的问题、备选说明和区域标题；这些不是正式情节节点或已发生事实。不能用批注代替情节节点，也不能只凭卡片位置推断因果关系。
+- `planning.apply` 支持 `decoration.create {ref?,value}`、`decoration.update {id,expectedRevision,value}`、`decoration.delete {id,expectedRevision,confirm:true}`。value 可含 pageId、kind:note/frame、title、content、position:{x,y}、width、height、color:neutral/sand/sage/sky/rose、fontSize:14/18/24/32、fontFamily:sans/serif、moveContents:boolean。坐标为有限数值，可正可负；宽度 160–6000，高度 80–6000。更新只提交需要的字段；同样支持事务撤销、版本冲突和导入导出。
+- 讨论框用于圈出一片讨论区域，分组用于检索，二者独立。新建框可设 moveContents:true，让作者拖框时带动内部卡片与批注；旧框没有该字段时只移动自身。删除框保留情节与连线。工具直接更新框的 position 只移动框本身；要整体搬动，先冻结要移动的对象列表，在同一个 apply 中更新框及每个成员的坐标和 expectedRevision。
+- 作者的视口、缩放与选择只存在本机偏好中，不是作品事实，也不作为 Agent 上下文。除非本次授权整理布局，保留已有节点坐标与外观；新增内容不触发自动重排。多对象调整用一次 apply，任一版本冲突就不提交，重新读取后合并，不能用新 revision 强行覆盖旧草稿。
 
 创建独立页及讨论材料可以一次完成；后续用 mapping 返回的真实 ID：
 

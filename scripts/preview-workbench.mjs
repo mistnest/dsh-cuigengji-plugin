@@ -6,13 +6,17 @@ import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
 import {Store} from '../src/core/store.js';
 import {WorkData} from '../src/data/workspace.js';
+import {seedCanvasDemo} from './canvas-demo.mjs';
 
 const root=resolve(import.meta.dirname,'..');
 const directory=await mkdtemp(join(tmpdir(),'cuigengji-preview-'));
 const store=new Store(directory),workData=new WorkData(store);
 const actor={kind:'human',sessionId:'production-preview'};
+let layoutFault=process.argv.includes('--fail-layout-once')?'before':process.argv.includes('--lose-layout-response-once')?'after':null;
 let novelId;
-if(process.argv[2]){
+if(process.argv[2]==='--canvas-demo'){
+  novelId=await seedCanvasDemo(store,actor);
+}else if(process.argv[2]){
   const backup=JSON.parse(await readFile(resolve(process.argv[2]),'utf8'));
   backup.novel.title+=' · 试用副本';
   novelId=(await store.dispatch('novel.import',{backup},actor)).id;
@@ -30,8 +34,11 @@ const server=createServer(async(req,res)=>{
       if(!req.headers['content-type']?.startsWith('application/json'))throw new Error('Expected JSON');
       let body='';for await(const part of req){body+=part;if(body.length>64*1024*1024)throw new Error('Request too large');}
       const {action,args={}}=JSON.parse(body);
+      const layout=action==='graph.layout'||(action==='planning.apply'&&args.reason==='调整画布布局');
+      if(layout&&layoutFault==='before'){layoutFault=null;throw new Error('试用：模拟布局保存失败，尚未提交');}
       const method={'workspace.status':'status','workspace.export':'export','workspace.preview':'preview','workspace.import':'import'}[action];
       const result=method?await workData[method](args.backup):await store.dispatch(action,args,actor);
+      if(layout&&layoutFault==='after'){layoutFault=null;throw new Error('试用：模拟布局已提交但响应丢失');}
       res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));return;
     }
     if(req.method!=='GET'){res.statusCode=405;res.end();return;}

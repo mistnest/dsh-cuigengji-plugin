@@ -69,7 +69,7 @@ function nodePosition(args) {
   if (args.position === undefined) return {};
   const p = args.position;
   if (p === null) return { position: null };
-  if (!p || Array.isArray(p) || typeof p !== 'object' || !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < 0 || p.y < 0) fail('INVALID_INPUT', 'position 必须是非负有限坐标或 null');
+  if (!p || Array.isArray(p) || typeof p !== 'object' || !Number.isFinite(p.x) || !Number.isFinite(p.y)) fail('INVALID_INPUT', 'position 必须是有限坐标或 null');
   return { position: { x: p.x, y: p.y } };
 }
 function memoryFields(args, novel, creating = false, optionalName = false) {
@@ -282,6 +282,28 @@ export class Store extends AtomicStore {
     }
     if (action === 'graph.groups' || action.startsWith('graph.group.') || action === 'graph.move') return memoryGroupAction(n, action, a);
     if (action === 'graph.get') return get(n.nodes, a.nodeId, '节点');
+    if (action === 'graph.layout') {
+      if (!Array.isArray(a.positions) || !a.positions.length || a.positions.length > 200) fail('INVALID_INPUT', '一次布局需要 1–200 个坐标');
+      const ids = new Set();
+      const changes = a.positions.map(item => {
+        if (!item || typeof item !== 'object' || ids.has(item.nodeId)) fail('INVALID_INPUT', '布局节点不能重复');
+        ids.add(item.nodeId);
+        const node = get(n.nodes, item.nodeId, '节点'); cas(node, item);
+        if (node.deleted) fail('DELETED', '节点已删除');
+        if (item.position === undefined || item.position === null) fail('INVALID_INPUT', '布局需要有限坐标');
+        return {node, ...nodePosition(item)};
+      });
+      for (const change of changes) { change.node.position = change.position; touch(change.node); }
+      touch(n); return changes.map(({node}) => ({id:node.id, revision:node.revision, position:node.position}));
+    }
+    if (action === 'graph.continue') {
+      const source = get(n.nodes, a.nodeId, '节点'); cas(source, a);
+      if (source.deleted) fail('DELETED', '起点已删除');
+      if (!['in','out'].includes(a.side ?? 'out')) fail('INVALID_INPUT', '连接方向无效');
+      const node = this.execute(state, 'graph.create', {...a.value,novelId:n.id,groupId:a.value?.groupId===undefined?source.groupId ?? null:a.value.groupId}, actor);
+      const edge = this.execute(state, 'edge.create', {novelId:n.id,from:a.side==='in'?node.id:source.id,to:a.side==='in'?source.id:node.id,name:'',content:''}, actor);
+      return {node,edge};
+    }
     if (action === 'graph.create') {
       if (!kinds.has(a.type)) fail('INVALID_INPUT', '节点类型无效');
       const v = record({ type: a.type, groupId: groupId(n, a.groupId), ...memoryFields(a, n, true), ...nodePosition(a), deleted: false });
@@ -302,6 +324,25 @@ export class Store extends AtomicStore {
         this.checkMemorySources(n, v);
       }
       touch(v); touch(n); return v;
+    }
+    if (action === 'graph.duplicate') {
+      if (!Array.isArray(a.members) || !a.members.length || a.members.length > 200 || new Set(a.members.map(v=>v.id)).size!==a.members.length) fail('INVALID_INPUT', '请选择 1–200 个不同的节点');
+      const sources=a.members.map(item=>{const node=get(n.nodes,item.id,'节点');cas(node,item);if(node.deleted)fail('DELETED','节点已删除');return {node,position:item.position===undefined?node.position:nodePosition(item).position};});
+      const mapping={},nodes=sources.map(({node,position},i)=>{const copy=this.execute(state,'graph.create',{...clone(node),novelId:n.id,name:node.name+' · 副本',position:{x:(position?.x??40+i*332)+28,y:(position?.y??60)+28}},actor);mapping[node.id]=copy.id;return copy;});
+      const edges=Object.values(n.edges).filter(e=>!e.deleted&&mapping[e.from]&&mapping[e.to]).map(e=>this.execute(state,'edge.create',{...clone(e),novelId:n.id,from:mapping[e.from],to:mapping[e.to]},actor));
+      return {nodes,edges};
+    }
+    if (action === 'graph.remove') {
+      if (a.confirm !== true) fail('CONFIRM_REQUIRED', '删除需要 confirm:true');
+      if (!Array.isArray(a.members) || !a.members.length || a.members.length > 200 || new Set(a.members.map(v=>v.id)).size!==a.members.length) fail('INVALID_INPUT', '请选择 1–200 个不同的节点');
+      for (const item of a.members) { const node=get(n.nodes,item.id,'节点');cas(node,item);if(node.deleted)fail('DELETED','节点已删除'); }
+      return a.members.map(item=>this.execute(state,'graph.delete',{novelId:n.id,nodeId:item.id,expectedRevision:item.expectedRevision,confirm:true},actor));
+    }
+    if (action === 'edge.disconnect') {
+      if (a.confirm !== true) fail('CONFIRM_REQUIRED', '断开需要 confirm:true');
+      if (!Array.isArray(a.edges) || !a.edges.length || a.edges.length > 200 || new Set(a.edges.map(v=>v.id)).size!==a.edges.length) fail('INVALID_INPUT', '请选择 1–200 条不同的连线');
+      for (const item of a.edges) { const edge=get(n.edges,item.id,'关系');cas(edge,item);if(edge.deleted)fail('DELETED','关系已删除'); }
+      return a.edges.map(item=>this.execute(state,'edge.delete',{novelId:n.id,edgeId:item.id,expectedRevision:item.expectedRevision,confirm:true},actor));
     }
     if (action === 'edge.get') return get(n.edges, a.edgeId, '关系');
     if (action === 'edge.list') return Object.values(n.edges).filter(e => (a.includeDeleted || !e.deleted) && (!a.nodeId || e.from === a.nodeId || e.to === a.nodeId));

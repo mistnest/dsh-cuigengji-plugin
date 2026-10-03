@@ -61,13 +61,13 @@ test('memory card positions are validated, revision checked, and portable withou
   const ch = await run('chapter.create',{title:'一',content:'雨城'});
   const original = await run('graph.create',{type:'world_entry',name:'雨城',content:'保留全文',summary:'摘要',aliases:['城'],sources:[{chapterId:ch.id,revision:ch.revision}]});
   assert.equal(original.position,undefined);
-  const position={x:371.5,y:260};
+  const position={x:-371.5,y:-260};
   const moved=await run('graph.update',{nodeId:original.id,expectedRevision:original.revision,position});
   for (const key of ['content','summary','aliases','sources','status']) assert.deepEqual(moved[key],original[key]);
   assert.deepEqual(moved.position,position);
   assert.deepEqual((await run('graph.list'))[0].position,position);
   await assert.rejects(run('graph.update',{nodeId:original.id,expectedRevision:original.revision,position:{x:1,y:1}}),{code:'CONFLICT'});
-  for (const value of [{x:-1,y:0},{x:Infinity,y:0},{x:'3',y:0},{x:1},[],false]) {
+  for (const value of [{x:Infinity,y:0},{x:'3',y:0},{x:1},[],false]) {
     await assert.rejects(run('graph.update',{nodeId:moved.id,expectedRevision:moved.revision,position:value}),{code:'INVALID_INPUT'});
   }
   assert.equal((await run('graph.get',{nodeId:moved.id})).revision,moved.revision);
@@ -77,7 +77,7 @@ test('memory card positions are validated, revision checked, and portable withou
   const restored=new Store(destination);
   const imported=await restored.dispatch('novel.import',{backup});
   assert.deepEqual((await restored.dispatch('graph.get',{novelId:imported.id,nodeId:moved.id})).position,position);
-  const corrupt=structuredClone(backup);corrupt.novel.nodes[moved.id].position={x:-1,y:0};
+  const corrupt=structuredClone(backup);corrupt.novel.nodes[moved.id].position={x:'invalid',y:0};
   await assert.rejects(restored.dispatch('novel.import',{backup:corrupt}),{code:'INVALID_INPUT'});
   const reset=await run('graph.update',{nodeId:moved.id,expectedRevision:moved.revision,position:null});
   assert.equal(reset.position,null);

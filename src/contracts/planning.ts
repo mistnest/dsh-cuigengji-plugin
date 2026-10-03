@@ -14,7 +14,7 @@ export interface PlanningPage extends PlanningGroup {}
 export interface Decoration {
   id:string; revision:number; pageId:string|null; kind:'note'|'frame'; title:string; content:string;
   position:Point; width:number; height:number; color:'neutral'|'sand'|'sage'|'sky'|'rose';
-  fontSize:number; fontFamily:'sans'|'serif'; deleted:boolean;
+  fontSize:number; fontFamily:'sans'|'serif'; moveContents?:boolean; deleted:boolean;
 }
 export type NodeIndex = Omit<PlanningNode, 'content'>;
 export type PlanningEntity = PlanningNode | PlanningEdge | PlanningGroup | PlanningPage | Decoration;
@@ -53,5 +53,5 @@ export interface PlanningArgs {
   requestId?:string; expectedSequence?:number; transactionId?:string; operations?:Operation[]; reason?:string;
   nodeId?:string;groupId?:string|null;pageId?:string|null;name?:string;summary?:string;expectedRevision?:number;confirm?:boolean;
   query?:string;includeDeleted?:boolean;parentId?:string|null;status?:string;thread?:string;
-  after?:number;offset?:number;limit?:number;
+  after?:number;offset?:number;limit?:number;side?:'in'|'out';
 }

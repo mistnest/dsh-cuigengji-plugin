@@ -1,6 +1,6 @@
 {
   "name": "dsh-cuigengji",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "description": "催更姬：给大肥鱼一个小说工作台，一起写正文、讨论情节、整理人物与世界设定。",
   "type": "module",
   "main": "runtime/index.js",

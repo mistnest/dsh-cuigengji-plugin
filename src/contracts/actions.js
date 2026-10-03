@@ -6,7 +6,7 @@ export const changesProse = (action, args) => ['chapter.restore', 'chapter.delet
     && ['content', 'append', 'patch'].some(key => args[key] !== undefined));
 export const TOOL_ACTIONS = Object.freeze({
   cuigengji_project: Object.freeze(['novel.get','novel.handoff','volume.list','volume.create','volume.update','volume.delete','chapter.list','chapter.search','chapter.create','chapter.get','chapter.update','chapter.delete','chapter.history','chapter.restore']),
-  cuigengji_memory: Object.freeze(['graph.list','graph.get','graph.groups','graph.group.create','graph.group.update','graph.group.delete','graph.move','graph.create','graph.update','graph.delete','edge.list','edge.get','edge.create','edge.update','edge.delete']),
+  cuigengji_memory: Object.freeze(['graph.list','graph.get','graph.groups','graph.group.create','graph.group.update','graph.group.delete','graph.move','graph.layout','graph.continue','graph.duplicate','graph.remove','graph.create','graph.update','graph.delete','edge.list','edge.get','edge.create','edge.update','edge.delete','edge.disconnect']),
   cuigengji_plan: Object.freeze(['planning.pages','planning.page.create','planning.page.update','planning.page.delete','planning.decorations','planning.list','planning.search','planning.get','planning.continue','planning.groups','planning.group.create','planning.group.update','planning.group.delete','planning.changes','planning.history','planning.apply','planning.revert']),
   cuigengji_context: Object.freeze(['context.get','binding.get','preset.read']),
 });

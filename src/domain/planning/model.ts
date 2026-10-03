@@ -27,7 +27,7 @@ export function validatePlanning(board:Board,novel:PlanningNovel):void {
   for(const [id,p] of Object.entries(pages))if(!record(p)||id!==p.id||typeof p.name!=='string'||!p.name.trim()||typeof p.summary!=='string'||typeof p.deleted!=='boolean'||!Number.isSafeInteger(p.revision)||p.revision<1)fail('INVALID_PLANNING','规划页面无效');
   for(const [id,d] of Object.entries(decorations)){
     if(!record(d)||id!==d.id||!Number.isSafeInteger(d.revision)||d.revision<1||typeof d.deleted!=='boolean'||!['note','frame'].includes(d.kind)||typeof d.title!=='string'||typeof d.content!=='string'||(!d.deleted&&!validPage(d.pageId)))fail('INVALID_PLANNING','画布批注无效');
-    if(!record(d.position)||!Number.isFinite(d.position.x)||!Number.isFinite(d.position.y)||d.position.x<0||d.position.y<0||!Number.isFinite(d.width)||d.width<160||d.width>6000||!Number.isFinite(d.height)||d.height<80||d.height>6000||![14,18,24,32].includes(d.fontSize)||!['sans','serif'].includes(d.fontFamily)||!['neutral','sand','sage','sky','rose'].includes(d.color))fail('INVALID_PLANNING','批注样式或位置无效');
+    if(!record(d.position)||!Number.isFinite(d.position.x)||!Number.isFinite(d.position.y)||!Number.isFinite(d.width)||d.width<160||d.width>6000||!Number.isFinite(d.height)||d.height<80||d.height>6000||![14,18,24,32].includes(d.fontSize)||!['sans','serif'].includes(d.fontFamily)||!['neutral','sand','sage','sky','rose'].includes(d.color)||(d.moveContents!==undefined&&typeof d.moveContents!=='boolean'))fail('INVALID_PLANNING','批注样式或位置无效');
   }
   if(!record(board.groups))fail('INVALID_PLANNING','规划分组无效');
   for(const [id,g] of Object.entries(board.groups)) if(!record(g)||id!==g.id||typeof g.name!=='string'||!g.name.trim()||typeof g.summary!=='string'||!Number.isSafeInteger(g.revision)||g.revision<1) fail('INVALID_PLANNING','规划分组无效');
@@ -35,7 +35,7 @@ export function validatePlanning(board:Board,novel:PlanningNovel):void {
   const nodes=Object.values(board.nodes).filter(n=>!n.deleted),edges=Object.values(board.edges).filter(e=>!e.deleted);
   for(const [id,n] of Object.entries(board.nodes)){
     if(!n.deleted&&!validPage(n.pageId))fail('INVALID_PLANNING','所属页面不存在或已删除');
-    if(n.position!==undefined&&n.position!==null&&(!record(n.position)||!Number.isFinite(n.position.x)||!Number.isFinite(n.position.y)||n.position.x<0||n.position.y<0))fail('INVALID_PLANNING','画布位置无效');
+    if(n.position!==undefined&&n.position!==null&&(!record(n.position)||!Number.isFinite(n.position.x)||!Number.isFinite(n.position.y)))fail('INVALID_PLANNING','画布位置无效');
     if(!n.deleted&&n.groupId&&board.groups[n.groupId]?.deleted)fail('INVALID_PLANNING','所属分组已删除');
     if(typeof n.deleted!=='boolean'||(n.parentId!==null&&typeof n.parentId!=='string')||id!==n.id||!Number.isSafeInteger(n.revision)||n.revision<1||typeof n.title!=='string'||!n.title.trim()||typeof n.content!=='string'||typeof n.summary!=='string'||(n.groupId!==null&&n.groupId!==undefined&&!Object.hasOwn(board.groups,n.groupId)))fail('INVALID_PLANNING','规划标题、内容或版本无效');
     if(!['long','phase','near','unspecified'].includes(n.scope)||!['idea','selected','written','dropped'].includes(n.status))fail('INVALID_PLANNING','规划范围或状态无效');

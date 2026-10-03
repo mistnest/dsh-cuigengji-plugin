@@ -1,68 +1,72 @@
-import React, {useEffect, useId, useState, useMemo} from 'react';
-import {arrangeGroups} from './layout.ts';
-import {useGraph, curve, CARD_WIDTH, PORT_Y, GraphStatus} from '../../shared/graph.tsx';
+import React,{useEffect,useId,useMemo,useState} from 'react';
+import {arrange} from './layout.ts';
+import {useGraph,curve,CARD_WIDTH,CARD_HEIGHT,PORT_Y,GraphControls} from '../../shared/graph.tsx';
+import {contains} from '../../shared/graph-geometry.ts';
+import type {GraphContext} from '../../shared/graph.tsx';
 import {DecorationCard} from './Decorations.tsx';
 import {CanvasMenu} from './CanvasMenu.tsx';
-import type {Decoration, NodeIndex, PlanningEdge, PlanningGroup, Point} from '../../../contracts/planning.ts';
-
+import type {MenuItem} from './CanvasMenu.tsx';
+import type {Decoration,NodeIndex,PlanningEdge,PlanningGroup,Point} from '../../../contracts/planning.ts';
 interface Props {
-  nodes: NodeIndex[]; edges: PlanningEdge[]; groups: PlanningGroup[];
-  decorations:Decoration[]; emptyMessage?:string|null;
-  onNew:(point:Point)=>void;
-  onDecorate:(kind:'note'|'frame',point:Point)=>void;
+  nodes:NodeIndex[];allNodes:NodeIndex[];edges:PlanningEdge[];groups:PlanningGroup[];decorations:Decoration[];
+  scopeKey:string;filtered:boolean;emptyMessage?:string|null;seen:number;busy:boolean;
+  onNew:(point:Point,connection?:{id:string;side:'in'|'out'})=>void;
+  onDecorate:(kind:'note'|'frame',point:Point,size?:{width:number;height:number})=>void;
   onEditDecoration:(value:Decoration)=>void;
   onResizeDecoration:(value:Decoration,size:{width:number;height:number})=>Promise<boolean|undefined>;
-  seen: number; selected: string | null; busy: boolean;
-  onSelect: (id: string) => void;
-  onLayout: (positions: Record<string, Point>) => Promise<boolean | undefined>;
-  onConnect: (from: string, to: string) => Promise<boolean | undefined>;
-  onDisconnect: (edge: PlanningEdge) => Promise<boolean | undefined>;
+  onToggleFrame:(value:Decoration)=>void;onSelect:(id:string)=>void;
+  onLayout:(positions:Record<string,Point>,revisions?:Record<string,number>,requestId?:string)=>Promise<boolean|undefined>;
+  onConnect:(from:string,to:string)=>Promise<boolean|undefined>;
+  onDisconnect:(edges:PlanningEdge[])=>Promise<boolean|undefined>;
+  onRemove:(ids:string[])=>void;onDuplicate:(ids:string[],points?:Record<string,Point>)=>void;
+  onMove:(ids:string[],groupId:string|null)=>void;
+  onReady:(center:()=>Point)=>void;
 }
-export function PlanningCanvas({nodes, edges, groups, seen, selected, busy, onSelect, onLayout, onConnect, onDisconnect, decorations, onNew, onDecorate, onEditDecoration, onResizeDecoration, emptyMessage}: Props) {
-  const markerId=useId(),[collapsed,setCollapsed]=useState<string[]>([]);
-  const allNodes=useMemo(()=>[...nodes,...decorations],[nodes,decorations]);
-  const [menu,setMenu]=useState<{x:number;y:number;point:Point;nodeId?:string;decorationId?:string}|null>(null);
-  const graph=useGraph({nodes:allNodes,edges,fallback:arrangeGroups(nodes,edges),busy,acyclic:true,onLayout,onConnect});
-  const {points,scroll,surface,zoom,zoomTo,selectedEdge,setSelectedEdge,cancel}=graph;
-  const signature=nodes.map(n=>n.id).sort().join(':');
-  useEffect(()=>{const p=Object.values(points);if(scroll.current&&p.length){scroll.current.scrollLeft=Math.max(0,Math.min(...p.map(v=>v.x))-24);scroll.current.scrollTop=Math.max(0,Math.min(...p.map(v=>v.y))-48);}},[signature]);
-  const frames=[...new Set(nodes.map(n=>n.groupId||''))].map(id=>{
-    const members=nodes.filter(n=>(n.groupId||'')===id),positions=members.map(n=>points[n.id]);
-    const x=Math.min(...positions.map(p=>p.x))-16,y=Math.min(...positions.map(p=>p.y))-38;
-    return {id,members,name:groups.find(g=>g.id===id)?.name||'未分组',x,y,
-      width:Math.max(...positions.map(p=>p.x))-x+236,
-      height:collapsed.includes(id)?38:Math.max(...positions.map(p=>p.y))-y+172};
-  });
-  const visible=nodes.filter(n=>!collapsed.includes(n.groupId||'')),ids=new Set(visible.map(n=>n.id));
-  const width=Math.max(800,...frames.map(f=>f.x+f.width+80),...decorations.map(d=>points[d.id].x+d.width+80)),height=Math.max(450,...frames.map(f=>f.y+f.height+80),...decorations.map(d=>points[d.id].y+d.height+80));
-  const active=edges.find(e=>e.id===selectedEdge&&ids.has(e.from)&&ids.has(e.to));
-  const remove=async()=>{if(active&&!busy&&!graph.saving&&await onDisconnect(active))cancel();};
-  const fit=()=>{zoomTo(Math.min(1,(scroll.current?.clientWidth||800)/width,(scroll.current?.clientHeight||450)/height));requestAnimationFrame(()=>{if(scroll.current){scroll.current.scrollLeft=0;scroll.current.scrollTop=0;}});};
-  const viewPoint=()=>{const el=scroll.current;return {x:Math.max(32,((el?.scrollLeft||0)+(el?.clientWidth||800)/3)/zoom),y:Math.max(60,((el?.scrollTop||0)+(el?.clientHeight||450)/3)/zoom)};};
-  const menuItems=menu?.nodeId?[{label:'打开情节',action:()=>onSelect(menu.nodeId!)}]:menu?.decorationId?[{label:'编辑批注',action:()=>{const d=decorations.find(d=>d.id===menu.decorationId);if(d)onEditDecoration(d);}}]:[{label:'新建情节',action:()=>onNew(menu!.point)},{label:'文字批注',action:()=>onDecorate('note',menu!.point)},{label:'背景框',action:()=>onDecorate('frame',menu!.point)}];
-  return <><div className="row canvas-tools">
-    <details className="menu"><summary aria-label="添加画布内容">添加批注</summary><div className="menu-panel"><button disabled={busy} onClick={()=>onDecorate('note',viewPoint())}>文字批注</button><button disabled={busy} onClick={()=>onDecorate('frame',viewPoint())}>背景框</button></div></details>
-    <details className="menu"><summary>视图</summary><div className="menu-panel"><button onClick={fit}>适应视图</button><button aria-label="缩小画布" onClick={()=>zoomTo(zoom-.1)}>缩小</button><button aria-label="放大画布" onClick={()=>zoomTo(zoom+.1)}>放大</button><button disabled={busy||graph.saving||graph.failed} onClick={()=>graph.arrange(arrangeGroups(nodes,edges))}>整理布局</button></div></details>
-    <small className="graph-hint">{Math.round(zoom*100)}%</small>
-    {active&&<><button disabled={busy||graph.saving} onClick={remove}>删除连线</button><button onClick={cancel}>取消选择</button></>}
-    <GraphStatus graph={graph} busy={busy}/>
-  </div><div className={`planning-canvas-scroll ${graph.dragging?'graph-dragging':''}`} ref={scroll} {...graph.scrollProps} onContextMenu={e=>{e.preventDefault();if(busy)return;graph.cancel();const rect=surface.current!.getBoundingClientRect(),bounds=scroll.current!.getBoundingClientRect(),target=e.target as HTMLElement;setMenu({x:Math.max(bounds.left,Math.min(e.clientX,bounds.right-188)),y:Math.max(bounds.top,Math.min(e.clientY,bounds.bottom-140)),point:{x:Math.max(32,(e.clientX-rect.left)/zoom),y:Math.max(60,(e.clientY-rect.top)/zoom)},nodeId:target.closest<HTMLElement>('.planning-card')?.dataset.nodeId,decorationId:target.closest<HTMLElement>('[data-decoration-id]')?.dataset.decorationId});}} onKeyDown={e=>{if(active&&(e.key==='Delete'||e.key==='Backspace')&&!(e.target as HTMLElement).closest('input,textarea,select,button')){e.preventDefault();void remove();}}}>
-    <div style={{width:width*zoom,height:height*zoom}}><div ref={surface} className="planning-canvas" style={{width,height,transform:`scale(${zoom})`,transformOrigin:'top left'}}>
-      {emptyMessage&&<p className="canvas-empty">{emptyMessage}</p>}
-      {decorations.map(d=><DecorationCard key={d.id} value={d} point={points[d.id]} zoom={zoom} busy={busy||graph.saving} dragProps={graph.cardProps(d.id,()=>onEditDecoration(d))} edit={()=>onEditDecoration(d)} resize={onResizeDecoration}/>)}
-      {frames.map(f=><div key={f.id} className="planning-group-frame" style={{left:f.x,top:f.y,width:f.width,height:f.height}}><button aria-expanded={!collapsed.includes(f.id)} onClick={()=>{cancel();setCollapsed(values=>values.includes(f.id)?values.filter(id=>id!==f.id):[...values,f.id]);}}>{collapsed.includes(f.id)?'▸':'▾'} {f.name} · {f.members.length}</button></div>)}
-      <svg className="planning-lines" width={width} height={height} aria-label="规划连线"><defs><marker id={markerId} markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="currentColor"/></marker></defs>
-        {edges.filter(e=>ids.has(e.from)&&ids.has(e.to)).map(e=>{
-          const a=points[e.from],b=points[e.to],path=curve({x:a.x+CARD_WIDTH,y:a.y+PORT_Y},{x:b.x,y:b.y+PORT_Y});
-          const choose=()=>{if(!busy){cancel();setSelectedEdge(e.id);}};
-          return <g key={e.id} className={selectedEdge===e.id?'edge-selected':''}><path d={path} fill="none" stroke="currentColor" markerEnd={`url(#${markerId})`}/><path className="edge-hit" d={path} fill="none" role="button" tabIndex={0} aria-label={`连线：${nodes.find(n=>n.id===e.from)?.title} → ${nodes.find(n=>n.id===e.to)?.title}`} aria-pressed={selectedEdge===e.id} onClick={choose} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();choose();}}}/></g>;
-        })}
+export function PlanningCanvas(props:Props){
+  const {nodes,allNodes,edges,groups,decorations,busy,filtered,onSelect,onLayout,onConnect,onDisconnect,onNew,onDecorate,onEditDecoration}=props;
+  const marker=useId(),[menu,setMenu]=useState<GraphContext|null>(null);
+  const objects=useMemo(()=>[...allNodes,...decorations],[allNodes,decorations]);
+  const fallback=useMemo(()=>arrange(allNodes,edges),[allNodes,edges]);
+  const createFrame=(ids:string[])=>{
+    const rects=ids.filter(id=>graph.points[id]).map(id=>{const d=decorations.find(v=>v.id===id);return {...graph.points[id],width:d?.width||CARD_WIDTH,height:d?.height||CARD_HEIGHT};});
+    if(!rects.length){onDecorate('frame',graph.centerPoint());return;}
+    const x=Math.min(...rects.map(r=>r.x))-24,y=Math.min(...rects.map(r=>r.y))-76;
+    onDecorate('frame',{x,y},{width:Math.max(160,Math.max(...rects.map(r=>r.x+r.width))-x+24),height:Math.max(80,Math.max(...rects.map(r=>r.y+r.height))-y+24)});
+  };
+  const graph=useGraph({nodes:objects,edges,fallback,busy,scopeKey:props.scopeKey,acyclic:true,onLayout,onConnect,onContext:setMenu,onCreateConnected:(id,side,point)=>onNew(point,{id,side}),onFrame:createFrame,visibleIds:[...nodes.map(n=>n.id),...(!filtered?decorations.map(d=>d.id):[])]});
+  const {points,zoom}=graph;
+  useEffect(()=>{props.onReady(graph.centerPoint);});
+  const visibleDecorations=decorations.filter(d=>!filtered||(d.kind==='frame'&&nodes.some(n=>contains({...points[d.id],width:d.width,height:d.height},{...points[n.id],width:CARD_WIDTH,height:CARD_HEIGHT}))));
+  const ids=new Set(nodes.map(n=>n.id)),links=edges.filter(e=>ids.has(e.from)&&ids.has(e.to));
+  const drawn=[...nodes,...visibleDecorations],left=Math.min(-200,...drawn.map(n=>points[n.id].x-180)),top=Math.min(-200,...drawn.map(n=>points[n.id].y-180));
+  const right=Math.max(800,...drawn.map(n=>points[n.id].x+('width' in n?n.width:CARD_WIDTH)+180)),bottom=Math.max(600,...drawn.map(n=>points[n.id].y+('height' in n?n.height:CARD_HEIGHT)+180));
+  const currentIds=menu?.selected.filter(id=>allNodes.some(n=>n.id===id))||[];
+  const linkedPort=menu?.hit.kind==='port'?edges.filter(e=>menu.hit.side==='out'?e.from===menu.hit.id:e.to===menu.hit.id):[];
+  const edge=menu?.hit.kind==='edge'?edges.find(e=>e.id===menu.hit.id):null;
+  const decoration=menu?.hit.kind==='decoration'?decorations.find(d=>d.id===menu.hit.id):null;
+  const moveItem:MenuItem={label:'移入分组',children:[{label:'未分组',action:()=>props.onMove(currentIds,null)},...groups.map(g=>({label:g.name,action:()=>props.onMove(currentIds,g.id)}))]};
+  let items:MenuItem[]=[];
+  if(menu){
+    if(edge)items=[{label:'断开连线',action:()=>{void onDisconnect([edge]);},danger:true}];
+    else if(menu.hit.kind==='port')items=[{label:'断开此连接点的连线',disabled:!linkedPort.length,action:()=>{void onDisconnect(linkedPort);},danger:true}];
+    else if(decoration)items=[{label:'打开内容',action:()=>onEditDecoration(decoration)},...(decoration.kind==='frame'?[{label:decoration.moveContents?'仅移动讨论框':'带动内部卡片',action:()=>props.onToggleFrame(decoration)}]:[]),{label:decoration.kind==='frame'?'删除框，保留内容':'删除批注',action:()=>props.onRemove([decoration.id]),danger:true}];
+    else if(currentIds.length>1&&menu.hit.kind==='node')items=[{label:'创建讨论框',action:()=>createFrame(currentIds)},moveItem,{label:'复制卡片',action:()=>props.onDuplicate(currentIds,points)},{label:`删除 ${currentIds.length} 张卡片`,action:()=>props.onRemove(currentIds),danger:true}];
+    else if(menu.hit.kind==='node')items=[{label:'打开内容',action:()=>onSelect(menu.hit.id!)},moveItem,{label:'复制卡片',action:()=>props.onDuplicate([menu.hit.id!],points)},{label:'删除卡片',action:()=>props.onRemove([menu.hit.id!]),danger:true}];
+    else items=[{label:'新建情节',action:()=>onNew(menu.point)},{label:'文字批注',action:()=>onDecorate('note',menu.point)},{label:'讨论框',action:()=>currentIds.length?createFrame(currentIds):onDecorate('frame',menu.point)}];
+  }
+  return <><div ref={graph.scroll} className={`planning-canvas-scroll ${graph.dragging?'graph-dragging':''} ${zoom<.6?'graph-overview':''}`} style={graph.viewportStyle} {...graph.scrollProps} onKeyDown={e=>{if(['Delete','Backspace'].includes(e.key)&&!busy&&!graph.saving&&!graph.failed&&!graph.wire&&!(e.target as HTMLElement).closest('input,textarea,select,[contenteditable=true],summary,.graph-view-controls,.graph-help,.graph-status,[role=menu]')){e.preventDefault();const active=edges.find(v=>v.id===graph.selectedEdge);if(active)void onDisconnect([active]);else if(graph.selected.length)props.onRemove(graph.selected);}}}>
+    <div ref={graph.surface} className="planning-canvas" style={graph.worldStyle}>
+      {visibleDecorations.map(d=><DecorationCard key={d.id} value={d} point={points[d.id]} zoom={zoom} busy={busy||graph.saving||graph.failed} selected={graph.selected.includes(d.id)} dragProps={graph.cardProps(d.id,()=>onEditDecoration(d))} edit={()=>onEditDecoration(d)} resize={props.onResizeDecoration}/>)}
+      <svg className="planning-lines" style={{left,top,width:right-left,height:bottom-top}} width={right-left} height={bottom-top} viewBox={`${left} ${top} ${right-left} ${bottom-top}`} aria-label="规划连线"><defs><marker id={marker} viewBox="0 0 8 8" markerWidth="6" markerHeight="6" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="currentColor"/></marker></defs>
+        {links.map(e=>{const a=points[e.from],b=points[e.to],path=curve({x:a.x+CARD_WIDTH,y:a.y+PORT_Y},{x:b.x,y:b.y+PORT_Y});return <g key={e.id} className={graph.selectedEdge===e.id?'edge-selected':''}><path d={path} className="graph-line" markerEnd={`url(#${marker})`}/><path data-edge-id={e.id} className="edge-hit" d={path} role="button" tabIndex={0} aria-label={`连线：${nodes.find(n=>n.id===e.from)?.title} → ${nodes.find(n=>n.id===e.to)?.title}`} aria-pressed={graph.selectedEdge===e.id} onClick={()=>graph.setSelectedEdge(e.id)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();graph.setSelectedEdge(e.id);}}}/></g>;})}
         {graph.preview&&<path className="graph-preview" d={graph.preview}/>}
       </svg>
-      {visible.map(n=><section key={n.id} data-node-id={n.id} {...graph.cardProps(n.id,()=>onSelect(n.id))} className={`planning-card ${selected===n.id?'selected':''} ${graph.wire?.id===n.id?'connect-source':''}`} style={{left:points[n.id].x,top:points[n.id].y}}>
-        <button {...graph.portProps(n.id,'in',n.title)}/><button {...graph.portProps(n.id,'out',n.title)}/>
-        <small className="graph-card-kind">{(n.lastSequence||0)>seen?'有更新':'情节'}</small><button className="planning-title" title={n.title}>{n.title}</button><p title={n.summary}>{n.summary||'打开讨论这个情节'}</p><span className={`planning-state state-${n.status}`}>{{idea:'讨论中',selected:'准备采用',written:'已写入正文',dropped:'暂不采用'}[n.status]}</span>
+      {nodes.map(n=><section key={n.id} data-node-id={n.id} aria-label={n.title} {...graph.cardProps(n.id,()=>onSelect(n.id))} className={`planning-card ${graph.selected.includes(n.id)?'selected':''}`} style={{left:points[n.id].x,top:points[n.id].y}}>
+        <button {...graph.portProps(n.id,'in',n.title)}/><button {...graph.portProps(n.id,'out',n.title)}/><button className="planning-title" title={n.title}>{n.title}</button><p title={n.summary}>{n.summary||'双击展开这个情节'}</p>{n.status!=='idea'&&<span className={`planning-state state-${n.status}`}>{{selected:'准备采用',written:'已写入正文',dropped:'暂不采用'}[n.status]}</span>}
       </section>)}
-    </div></div>
-  </div>{menu&&<CanvasMenu {...menu} close={()=>{setMenu(null);scroll.current?.focus({preventScroll:true});}} items={menuItems}/>}</>;
+    </div>
+    {!drawn.length&&<p className="canvas-empty">{props.emptyMessage||'右键开始新的情节'}</p>}
+    {graph.lasso&&<div className="graph-lasso" style={{left:graph.lasso.x,top:graph.lasso.y,width:graph.lasso.width,height:graph.lasso.height}}/>}
+    <GraphControls graph={graph} busy={busy}/>
+  </div>{menu&&<CanvasMenu {...menu} items={items} close={()=>{setMenu(null);graph.scroll.current?.focus({preventScroll:true});}}/>}</>;
 }

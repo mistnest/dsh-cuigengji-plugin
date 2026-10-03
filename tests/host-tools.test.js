@@ -44,6 +44,15 @@ test('registered DSH tools execute through session policy and real MCP', async t
   assert.equal((await execute('cuigengji_context', 'preset.read')).content, '');
   const node = await execute('cuigengji_memory', 'graph.create', { type: 'character_card', name: '来客', sources: [{ chapterId: chapter.id, revision: chapter.revision }] });
   assert.equal((await execute('cuigengji_memory', 'graph.get', { nodeId: node.id })).name, '来客');
+  const setting = await execute('cuigengji_memory', 'graph.continue', { nodeId: node.id, expectedRevision: node.revision, value: { type: 'world_entry', name: '旧书铺', content: '临时工具验证设定' } });
+  const moved = await execute('cuigengji_memory', 'graph.layout', { requestId: 'host-layout', positions: [{ nodeId: node.id, expectedRevision: node.revision, position: { x: -300, y: -120 } }, { nodeId: setting.node.id, expectedRevision: setting.node.revision, position: { x: 60, y: -120 } }] });
+  assert.deepEqual((await execute('cuigengji_memory', 'graph.get', { nodeId: node.id })).position, { x: -300, y: -120 });
+  const copies = await execute('cuigengji_memory', 'graph.duplicate', { members: moved.map(n => ({ id: n.id, expectedRevision: n.revision })) });
+  assert.equal(copies.nodes.length, 2); assert.equal(copies.edges.length, 1);
+  await execute('cuigengji_memory', 'graph.remove', { members: copies.nodes.map(n => ({ id: n.id, expectedRevision: n.revision })), confirm: true });
+  await execute('cuigengji_memory', 'edge.disconnect', { edges: [{ id: setting.edge.id, expectedRevision: setting.edge.revision }], confirm: true });
+  assert.equal((await execute('cuigengji_memory', 'edge.list')).length, 0);
+  assert.equal((await execute('cuigengji_memory', 'graph.list')).length, 2);
   await execute('cuigengji_project', 'chapter.update', { chapterId: chapter.id, expectedRevision: chapter.revision, content: '' });
   assert.equal((await execute('cuigengji_project', 'chapter.get', { chapterId: chapter.id })).content, '');
   assert.equal((await execute('cuigengji_memory', 'graph.get', { nodeId: node.id })).status, 'stale');

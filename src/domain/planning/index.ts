@@ -22,10 +22,11 @@ export function planningAction(novel:PlanningNovel,action:string,args:PlanningAr
   if(action==='planning.continue'){
     const source=entity(board.nodes,args.nodeId);check(source,args.expectedRevision);
     if(source.deleted)fail('DELETED','起点已删除');
+    if(args.side!==undefined&&!['in','out'].includes(args.side))fail('INVALID_INPUT','连接方向无效');
     if(typeof args.value?.title!=='string'||!args.value.title.trim())fail('INVALID_INPUT','请填写下一步情节标题');
     const result=planningAction(novel,'planning.apply',{...args,reason:args.reason||`从「${source.title}」继续推进`,operations:[
       {op:'node.create',ref:'continuation',value:{...args.value,pageId:source.pageId??null,groupId:args.value?.groupId===undefined?source.groupId??null:args.value.groupId}},
-      {op:'edge.create',value:{from:source.id,to:'continuation',type:'next'}},
+      {op:'edge.create',value:{from:args.side==='in'?'continuation':source.id,to:args.side==='in'?source.id:'continuation',type:'next'}},
     ]},actor) as {mapping:Record<string,string>;transactionId:string;sequence:number};
     const {content,...node}=novel.planning!.nodes[result.mapping.continuation];
     return {...result,node,from:source.id};
@@ -117,4 +118,4 @@ export function planningAction(novel:PlanningNovel,action:string,args:PlanningAr
   return {transactionId:transaction.id,sequence:draft.sequence,mapping,changed:transaction.changes.map(c=>({id:c.id,collection:c.collection,revision:c.after.revision}))};
 }
 function pickNode(value:Partial<PlanningNode>={}):Partial<PlanningNode> {return Object.fromEntries((['title','summary','content','scope','status','parentId','groupId','pageId','position','threads','chapterRefs','memoryRefs'] as const).filter(k=>value[k]!==undefined).map(k=>[k,value[k]]));}
-function pickDecoration(value:Partial<Decoration>={}):Partial<Decoration>{return Object.fromEntries((['pageId','kind','title','content','position','width','height','color','fontSize','fontFamily'] as const).filter(k=>value[k]!==undefined).map(k=>[k,value[k]]));}
+function pickDecoration(value:Partial<Decoration>={}):Partial<Decoration>{return Object.fromEntries((['pageId','kind','title','content','position','width','height','color','fontSize','fontFamily','moveContents'] as const).filter(k=>value[k]!==undefined).map(k=>[k,value[k]]));}

@@ -1,4 +1,4 @@
-import React, {useLayoutEffect, useRef} from 'react';
+import React, {useLayoutEffect, useRef, useState} from 'react';
 export function DocumentTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const fit = () => {const el=ref.current;if(el){el.style.height='0px';el.style.height=`${el.scrollHeight}px`;}};
@@ -11,4 +11,8 @@ export function ViewSwitch({value,change,graph}: {value:string;change:(value:str
 }
 export function FilterControl({label,value,change,children}: {label:string;value:string;change:(v:string)=>void;children:React.ReactNode}) {
   return <label className={`filter-control ${value?'is-active':''}`}><span className="filter-prefix">{label}</span><select aria-label={label} value={value} onChange={e=>change(e.target.value)}>{children}</select><span className="filter-chevron" aria-hidden="true"/></label>;
+}
+export function SearchControl({label,value,change}:{label:string;value:string;change:(value:string)=>void}) {
+  const [open,setOpen]=useState(false);
+  return <div className="graph-search"><button aria-label={label} aria-expanded={open||Boolean(value)} onClick={()=>{if(open||value){change('');setOpen(false);}else setOpen(true);}}>{open||value?'收起搜索':'搜索'}</button>{(open||value)&&<input autoFocus className="module-search" aria-label={label} placeholder="标题、摘要" value={value} onChange={e=>change(e.target.value)}/>}</div>;
 }
