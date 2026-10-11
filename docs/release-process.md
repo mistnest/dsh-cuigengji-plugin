@@ -63,7 +63,7 @@ GitHub 仓库、npm 包和市场显示名统一为 **`dsh-cuigengji-plugin`**，
 
 以下是 2026-10-11 调研时的状态；每次发布前重新确认，不将历史结果当作当前验收。
 
-- npm `dsh-cuigengji-plugin` 首次发布与无 Git 安装仍需验收。账号与首次发布见 [npm 发布](npm-publishing.md)，未通过前使用已公开的 Release 成品包。
+- npm 精确版本 `0.4.2` 的无 Git 安装与旧名升级已经验收；本次 `0.4.3` 仍待公开处理和默认标签验收。上传权限已验证，标签更新实际被拒绝，需开启同一可信连接的 `Allow npm dist-tag`。完成前继续使用已公开的 Release 成品包，见 [npm 发布](npm-publishing.md)。
 - `dshmarket` 的[收录 PR #7064](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7064)尚未合并；不宣称该市场已经可搜索安装。
 - 补充官方插件卡片可读取的中文标题、图标和简短介绍，并在真实插件管理界面核对显示。
 

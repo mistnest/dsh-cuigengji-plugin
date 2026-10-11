@@ -2,9 +2,11 @@
 
 整体渠道分工与发布验收顺序见[渠道维护与发布流程](release-process.md)。本文负责 npm 首次发布、可信发布配置和按包名安装验收。
 
-npm 包、GitHub 仓库和市场显示名统一为 **`dsh-cuigengji-plugin`**。首次发布成功后，用户可在 DSH「插件 → 添加插件 → 包名或地址」中填写 `dsh-cuigengji-plugin`，固定版本填写 `dsh-cuigengji-plugin@0.4.3`。「安装源」选择默认、npm 官方源或大陆镜像，不填写 GitHub 地址。这条路线不需要 Git。旧包名安装的用户按[名称迁移指南](package-name-migration.md)更新。
+npm 包、GitHub 仓库和市场显示名统一为 **`dsh-cuigengji-plugin`**。目标精确版本、归档和默认标签均验收通过后，用户可在 DSH「插件 → 添加插件 → 包名或地址」中填写 `dsh-cuigengji-plugin`，固定版本填写 `dsh-cuigengji-plugin@0.4.3`。「安装源」选择默认、npm 官方源或大陆镜像，不填写 GitHub 地址。这条路线不需要 Git。旧包名安装的用户按[名称迁移指南](package-name-migration.md)更新。
 
-首次发布需要维护者自己的 npm 账号。npm 发布与 dsh-market 收录互相独立：npm 包可用不代表市场已收录，市场收录状态仍以[收录申请](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7064)和公开目录为准。
+首次发布需要维护者自己的 npm 账号。npm 发布与 `dshmarket` 收录互相独立：npm 包可用不代表市场已收录，市场收录状态仍以[收录申请](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7064)和公开目录为准。
+
+2026-10-11 的渠道验收中，npm 精确版本 `0.4.2` 已通过无 Git 全新安装与旧名升级；`0.4.3` 的 OIDC 上传已接受，但尚未公开，`latest` 仍指向占位版本 `0.0.0-stage`。该工作流更新标签实际返回 `E403: This trusted publisher cannot manage dist-tags`，需要同一可信发布连接的 `Allow npm dist-tag` 权限。完整包名入口尚未验收时，用户继续按[桌面安装步骤](getting-started.md)安装 GitHub 0.4.3 成品包。每次发版重新确认当前状态，不重复上传已被接受的 0.4.3，也不把精确 0.4.2 验收当作默认包名入口已完成。
 
 ## 首次发布
 
