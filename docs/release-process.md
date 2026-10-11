@@ -38,7 +38,7 @@ npm run release -- status
 | 维护项 | 固定职责 |
 | --- | --- |
 | [公开主仓库](https://github.com/mistnest/dsh-cuigengji-plugin) | 维护源码、使用文档、安装与升级指南、兼容范围、更新记录 |
-| npm 包 `dsh-cuigengji-plugin` | 首次发布并验收后，作为普通用户首选安装渠道；稳定版 `latest`，预发布版 `next` |
+| npm 包 `dsh-cuigengji-plugin` | 普通用户首选安装渠道；稳定版 `latest`，预发布版 `next` |
 | GitHub Release | 提供与 npm 完全相同的 `.tgz`、`SHA256SUMS`、版本说明和已验证的 DSH 版本 |
 | 社区市场 `dshmarket` | 通过 `awesome-dsh-plugin` 维护名称、介绍、安装映射与收录状态；安装目标指向同一发布版本 |
 | 仓库内的 Agent 指南 | 指导环境确认、原生安装、自动迁移验收与失败恢复 |
@@ -55,19 +55,19 @@ GitHub 仓库、npm 包和市场显示名统一为 **`dsh-cuigengji-plugin`**，
 | --- | --- | --- |
 | [dshmarket](https://github.com/dsh-market/dsh-market)，npm 名 `dshmarket` | 向 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 提交条目 | PR 是否合并、公开目录是否出现、中文和英文搜索及实际安装 |
 
-收录、可搜索、点击安装成功是不同状态，逐项记录。市场是可选发现入口，用户也能直接通过 DSH 原生插件管理安装。
+收录、可搜索、点击安装成功是不同状态，逐项记录。市场是可选发现入口，用户也能直接通过 DSH 原生插件管理安装。公开[收录指南](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md#how-submissions-are-reviewed--收录如何评审)要求条目 PR 先通过自动检查，再由维护方审阅合并；合并后 README、网站与市场自动同步。自动检查通过不等于已经收录，文档中的通常同步时间也不是审核期限。
 
 按作者 2026-10-11 的决定，不再维护 `2BingLing/dsh-market`（`dsh.market` / `@dsh-market/plugin`），不跟进该渠道的索引或安装器，也不把它列为发布验收要求。其他平台自动索引本仓库，不代表本项目已适配或推荐其安装入口。
 
-## 当前待完成事项
+## 当前渠道验收状态
 
 以下是 2026-10-11 调研时的状态；每次发布前重新确认，不将历史结果当作当前验收。
 
-- npm 精确版本 `0.4.2` 的无 Git 安装与旧名升级已经验收；本次 `0.4.3` 仍待公开处理和默认标签验收。上传权限已验证，标签更新实际被拒绝，需开启同一可信连接的 `Allow npm dist-tag`。完成前继续使用已公开的 Release 成品包，见 [npm 发布](npm-publishing.md)。
+- GitHub Release 和 npm **0.4.3** 均已公开，安装包哈希一致；npm 默认标签、默认包名全新安装、0.4.2 同名升级与 0.4.1 旧名升级均已验收。测试没有 Git 或另装的 Node.js，原配置与合成作品保留，见 [npm 发布](npm-publishing.md)。
 - `dshmarket` 的[收录 PR #7064](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7064)尚未合并；不宣称该市场已经可搜索安装。
 - 补充官方插件卡片可读取的中文标题、图标和简短介绍，并在真实插件管理界面核对显示。
 
-npm 首次发布和无 Git 安装验收通过后，再把普通用户安装首选改成包名。已经验收的 Release `.tgz` 保留为备用入口。
+普通用户安装首选已改为包名。已经验收的 Release `.tgz` 保留为备用入口；源码仓库地址继续兼容，但不作为无 Git 用户的首选。
 
 上传与公开之间要留出 npm 扫描时间；工作流会等待最多 30 分钟，再核对正式归档和版本标签。已经接受的上传超时后使用 `verify_only=true` 的工作流与 `release verify` 补验收，不重传。可信发布还需要在 npm 包设置中为同一工作流开启独立的 `Allow npm dist-tag` 权限，才能自动维护 `latest` / `next`。
 

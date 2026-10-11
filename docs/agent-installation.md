@@ -9,7 +9,7 @@
 - 哈希校验：[SHA256SUMS](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.3/SHA256SUMS)
 - 已验证宿主：DSH Windows 桌面版 **0.2.0-rc.2**。后续宿主版本以对应发布说明为准。
 
-npm 发布后可在 DSH“添加插件”的“包名或地址”中填 `dsh-cuigengji-plugin`；Agent 更新使用精确版本 `dsh-cuigengji-plugin@0.4.3`，并先查明该版本确已公开。也支持仓库地址 `https://github.com/mistnest/dsh-cuigengji-plugin`；0.4.1 起仓库包含完整编译文件，不需要构建授权。固定版本与无 Git 安装可使用上面的 `.tgz` URL，或下载后的 Windows 绝对路径。GitHub 的源码 ZIP 不替代 `.tgz` 包。
+npm 0.4.3 已公开，默认包名 `dsh-cuigengji-plugin` 的全新安装已验收；Agent 安装或更新优先使用精确版本 `dsh-cuigengji-plugin@0.4.3`，并在执行前核对公开版本。没有 Git、没有另装 Node.js 的测试已覆盖新安装、0.4.2 同名升级和 0.4.1 旧名升级。备用入口使用上面的 `.tgz` URL，或下载后的 Windows 绝对路径。也支持仓库地址 `https://github.com/mistnest/dsh-cuigengji-plugin`；0.4.1 起仓库包含完整编译文件，不需要构建授权。GitHub 的源码 ZIP 不替代 `.tgz` 包。
 
 **环境清单中若存在旧包 `dsh-cuigengji`，先按[安装名称迁移](package-name-migration.md)以关闭状态装入新包，再离线转接启用项和原配置。不要直接同时启用两个包。** 新安装或已经使用统一名称的更新继续本页流程。
 
@@ -41,7 +41,13 @@ Windows 外部 Agent 可以用 PowerShell 的 `Get-FileHash -Algorithm SHA256` �
 
 ## 3. 由宿主安装和启用
 
-通过 DSH 原生工具安装 URL：
+通过 DSH 原生工具安装固定版本：
+
+```json
+{"action":"install_bundle","target":"dsh-cuigengji-plugin@0.4.3","enabled":true}
+```
+
+需要使用 GitHub 成品包时：
 
 ```json
 {"action":"install_bundle","target":"https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.3/dsh-cuigengji-plugin-0.4.3.tgz","enabled":true}

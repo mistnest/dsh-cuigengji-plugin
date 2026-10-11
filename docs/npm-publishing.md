@@ -6,7 +6,9 @@ npm 包、GitHub 仓库和市场显示名统一为 **`dsh-cuigengji-plugin`**。
 
 首次发布需要维护者自己的 npm 账号。npm 发布与 `dshmarket` 收录互相独立：npm 包可用不代表市场已收录，市场收录状态仍以[收录申请](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7064)和公开目录为准。
 
-2026-10-11 的渠道验收中，npm 精确版本 `0.4.2` 已通过无 Git 全新安装与旧名升级；`0.4.3` 的 OIDC 上传已接受，但尚未公开，`latest` 仍指向占位版本 `0.0.0-stage`。该工作流更新标签实际返回 `E403: This trusted publisher cannot manage dist-tags`，需要同一可信发布连接的 `Allow npm dist-tag` 权限。完整包名入口尚未验收时，用户继续按[桌面安装步骤](getting-started.md)安装 GitHub 0.4.3 成品包。每次发版重新确认当前状态，不重复上传已被接受的 0.4.3，也不把精确 0.4.2 验收当作默认包名入口已完成。
+2026-10-11 已完成 npm **0.4.3** 验收：精确版本已公开，`latest` 指向 0.4.3，归档 SHA-256 与 GitHub Release 相同，完整性检查通过。默认包名全新安装、0.4.2 同名升级和 0.4.1 旧名升级均在没有 Git、没有另装 Node.js 的 Windows 桌面运行时中通过；合成作品与原配置保留。[仅验收工作流](https://github.com/mistnest/dsh-cuigengji-plugin/actions/runs/38148012920)已成功，未重复上传。用户可按[桌面安装步骤](getting-started.md)直接填写包名。
+
+首次上传后 npm 曾后台处理较长时间，早期验收超时；公开后补验收即可。另一次更新 0.4.2 标签的请求返回过 `E403: This trusted publisher cannot manage dist-tags`。本次 0.4.3 的默认标签已随公开处理到位，所以补验收未调用标签更新，不代表独立的 `Allow npm dist-tag` 权限已经验证。后续需要单独管理标签时仍按下文核对该权限。
 
 ## 首次发布
 
