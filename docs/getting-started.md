@@ -1,6 +1,6 @@
 # 安装与开始使用
 
-使用 DSH Windows 桌面版自带的插件管理即可，普通用户无需另装 Git、Node.js 或 pnpm，也不用编译源码。0.4.4 支持 DSH **0.2.1-rc.2** 和 **0.2.0-rc.2**，其他宿主版本请先核对对应发布说明。
+使用 DSH Windows 桌面版自带的插件管理即可，普通用户无需另装 Git、Node.js 或 pnpm，也不用编译源码。最低 DSH 版本为 **0.2.0-rc.2**，此后的版本默认允许安装；已实际验收 **0.2.1-rc.2** 和 **0.2.0-rc.2**。
 
 ## 交给 Agent 安装或更新
 
@@ -12,7 +12,7 @@
 
 ## 自己在桌面版安装
 
-当前稳定版为 **0.4.4**，统一名称为 `dsh-cuigengji-plugin`。新安装与已使用统一名称的用户可直接按包名安装。旧安装名为 `dsh-cuigengji` 的用户，把[名称迁移指南](package-name-migration.md)交给 Agent，由它保留配置与小说完成转换。
+当前稳定版为 **0.4.5**，统一名称为 `dsh-cuigengji-plugin`。新安装与已使用统一名称的用户可直接按包名安装。旧安装名为 `dsh-cuigengji` 的用户，把[名称迁移指南](package-name-migration.md)交给 Agent，由它保留配置与小说完成转换。
 
 1. 从 DSH 左侧进入“插件”，点击“添加插件”。
 2. 在“包名或地址”中填写下面的包名。
@@ -23,17 +23,17 @@
 dsh-cuigengji-plugin
 ```
 
-需要固定本次版本时，填写 `dsh-cuigengji-plugin@0.4.4`。更新已有插件也可填写精确版本，保留原有配置与小说数据。镜像暂未同步时，可改选 npm 官方源。
+需要固定本次版本时，填写 `dsh-cuigengji-plugin@0.4.5`。更新已有插件也可填写精确版本，保留原有配置与小说数据。镜像暂未同步时，可改选 npm 官方源。
 
 ### 成品包备用入口
 
 也可以在同一“包名或地址”输入框安装 GitHub Release 成品包：
 
 ```text
-https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.4/dsh-cuigengji-plugin-0.4.4.tgz
+https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.5/dsh-cuigengji-plugin-0.4.5.tgz
 ```
 
-或者先[下载成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.4.4)，将下载后的 Windows 绝对路径填入同一输入框。需要核对下载文件时，可使用 Release 中的 `SHA256SUMS`，或交给 Agent 检查。GitHub 与 npm 使用同一份已验收的包；GitHub 的“Download ZIP”是源码下载，不是这里的成品包。
+或者先[下载成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.4.5)，将下载后的 Windows 绝对路径填入同一输入框。需要核对下载文件时，可使用 Release 中的 `SHA256SUMS`，或交给 Agent 检查。GitHub 与 npm 使用同一份已验收的包；GitHub 的“Download ZIP”是源码下载，不是这里的成品包。
 
 ### GitHub 地址安装
 
@@ -83,7 +83,7 @@ Windows 桌面版是当前主要验证环境；其他系统的默认目录已实
 
 **安装后没有入口**：在 DSH 插件管理中检查催更姬是否已安装、启用，并按提示完全退出、重启。仍没有入口时，将[Agent 安装指南](agent-installation.md)交给 Agent 核对当前环境和实际加载状态。
 
-**新版 DSH 提示 0.4.3 不兼容**：在“包名或地址”填写 `dsh-cuigengji-plugin@0.4.4` 更新，不用关闭版本检查或移动小说。0.4.4 保留原有功能与数据格式。
+**新版 DSH 提示 0.4.3 不兼容**：在“包名或地址”填写 `dsh-cuigengji-plugin@0.4.5` 更新，不用关闭版本检查或移动小说。0.4.5 保留原有功能与数据格式。
 
 **提示版本冲突**：保留草稿，读取最新内容后比较。不要修改版本号强行覆盖另一会话或 AI 的修改。
 

@@ -25,7 +25,7 @@ description: 安装或更新催更姬后，查询自动迁移、备份和完整�
 返回当前插件版本、实际数据根、来源/目标存储版本、迁移阶段、完整备份路径、作品和正文数量，以及失败原因。它不要求会话绑定小说，迁移失败时仍可调用。
 
 ```json
-{"action":"verify","args":{"expectedVersion":"0.4.4","expectedDataRoot":"C:\\Users\\用户名\\AppData\\Local\\cuigengji"}}
+{"action":"verify","args":{"expectedVersion":"0.4.5","expectedDataRoot":"C:\\Users\\用户名\\AppData\\Local\\cuigengji"}}
 ```
 
 它在锁内重新读取并校验工作库，返回计数、摘要哈希和每项检查结果。不要把摘要哈希当作正文内容，也不要把数据根替换成维护者电脑上的路径。

@@ -1,6 +1,6 @@
 {
   "name": "dsh-cuigengji-plugin",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "催更姬：给大肥鱼一个小说工作台，一起写正文、讨论情节、整理人物与世界设定。",
   "type": "module",
   "main": "runtime/index.js",
@@ -68,7 +68,7 @@
   },
   "engines": {
     "node": ">=24",
-    "dsh": "0.2.0-rc.2 || 0.2.1-rc.2"
+    "dsh": ">=0.2.0-rc.2"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
@@ -77,8 +77,8 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
-    "@deepseek-ai/dsh-atomic-write": "0.2.0-rc.2 || 0.2.1-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.0-rc.2 || 0.2.1-rc.2",
+    "@deepseek-ai/dsh-atomic-write": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "~3.18.4"
   },
   "devDependencies": {

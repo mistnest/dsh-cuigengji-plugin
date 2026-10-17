@@ -22,7 +22,7 @@ tarball: https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4
 
 市场显示名统一为 `dsh-cuigengji-plugin`，中文介绍保留“催更姬”，便于按英文名称或中文名称查找。条目文件名和仓库地址仍用于识别作者与项目，不随显示名修改。
 
-仓库保留 `dsh-plugin`、`deepseek-harness`、`cuigengji` 等主题标签，供市场与 Agent 检索。实际宿主兼容范围以 `package.json` 和 Release 为准，不扩大声明。npm 包名也统一为 `dsh-cuigengji-plugin`，首次发布与安装验收通过后再将包名入口标为可用；成品包仍使用固定版本 Release 地址。用户界面标题保持“催更姬”，英文安装名在全部渠道一致。
+仓库保留 `dsh-plugin`、`deepseek-harness`、`cuigengji` 等主题标签，供市场与 Agent 检索。最低宿主要求以 `package.json` 为准，Release 单独列明实际验收版本，未来版本默认允许安装。npm 包名也统一为 `dsh-cuigengji-plugin`，首次发布与安装验收通过后再将包名入口标为可用；成品包仍使用固定版本 Release 地址。用户界面标题保持“催更姬”，英文安装名在全部渠道一致。
 
 ## 收录验收
 

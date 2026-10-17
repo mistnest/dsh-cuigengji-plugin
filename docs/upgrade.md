@@ -1,6 +1,6 @@
 # 更新与数据迁移
 
-0.4.4 是基于 0.4.3 的宿主兼容修补，支持 DSH 0.2.1-rc.2 与 0.2.0-rc.2，不改变存储格式。0.4.3 在新版 DSH 被版本检查拒绝时，由宿主安装 `dsh-cuigengji-plugin@0.4.4`，保留原配置和数据根；不必先导出再导入，也不要删除旧作品。
+0.4.5 延续公开 0.4.3 系列功能，最低宿主要求为 DSH `>=0.2.0-rc.2`，后续正式版与预发布版默认允许安装；已实际验收 0.2.1-rc.2 和 0.2.0-rc.2。0.4.4 的精确版本白名单已放宽，存储格式保持不变。0.4.3 在新版 DSH 被版本检查拒绝时，由宿主安装 `dsh-cuigengji-plugin@0.4.5`，保留原配置和数据根；不必先导出再导入，也不要删除旧作品。
 
 0.4.2 将公开名称统一为 `dsh-cuigengji-plugin`。旧名 `dsh-cuigengji` 安装的用户需要由升级 Agent 完成一次[安装名称迁移](package-name-migration.md)，转接启用项和配置，避免两个包同时加载。小说目录、内部 ID、工具名与数据格式保持兼容。
 
@@ -32,7 +32,7 @@
 然后使用真实加载版本和数据根进行校验：
 
 ```json
-{"action":"verify","args":{"expectedVersion":"0.4.4","expectedDataRoot":"C:\\Users\\用户\\AppData\\Local\\cuigengji"}}
+{"action":"verify","args":{"expectedVersion":"0.4.5","expectedDataRoot":"C:\\Users\\用户\\AppData\\Local\\cuigengji"}}
 ```
 
 只有 `status.status` 为 `ready` 且 `verify.verified` 为 `true`，才能向用户报告更新完成。校验结果包含作品、章节、历史、设定、规划和绑定数量，不返回正文内容。

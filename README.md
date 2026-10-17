@@ -57,7 +57,7 @@
 
 ## 开始使用
 
-当前主要适配 DSH Windows 桌面版，0.4.4 支持 **0.2.1-rc.2** 和 **0.2.0-rc.2**。旧插件 0.4.3 会被新版 DSH 的版本检查拒绝，更新催更姬即可，小说数据与原有功能保持不变。普通用户无需另装 Git、Node.js 或编译源码。
+当前主要适配 DSH Windows 桌面版，最低版本为 **0.2.0-rc.2**，后续版本默认允许安装；已实际验收 **0.2.1-rc.2** 和 **0.2.0-rc.2**。旧插件 0.4.3 会被新版 DSH 的版本检查拒绝，更新催更姬即可，小说数据与原有功能保持不变。普通用户无需另装 Git、Node.js 或编译源码。
 
 推荐把[安装与更新指南](docs/agent-installation.md)交给 Agent；也可以按[桌面安装步骤](docs/getting-started.md)，在 DSH“添加插件”中安装[成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/latest)。更新时自动备份、迁移并校验已有作品，详见[更新与数据迁移](docs/upgrade.md)。
 

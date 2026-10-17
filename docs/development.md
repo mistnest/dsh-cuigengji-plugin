@@ -2,7 +2,7 @@
 
 渠道分工、版本规则与每次发布的顺序统一见[渠道维护与发布流程](release-process.md)；本文说明具体构建、测试和迁移验收工具。
 
-当前插件版本 0.4.4，统一公开名称 `dsh-cuigengji-plugin`，Node.js 24+，DSH 支持 0.2.1-rc.2 和 0.2.0-rc.2。源码同时包含 TypeScript、JavaScript 和 JSX，尚未完成全部模块的 TypeScript 迁移。
+当前插件版本 0.4.5，统一公开名称 `dsh-cuigengji-plugin`，Node.js 24+，最低宿主要求 DSH `>=0.2.0-rc.2`，后续版本默认允许安装；实际验收 DSH 0.2.1-rc.2 和 0.2.0-rc.2。开发依赖固定 0.2.1-rc.2，范围回归用例不代表已运行未来宿主。源码同时包含 TypeScript、JavaScript 和 JSX，尚未完成全部模块的 TypeScript 迁移。
 
 ## 模块与构建
 
@@ -64,12 +64,12 @@ Windows 上 `scripts/check-release-install.mjs` 在临时 profile 中调用 DSH 
 `npm run test:host-compat -- --desktop-exe <exe> --package <tgz> --report <json>` 在临时 profile 启动该桌面内置的真实 DSH Host，通过 headless 浏览器验收侧栏入口、首次建书、正文自动保存、规划、设定、预设和导入导出，并检查宿主工具与 Skill 注册。只用合成数据，不发送聊天或调用模型；失败截图与诊断保存在报告旁。正式 `release prepare` 也会执行这项检查。
 
 ```powershell
-node scripts/check-release-install.mjs --desktop-exe "C:\新版DSH\DeepSeek Harness.exe" --old-desktop-exe "C:\旧版DSH\DeepSeek Harness.exe" --package "C:\发布目录\dsh-cuigengji-plugin-0.4.4.tgz" --old-package "C:\旧包目录\dsh-cuigengji-plugin-0.4.3.tgz" --report "C:\验收目录\update.json"
+node scripts/check-release-install.mjs --desktop-exe "C:\新版DSH\DeepSeek Harness.exe" --old-desktop-exe "C:\旧版DSH\DeepSeek Harness.exe" --package "C:\发布目录\dsh-cuigengji-plugin-0.4.5.tgz" --old-package "C:\旧包目录\dsh-cuigengji-plugin-0.4.3.tgz" --report "C:\验收目录\update.json"
 ```
 
 省略 `--old-package` 验证全新安装；`--package` 也可使用真实 Release `.tgz` URL、完整 GitHub 仓库 URL 或固定提交的 `github:owner/repo#commit`。默认不提供 Git，固定提交使用完整 40 位 SHA；不固定提交的仓库地址加 `--with-git` 验收宿主的 Git 引用解析。GitHub 路径同样检查安装后的编译文件、无构建授权和旧库内容。用户安装使用[原生 Agent 指南](agent-installation.md)，不运行此开发者验收脚本。
 
-npm 首次发布与后续可信发布流程见 [npm 发布](npm-publishing.md)。首次发布成功后，同一验收脚本可用 `--npm-package dsh-cuigengji-plugin@0.4.4` 检查按包名安装；它与 `--package` 二选一，继续使用没有 Git 的隔离 profile。名称转换由 `tests/package-identity.test.js` 和真实安装验收覆盖，包括自定义数据根、home/profile 配置、去重、配置原始备份和幂等重试。
+npm 首次发布与后续可信发布流程见 [npm 发布](npm-publishing.md)。首次发布成功后，同一验收脚本可用 `--npm-package dsh-cuigengji-plugin@0.4.5` 检查按包名安装；它与 `--package` 二选一，继续使用没有 Git 的隔离 profile。名称转换由 `tests/package-identity.test.js` 和真实安装验收覆盖，包括自定义数据根、home/profile 配置、去重、配置原始备份和幂等重试。
 
 ## 小说数据与源码分离
 
