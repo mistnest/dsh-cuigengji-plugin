@@ -4,12 +4,12 @@
 
 ## 下载入口
 
-- 目标发布：[0.4.3](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.4.3)
-- 成品安装包：[dsh-cuigengji-plugin-0.4.3.tgz](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.3/dsh-cuigengji-plugin-0.4.3.tgz)
-- 哈希校验：[SHA256SUMS](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.3/SHA256SUMS)
-- 已验证宿主：DSH Windows 桌面版 **0.2.0-rc.2**。后续宿主版本以对应发布说明为准。
+- 目标发布：[0.4.4](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.4.4)
+- 成品安装包：[dsh-cuigengji-plugin-0.4.4.tgz](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.4/dsh-cuigengji-plugin-0.4.4.tgz)
+- 哈希校验：[SHA256SUMS](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.4/SHA256SUMS)
+- 已验证宿主：DSH Windows 桌面版 **0.2.1-rc.2** 和 **0.2.0-rc.2**。后续宿主版本以对应发布说明为准。
 
-npm 0.4.3 已公开，默认包名 `dsh-cuigengji-plugin` 的全新安装已验收；Agent 安装或更新优先使用精确版本 `dsh-cuigengji-plugin@0.4.3`，并在执行前核对公开版本。没有 Git、没有另装 Node.js 的测试已覆盖新安装、0.4.2 同名升级和 0.4.1 旧名升级。备用入口使用上面的 `.tgz` URL，或下载后的 Windows 绝对路径。也支持仓库地址 `https://github.com/mistnest/dsh-cuigengji-plugin`；0.4.1 起仓库包含完整编译文件，不需要构建授权。GitHub 的源码 ZIP 不替代 `.tgz` 包。
+安装或更新优先使用精确版本 `dsh-cuigengji-plugin@0.4.4`，执行前核对 npm 精确版本与发布说明。无 Git 验收覆盖新装、旧宿主的 0.4.3 同名升级及 0.4.1 旧名升级，升级后检查完整逻辑工作库保留。备用入口使用上面的 `.tgz` URL，或下载后的 Windows 绝对路径。也支持仓库地址 `https://github.com/mistnest/dsh-cuigengji-plugin`；0.4.1 起仓库包含完整编译文件，不需要构建授权。GitHub 的源码 ZIP 不替代 `.tgz` 包。
 
 **环境清单中若存在旧包 `dsh-cuigengji`，先按[安装名称迁移](package-name-migration.md)以关闭状态装入新包，再离线转接启用项和原配置。不要直接同时启用两个包。** 新安装或已经使用统一名称的更新继续本页流程。
 
@@ -19,7 +19,7 @@ npm 0.4.3 已公开，默认包名 `dsh-cuigengji-plugin` 的全新安装已验�
 
 ## 用户可直接交给 Agent 的话
 
-> 请按催更姬的 Windows Agent 安装指南帮我安装或更新 dsh-cuigengji-plugin 到 0.4.3。使用 DSH 原生插件管理与已公开成品包；如果存在旧安装名，先完成名称迁移。保留已有配置和小说数据，完整重启后确认实际加载版本、数据目录和迁移校验结果。重新进入插件时应能直接继续写作。
+> 请按催更姬的 Windows Agent 安装指南帮我安装或更新 dsh-cuigengji-plugin 到 0.4.4。使用 DSH 原生插件管理与已公开成品包；如果存在旧安装名，先完成名称迁移。保留已有配置和小说数据，完整重启后确认实际加载版本、数据目录和迁移校验结果。重新进入插件时应能直接继续写作。
 
 ## 1. 查明当前环境
 
@@ -44,13 +44,13 @@ Windows 外部 Agent 可以用 PowerShell 的 `Get-FileHash -Algorithm SHA256` �
 通过 DSH 原生工具安装固定版本：
 
 ```json
-{"action":"install_bundle","target":"dsh-cuigengji-plugin@0.4.3","enabled":true}
+{"action":"install_bundle","target":"dsh-cuigengji-plugin@0.4.4","enabled":true}
 ```
 
 需要使用 GitHub 成品包时：
 
 ```json
-{"action":"install_bundle","target":"https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.3/dsh-cuigengji-plugin-0.4.3.tgz","enabled":true}
+{"action":"install_bundle","target":"https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.4/dsh-cuigengji-plugin-0.4.4.tgz","enabled":true}
 ```
 
 或把 `target` 换成已经核对过的本地 `.tgz` 绝对路径。没有原生工具访问能力的外部 Agent，可以先准备好包，交由 DSH 的原生插件页安装，并继续接手后面的验证。
@@ -59,9 +59,9 @@ Windows 外部 Agent 可以用 PowerShell 的 `Get-FileHash -Algorithm SHA256` �
 
 desktop profile 由桌面应用管理。普通 DSH CLI 会拒绝对它直接操作；不要创建同名 profile、手工改 bundles 或在用户 profile 直接运行 `pnpm add`。本仓库的 `install-desktop.ps1` 是开发者维护脚本，不属于普通用户安装路径。
 
-## 4. 完整重启与自动迁移
+## 4. 重新加载与自动迁移
 
-请用户先保存编辑中的内容，然后从 DSH 菜单正常退出，包括托盘进程，再从原快捷方式启动。具备相应权限的安装 Agent 可以完成重启；否则说明唯一剩余步骤并在重启后继续验收。
+先读取宿主安装结果。报告需要重启或仍加载旧版本时，请用户保存编辑中的内容，从 DSH 菜单正常退出，包括托盘进程，再从原快捷方式启动。宿主已热重载时可直接验收实际版本；未完成加载就不能报告成功。具备相应权限的安装 Agent 可以完成重启；否则说明唯一剩余步骤并在重启后继续验收。
 
 插件加载阶段完成升级前的完整原始快照、挂起事务恢复、物理布局迁移和完整逻辑校验。用户不需要单独运行迁移命令，也不会看到迁移向导。**负责更新的 Agent 必须完成这一步的验证，才能说更新结束。**
 
@@ -76,12 +76,12 @@ desktop profile 由桌面应用管理。普通 DSH CLI 会拒绝对它直接操�
 再核对版本、原数据根和原作品 ID；下面的数据目录是示例，请换成之前查明的目录：
 
 ```json
-{"action":"verify","args":{"expectedVersion":"0.4.3","expectedDataRoot":"C:\\Users\\用户名\\AppData\\Local\\cuigengji","expectedNovelIds":[]}}
+{"action":"verify","args":{"expectedVersion":"0.4.4","expectedDataRoot":"C:\\Users\\用户名\\AppData\\Local\\cuigengji","expectedNovelIds":[]}}
 ```
 
 `expectedNovelIds` 可填升级前作品的真实 ID，不用新 ID 替代。确认：
 
-- `status.status=ready`，实际加载版本为 0.4.3，数据根与更新前一致。
+- `status.status=ready`，实际加载版本为 0.4.4，数据根与更新前一致。
 - `verify.verified=true`，各作品、正文版本、回收站、设定、规划页和绑定数量符合原数据。
 - 原有作品仍能通过只读工具访问。初次安装应是可用空库，不会附带作者小说。
 
@@ -91,6 +91,7 @@ desktop profile 由桌面应用管理。普通 DSH CLI 会拒绝对它直接操�
 
 ## 失败时怎样处理
 
+- **新版 DSH 拒绝旧 0.4.3**：旧包仅声明支持 0.2.0-rc.2。DSH 0.2.1-rc.2 使用本页的 0.4.4 更新入口，保留原配置和数据根，不添加兼容豁免或停用供应链检查。
 - **无法从依赖变更中确定安装了哪一个包**：若重复用了同一个仓库地址，改为目标版本的 `.tgz` URL 或明确的新提交地址；核对安装结果与重启后版本，不把无依赖变更当作更新完成。
 - **找不到 Git / `git ls-remote`**：核对是否误用了仓库地址，换成已核实的 `.tgz`。
 - **不兼容或构建批准提示**：保留宿主的具体结果，按相应发布说明处理，不绕过宿主检查。

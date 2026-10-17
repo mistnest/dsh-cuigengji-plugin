@@ -15,6 +15,7 @@ const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8')), release=
 const dir=join(root,'releases',release.tag), stateFile=join(dir,'release-state.json');
 const archive=join(dir,release.asset), sums=join(dir,'SHA256SUMS'), notesFile=join(dir,'release-notes.md');
 const desktopExe=value('--desktop-exe') || process.env.CUIGENGJI_DESKTOP_EXE;
+const oldDesktopExe=value('--old-desktop-exe') || process.env.CUIGENGJI_PREVIOUS_DESKTOP_EXE;
 let state;
 let locked=false;
 const lock=join(dir,'.release-lock');
@@ -112,7 +113,7 @@ async function waitWorkflow(name,allowDispatch=false) {
 async function native(spec,label,oldPackage) {
   const report=join(dir,`${label}.json`);
   await run(process.execPath,[join(root,'scripts/check-release-install.mjs'),'--desktop-exe',state.desktopExe,
-    '--package',spec,...(oldPackage?['--old-package',oldPackage]:[]),'--report',report]);
+    '--package',spec,...(oldPackage?['--old-package',oldPackage,...(state.oldDesktopExe?['--old-desktop-exe',state.oldDesktopExe]:[])]:[]),'--report',report]);
   const result=JSON.parse(await readFile(report,'utf8')); assert.equal(result.ok,true); return result;
 }
 
@@ -141,7 +142,7 @@ async function prepare() {
     if (state.sha256) assert.equal(sha256(await readFile(archive)),state.sha256,'Interrupted preparation archive changed');
   } else assert.equal(await exists(archive),false,'Untracked archive has no preparation state; use --reset before publication');
   state={schemaVersion:1,...release,sourceCommit:src.commit,sha256:null,checks:{},
-    desktopExe:resolve(desktopExe),dshBaseline:pkg.engines.dsh,startedAt:new Date().toISOString(),github:{published:false},npm:{published:false},market:{}};
+    desktopExe:resolve(desktopExe),...(oldDesktopExe?{oldDesktopExe:resolve(oldDesktopExe)}:{}),dshBaseline:pkg.engines.dsh,startedAt:new Date().toISOString(),github:{published:false},npm:{published:false},market:{}};
   await save();
   await run('npm',['test']); state.checks.unitTests=true;
   await run('npm',['run','typecheck']); state.checks.typecheck=true;
@@ -157,6 +158,9 @@ async function prepare() {
   state.sha256=sha256(await readFile(archive)); await writeFile(sums,`${state.sha256}  ${release.asset}\n`);
   await save();
   state.checks.freshNoGit=await native(archive,'fresh-no-git'); await save();
+  const hostReport=join(dir,'host-compatibility.json');
+  await run(process.execPath,[join(root,'scripts/check-host-compat.mjs'),'--desktop-exe',state.desktopExe,'--package',archive,'--report',hostReport]);
+  state.checks.hostCompatibility=JSON.parse(await readFile(hostReport,'utf8'));assert.equal(state.checks.hostCompatibility.ok,true);await save();
   // Test both the most recent stable archive and the old-name migration boundary.
   const releases=await jsonGH('release','list','--limit','100','--json','tagName,isDraft,isPrerelease');
   const previous=releases.find(row=>!row.isDraft&&!row.isPrerelease&&row.tagName!==release.tag)?.tagName;
@@ -252,7 +256,7 @@ async function verify(githubOnly=has('--github-only')) {
   if (state.npm.published) {
     const report=join(dir,'npm-no-git.json');
     await run(process.execPath,[join(root,'scripts/check-release-install.mjs'),'--desktop-exe',state.desktopExe,
-      '--npm-package',`${PACKAGE}@${release.version}`,'--old-package',state.oldArchives[0].path,'--report',report]);
+      '--npm-package',`${PACKAGE}@${release.version}`,'--old-package',state.oldArchives[0].path,...(state.oldDesktopExe?['--old-desktop-exe',state.oldDesktopExe]:[]),'--report',report]);
     state.checks.npmNoGit=JSON.parse(await readFile(report,'utf8')); assert.equal(state.checks.npmNoGit.ok,true); await save();
   } else assert.ok(githubOnly,'Exact npm version is not public; staging or a successful CLI exit is insufficient. Resume verify when it is available');
   await syncMarket();

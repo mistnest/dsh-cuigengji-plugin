@@ -15,10 +15,10 @@
 通过 DSH 原生工具安装精确版本，使用 `enabled:false`：
 
 ```json
-{"action":"install_bundle","target":"https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.3/dsh-cuigengji-plugin-0.4.3.tgz","enabled":false}
+{"action":"install_bundle","target":"https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.4/dsh-cuigengji-plugin-0.4.4.tgz","enabled":false}
 ```
 
-npm 发布并验证后，`target` 也可使用 `dsh-cuigengji-plugin@0.4.3`。读取真实安装返回，确认新包已落盘。安装失败时旧包继续保留，停止后续步骤。
+npm 发布并验证后，`target` 也可使用 `dsh-cuigengji-plugin@0.4.4`。读取真实安装返回，确认新包已落盘。安装失败时旧包继续保留，停止后续步骤。
 
 ### 2. 正常退出后，运行名称迁移工具
 
@@ -51,7 +51,7 @@ DSH 内的 Agent 需要在退出前准备后台维护任务。工具可加 `--wa
 
 ### 3. 从原入口重新打开，核对作品
 
-从用户原来的快捷方式启动 DSH。确认仅新包被启用，工具调用和前端入口各只有一份；再按[更新与数据迁移](upgrade.md)调用 `cuigengji_maintenance` 的 `status` / `verify`，核对 `0.4.3`、原数据根和升级前作品 ID。只有就绪且完整性验证通过才报告完成。
+从用户原来的快捷方式启动 DSH。确认仅新包被启用，工具调用和前端入口各只有一份；再按[更新与数据迁移](upgrade.md)调用 `cuigengji_maintenance` 的 `status` / `verify`，核对 `0.4.4`、原数据根和升级前作品 ID。只有就绪且完整性验证通过才报告完成。
 
 ### 4. 清理旧依赖
 

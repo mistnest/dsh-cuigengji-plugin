@@ -15,10 +15,12 @@ npm run release -- status
 
 其他电脑传实际 DSH exe 路径，或设置 `CUIGENGJI_DESKTOP_EXE`。这些命令不会更新或关闭正式 DSH，不读真实作品；原生安装测试使用临时 profile 和虚构工作库。
 
+0.4.4 的目标宿主为 0.2.1-rc.2，上一公开版 0.4.3 仅支持旧宿主。验收时将 `--desktop-exe` 指向新版，另加 `--old-desktop-exe "C:\旧版DSH\DeepSeek Harness.exe"`（或 `CUIGENGJI_PREVIOUS_DESKTOP_EXE`）提供旧运行时。脚本先用旧宿主运行旧插件，再用新版升级，不绕过新宿主的兼容检查。可以使用经过官方签名及校验的独立桌面解包目录，无需替换作者的正式安装。
+
 | 命令 | 负责什么 |
 | --- | --- |
 | `plan` / `status` | 只读检查当前版本、工作树、GitHub Release、npm 精确版本与占位状态、可信发布开关、市场 PR |
-| `prepare` | 要求已提交的 main；跑测试、类型检查、构建一致性、实际包审计、桌面无 Git 全新安装与升级；上一稳定版和 v0.4.1 旧名称边界都验证 |
+| `prepare` | 要求已提交的 main；跑测试、类型检查、构建一致性、实际包审计、新宿主工作台集成、桌面无 Git 全新安装与升级；上一稳定版和 v0.4.1 旧名称边界都验证 |
 | `publish` | 复用准备好的包；推送提交并等待 CI；建立同提交的版本标签和草稿，核对资产后公开；等待 npm 工作流；下载公开版本并进行原生安装验收，再同步待审核市场条目 |
 | `verify` | 不重新打包，补验收公开 GitHub URL / npm 精确版本和升级，恢复中断后的渠道同步 |
 | `trust` | 首次通过 npm 官方 2FA 流程配置指定仓库 / 工作流的直接可信发布权限，核对后启用工作流；需要账号持有人的真实验证方式 |
@@ -64,7 +66,7 @@ GitHub 仓库、npm 包和市场显示名统一为 **`dsh-cuigengji-plugin`**，
 以下是 2026-10-11 调研时的状态；每次发布前重新确认，不将历史结果当作当前验收。
 
 - GitHub Release 和 npm **0.4.3** 均已公开，安装包哈希一致；npm 默认标签、默认包名全新安装、0.4.2 同名升级与 0.4.1 旧名升级均已验收。测试没有 Git 或另装的 Node.js，原配置与合成作品保留，见 [npm 发布](npm-publishing.md)。
-- `dshmarket` 的[收录 PR #7064](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7064)尚未合并；不宣称该市场已经可搜索安装。
+- `dshmarket` 的[收录 PR #7064](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7064)已于 2026-10-17 合并，公开目录已出现本插件；本次发布另行更新已合并条目的安装包地址。收录不等于市场已同步新版，搜索与安装结果仍需单独核对。
 - 补充官方插件卡片可读取的中文标题、图标和简短介绍，并在真实插件管理界面核对显示。
 
 普通用户安装首选已改为包名。已经验收的 Release `.tgz` 保留为备用入口；源码仓库地址继续兼容，但不作为无 Git 用户的首选。

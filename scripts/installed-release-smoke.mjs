@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const [packagePath,dataRoot] = process.argv.slice(2);
+const [packagePath,dataRoot,versionOverride] = process.argv.slice(2);
 const manifest = JSON.parse(await readFile(join(packagePath,'package.json'),'utf8'));
-const expectedVersion = JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
+const expectedVersion = versionOverride || JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
 assert.equal(manifest.version,expectedVersion);
 const {apply} = await import(pathToFileURL(join(packagePath,manifest.main)));
 const registered = new Map(), effects = [], routes = [], listeners = new Map();
@@ -48,6 +48,9 @@ try {
   const again=(await rpc('novel.archive',{novelId:novel.id,expectedRevision:restored.revision,confirm:true})).value;
   assert.equal((await rpc('novel.purge',{novelId:novel.id,expectedRevision:again.revision,confirm:true})).value.purged,true);
   assert.equal((await rpc('novel.list',{includeArchived:true})).value.some(n=>n.id===novel.id),false);
+  const finalVerification=await execute('cuigengji_maintenance','verify',{expectedVersion});
+  assert.equal(finalVerification.verified,true);
   console.log(JSON.stringify({ok:true,installedVersion:manifest.version,node:process.version,electron:process.versions.electron,
+    initialStateDigest:verification.currentStateDigest,finalStateDigest:finalVerification.currentStateDigest,
     fromStorageVersion:status.fromStorageVersion,migrated:status.migrated,counts:verification.summary.counts,backupPath:status.backupPath,lifecycleVerified:true}));
 } finally {for (const dispose of effects) await dispose();}

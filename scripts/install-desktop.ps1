@@ -11,7 +11,9 @@ if ([string]::IsNullOrWhiteSpace($DesktopExe)) {
 $DesktopExe = [IO.Path]::GetFullPath($DesktopExe)
 $desktopDirectory = Split-Path -Parent $DesktopExe
 $nodeShim = Join-Path $desktopDirectory 'resources\runtime\bin\node.cmd'
-$pnpm = Join-Path $desktopDirectory 'resources\runtime\pnpm\bin\pnpm.mjs'
+$pnpm = @('resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs', 'resources\runtime\pnpm\bin\pnpm.mjs') |
+  ForEach-Object { Join-Path $desktopDirectory $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $pnpm) { throw 'Required installed desktop package manager was not found.' }
 $profile = Join-Path $DshHome 'profiles\desktop'
 foreach ($path in @($DesktopExe, $nodeShim, $pnpm, (Join-Path $profile 'package.json'))) {
   if (-not (Test-Path -LiteralPath $path)) { throw "Required installed desktop path missing: $path" }
