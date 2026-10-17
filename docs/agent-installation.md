@@ -7,7 +7,7 @@
 - 目标发布：[0.4.5](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.4.5)
 - 成品安装包：[dsh-cuigengji-plugin-0.4.5.tgz](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.5/dsh-cuigengji-plugin-0.4.5.tgz)
 - 哈希校验：[SHA256SUMS](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.5/SHA256SUMS)
-- 最低宿主：DSH **0.2.0-rc.2**；后续正式版和预发布版默认允许安装。
+- 兼容范围：DSH **0.2.0-rc.2 及以上、0.3.0 以下**；0.2.0 线从 `0.2.0-rc.2` 起放行，0.2.1 线的预发布从 `0.2.1-rc.2` 起放行，0.3 起需要新的插件版本声明。
 - 已验证宿主：DSH Windows 桌面版 **0.2.1-rc.2** 和 **0.2.0-rc.2**。此列表是实际验收记录，不是安装白名单；后续版本遇到具体接口错误时按错误排查，不因未测试就擅自添加版本豁免或改动用户配置。
 
 安装或更新优先使用精确版本 `dsh-cuigengji-plugin@0.4.5`，执行前核对 npm 精确版本与发布说明。无 Git 验收覆盖新装、旧宿主的 0.4.3 / 0.4.4 同名升级及 0.4.1 旧名升级，升级后检查完整逻辑工作库保留。备用入口使用上面的 `.tgz` URL，或下载后的 Windows 绝对路径。也支持仓库地址 `https://github.com/mistnest/dsh-cuigengji-plugin`；0.4.1 起仓库包含完整编译文件，不需要构建授权。GitHub 的源码 ZIP 不替代 `.tgz` 包。
