@@ -2,7 +2,7 @@
 
 整体渠道分工与发布验收顺序见[渠道维护与发布流程](release-process.md)。本文负责 npm 首次发布、可信发布配置和按包名安装验收。
 
-npm 包、GitHub 仓库和市场显示名统一为 **`dsh-cuigengji-plugin`**。目标精确版本、归档和默认标签均验收通过后，用户可在 DSH「插件 → 添加插件 → 包名或地址」中填写 `dsh-cuigengji-plugin`，固定本次版本填写 `dsh-cuigengji-plugin@0.4.5`。「安装源」选择默认、npm 官方源或大陆镜像，不填写 GitHub 地址。这条路线不需要 Git。旧包名安装的用户按[名称迁移指南](package-name-migration.md)更新。
+npm 包、GitHub 仓库和市场显示名统一为 **`dsh-cuigengji-plugin`**。目标精确版本、归档和默认标签均验收通过后，用户在 DSH「插件 → 添加插件 → 包名或地址」中填写 **`dsh-cuigengji-plugin@0.4.5`**。只填包名可能因宿主的版本选择策略安装到较旧版本，因此当前安装说明保留明确版本号。「安装源」选择默认、npm 官方源或大陆镜像，不填写 GitHub 地址。这条路线不需要 Git。旧包名安装的用户按[名称迁移指南](package-name-migration.md)更新。
 
 首次发布需要维护者自己的 npm 账号。npm 发布与 `dshmarket` 收录互相独立：npm 包可用不代表市场已收录，市场收录状态仍以[收录申请](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7064)和公开目录为准。
 

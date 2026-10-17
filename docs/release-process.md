@@ -69,7 +69,7 @@ GitHub 仓库、npm 包和市场显示名统一为 **`dsh-cuigengji-plugin`**，
 - `dshmarket` 的[收录 PR #7064](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7064)已于 2026-10-17 合并，公开目录已出现本插件；本次发布另行更新已合并条目的安装包地址。收录不等于市场已同步新版，搜索与安装结果仍需单独核对。
 - 补充官方插件卡片可读取的中文标题、图标和简短介绍，并在真实插件管理界面核对显示。
 
-普通用户安装首选已改为包名。已经验收的 Release `.tgz` 保留为备用入口；源码仓库地址继续兼容，但不作为无 Git 用户的首选。
+普通用户安装首选带明确版本号的包名，例如 `dsh-cuigengji-plugin@0.4.5`。宿主的版本选择策略可能让不带版本的包名安装到旧版，不能仅凭 npm 的 `latest` 就报告用户已安装新版。已经验收的 Release `.tgz` 保留为备用入口；源码仓库地址继续兼容，但不作为无 Git 用户的首选。
 
 上传与公开之间要留出 npm 扫描时间；工作流会等待最多 30 分钟，再核对正式归档和版本标签。已经接受的上传超时后使用 `verify_only=true` 的工作流与 `release verify` 补验收，不重传。可信发布还需要在 npm 包设置中为同一工作流开启独立的 `Allow npm dist-tag` 权限，才能自动维护 `latest` / `next`。
 

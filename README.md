@@ -61,6 +61,8 @@
 
 推荐把[安装与更新指南](docs/agent-installation.md)交给 Agent；也可以按[桌面安装步骤](docs/getting-started.md)，在 DSH“添加插件”中安装[成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/latest)。更新时自动备份、迁移并校验已有作品，详见[更新与数据迁移](docs/upgrade.md)。
 
+本次安装请在“包名或地址”填写 **`dsh-cuigengji-plugin@0.4.5`**，无需 Git。保留版本号可以避免宿主将不带版本的包名解析到旧版。
+
 安装后，从 DSH 左侧栏的 **催更姬** 进入。创建或选择一本作品，再在绑定这本作品的会话里讨论写作；空白会话也能打开工作台。
 
 开发者可通过[源码预览](docs/getting-started.md#开发者源码预览)试用临时演示作品。
