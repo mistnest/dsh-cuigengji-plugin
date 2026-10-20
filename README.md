@@ -11,7 +11,7 @@
 <p>
   <a href="docs/getting-started.md"><strong>开始使用</strong></a> ·
   <a href="https://www.bilibili.com/video/BV1e5HE6wErd/"><strong>看视频演示</strong></a> ·
-  <a href="docs/agent-installation.md">交给 Agent 安装</a>
+  <a href="#视频与教程">视频教程</a>
 </p>
 
 <p>
@@ -43,6 +43,18 @@ dsh-cuigengji-plugin@0.4.5
 [详细安装步骤](docs/getting-started.md) · [备用成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.5/dsh-cuigengji-plugin-0.4.5.tgz) · [更新与数据迁移](docs/upgrade.md)
 
 也可以把[安装与更新指南](docs/agent-installation.md)交给 Agent，由它处理安装、备份和升级检查。当前已实际验收 DSH **0.2.1-rc.2** 和 **0.2.0-rc.2**；更新插件会自动备份、迁移并校验原有作品。
+
+## 视频与教程
+
+第一次接触 DSH 或 AI 写作，可以跟着「催更姬从零上手」系列开始：
+
+| 想了解什么 | 视频 | 时长 |
+| --- | --- | --- |
+| 安装 DSH 和催更姬 | [从零上手①：只会网页版 AI？先把 DSH 和插件装好](https://www.bilibili.com/video/BV1x5JX6GEXk/) | 2:28 |
+| 理解长篇写作中的问题与插件思路 | [从零上手②：AI 会润色，为什么写长篇就跑偏？](https://www.bilibili.com/video/BV11xnJ6UEgc/) | 6:28 |
+| 看看工作台怎样操作 | [v0.4.0 功能演示：写作、规划与数据管理](https://www.bilibili.com/video/BV1Qepg6uEN2/) | 2:31 |
+
+更多教程、版本演示和「从零开始 AI 写作」系列，见 **[B 站主页 · 催更姬VibeWriting](https://space.bilibili.com/3707006961584592)**。视频中的版本以标题和画面标注为准，当前安装步骤以[安装说明](docs/getting-started.md)为准。
 
 ## 从一个想法，到一部小说
 
@@ -82,6 +94,7 @@ dsh-cuigengji-plugin@0.4.5
 
 ## 交流与支持
 
+- **[B 站 · 催更姬VibeWriting](https://space.bilibili.com/3707006961584592)**：观看教程、功能演示，关注后续更新。
 - **QQ 交流群：1026457465**，欢迎分享作品体验、反馈问题和讨论后续功能。
 - **[爱发电 · 支持催更姬](https://ifdian.net/a/cuigengji)**：欢迎合作与投喂，每一份支持都会化作 token，帮助催更姬继续成长。
 - **[提交问题或建议](https://github.com/mistnest/dsh-cuigengji-plugin/issues)**：带上 DSH 与插件版本、操作步骤，更方便定位问题。
