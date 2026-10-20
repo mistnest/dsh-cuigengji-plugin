@@ -1,96 +1,95 @@
-# 催更姬
+<div align="center">
 
-**给大肥鱼一个小说工作台，陪你把故事写下去。**
+<h1>催更姬</h1>
+<p><strong>让大肥鱼成为你的小说写作助手</strong></p>
+<p>写正文 · 推敲情节 · 整理人物与世界<br>在 DSH 里，和 AI 一起把故事写下去。</p>
 
-催更姬（`dsh-cuigengji-plugin`）是 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的小说写作插件。你可以在聊天旁边写正文、整理人物和世界设定、画出情节规划，再和 DSH 里的 AI 一起讨论、续写和修改。
+<a href="https://www.bilibili.com/video/BV1e5HE6wErd/">
+  <img src=".github/assets/writing-duo.png" width="680" alt="大肥鱼和催更姬坐在一起看稿、讨论故事；点击观看 B 站演示">
+</a>
 
-想看它怎样用？[B 站演示：一个插件，让大肥鱼成为你的小说写作助手](https://www.bilibili.com/video/BV1e5HE6wErd/)。
+<p>
+  <a href="docs/getting-started.md"><strong>开始使用</strong></a> ·
+  <a href="https://www.bilibili.com/video/BV1e5HE6wErd/"><strong>看视频演示</strong></a> ·
+  <a href="docs/agent-installation.md">交给 Agent 安装</a>
+</p>
 
-开始使用：[桌面版安装](docs/getting-started.md) · [让 Agent 安装或更新](docs/agent-installation.md) · [下载成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/latest)。
+<p>
+  <a href="https://github.com/mistnest/dsh-cuigengji-plugin/releases/latest"><img src="https://img.shields.io/github/v/release/mistnest/dsh-cuigengji-plugin?label=%E7%A8%B3%E5%AE%9A%E7%89%88&amp;color=2563eb" alt="最新稳定版"></a>
+  <a href="https://www.npmjs.com/package/dsh-cuigengji-plugin"><img src="https://img.shields.io/badge/npm-dsh--cuigengji--plugin-cb3837" alt="npm 安装包"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-16a085" alt="MIT 许可证"></a>
+</p>
 
-它想解决的是长篇创作里的一个常见问题：**AI 能写出一段像样的文字，却未必知道你整本书想怎么写。** 人物为什么沉默、哪条伏笔还不能揭开、下一章要走向哪里，这些往往都在正文之外。
+</div>
 
-## 正文之外，也有故事
+**正文写到一半，想和 AI 商量下一步，却又得重新解释人物和前情。**
 
-一部小说可以比作一座冰山。正文是读者看见的部分，水面之下还有人物动机、世界规则和作者对后续情节的安排。
+催更姬是 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 的小说写作插件。把正文、情节规划、人物和世界设定放在同一个工作台里，让你和 AI 围着同一份作品资料讨论、续写和修改。
 
-催更姬把这些创作资料放在同一本作品里，并给 AI 提供查阅和维护它们的工具。写到某个人物时，可以查他的设定；讨论下一步时，可以查看规划；续写时，可以回到相关正文。你和 AI 面对的是同一份作品资料，讨论也能留下来，供下一次继续。
+## 装进 DSH，开始写
 
-我们的设计思路很简单：
+使用 **DSH Windows 桌面版 0.2.0-rc.2 或更新版本**，无需另装 Git、Node.js 或编译源码。
 
-- **正文是基础。** 已经写下的故事，是前后连贯的依据。
-- **规划是可以一起讨论的路线。** 用节点、连线和批注整理后续情节，保留尚未决定的走向。
-- **设定是随时可查的案头资料。** 角色卡、世界书、分组和关系图帮助理解人物与世界。
-- **故事由作者做主。** AI 是写作助手，你可以直接修改正文、设定和规划，也可以调整写作要求。
+1. 打开 DSH 的「插件 → 添加插件」。
+2. 在「包名或地址」填入下方内容，「安装源」保持默认或选择 npm 官方源 / 中国大陆镜像源。
+3. 安装后按提示重启，从左侧「催更姬」进入，创建或选择作品。
 
-这些信息按需要查阅，不会每次把整本书和全部资料塞进对话。目标是减少长篇写作中的人物变味、伏笔断掉和情节跑偏，让大肥鱼更贴近你的故事与想法。
+```text
+dsh-cuigengji-plugin@0.4.5
+```
 
-## 你可以用它做什么
+请保留版本号，避免宿主将不带版本的包名解析到旧版。「安装源」用于下载依赖，保持为包源即可。
 
-### 接着写正文
+[详细安装步骤](docs/getting-started.md) · [备用成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.5/dsh-cuigengji-plugin-0.4.5.tgz) · [更新与数据迁移](docs/upgrade.md)
 
-按卷和章节整理作品，目录里直接看每章字数，不用时收起。打开章节就能编辑，修改自动保存；粘贴进来的文字可以一键排版，也能复制到 Word、WPS 或发布网站。需要回看时，可以查看和恢复历史版本。
+也可以把[安装与更新指南](docs/agent-installation.md)交给 Agent，由它处理安装、备份和升级检查。当前已实际验收 DSH **0.2.1-rc.2** 和 **0.2.0-rc.2**；更新插件会自动备份、迁移并校验原有作品。
 
-![正文工作台：章节目录、字数、自动排版与正文编辑](docs/screenshots/01-manuscript.png)
+## 从一个想法，到一部小说
 
-### 一起推敲下一章
+### 写正文，随时和大肥鱼商量
 
-每个规划节点都有标题、摘要和自由正文。拖动卡片安排位置，拖动连接点串起情节；连线可以取消和删除。还没想好的问题留在文字批注里，新支线可以单独开一页。作者和 AI 都能维护这张图，逐步把讨论变成清楚的推进方向。
+在聊天旁边直接写稿。按卷、章节整理作品，自动保存、查看字数、调整顺序，写好的内容可以排版和复制；改得不满意，还能回看正文历史版本。
 
-![规划画布：调查与人物动线交汇，讨论框和便签保留待定问题](docs/screenshots/02-planning.png)
+![正文工作台：章节目录、字数统计与正文编辑](docs/screenshots/01-manuscript.png)
 
-### 整理人物与世界
+### 把情节摊开，一起推敲
 
-角色卡和世界书支持分组、搜索与关系图。人物之间是什么关系，某个地点有哪些规则，都可以随时查看、补充和修改。已有酒馆角色卡或世界书，可以导入后继续整理。
+把主角的行动、支线的交汇、尚未决定的走向放到画布上，用卡片、连线、讨论框和便签慢慢理清。大场面可以单独开一页推演，作者和 AI 都能维护这张图。
 
-![设定关系图：角色卡、世界书及它们之间的关系](docs/screenshots/03-settings.png)
+![规划画布：多条情节动线交汇，讨论框和便签留下待定想法](docs/screenshots/02-planning.png)
 
-以上为正式工作台的虚构演示作品，不包含真实小说或聊天记录。
+### 人物和世界，随用随查
 
-### 让写作要求跟着作品走
+把人物动机、关系、地点和世界规则整理成角色卡与世界书，支持分组、搜索和关系图。写到相关情节时，AI 可以查阅、补充这些资料，让后续推进有据可依。
 
-把文风、视角和其他写作要求放进预设，启用后提供给绑定这本作品的 AI 会话。支持导入酒馆提示词预设，重点保留提示词内容；具体导入范围见[角色卡与世界书说明](docs/tavern-import.md)和[预设说明](docs/presets.md)。
+![设定工作台：人物、世界书、分组与关系图](docs/screenshots/03-settings.png)
 
-### 把作品带走
+*以上截图使用虚构演示作品。*
 
-正文、版本历史、设定、规划和预设都存放在独立的小说工作数据目录里，可以导入、导出和备份。升级插件或更换源码目录，不需要把小说混在代码里。
+| 还有这些写作工具 | 能帮你做什么 |
+| --- | --- |
+| [每本作品的写作预设](docs/presets.md) | 保存文风、视角等写作要求，启用后提供给绑定作品的 AI 会话。 |
+| [酒馆资料导入](docs/tavern-import.md) | 接着用已有的角色卡、世界书和提示词预设，导入后继续整理。 |
+| [导入、导出与备份](docs/import-export.md) | 带走整本作品，或选择章节、设定分组、规划页与预设；也能备份整个工作库。 |
 
-## 开始使用
+## 为什么正文之外，还需要这些资料？
 
-当前主要适配 DSH Windows 桌面版，最低版本为 **0.2.0-rc.2**，后续版本默认允许安装；已实际验收 **0.2.1-rc.2** 和 **0.2.0-rc.2**。旧插件 0.4.3 会被新版 DSH 的版本检查拒绝，更新催更姬即可，小说数据与原有功能保持不变。普通用户无需另装 Git、Node.js 或编译源码。
+一部小说像一座冰山。正文是读者看见的部分，水面之下，还有人物的动机、没揭开的伏笔、世界的规则，以及你对后续故事的安排。
 
-推荐把[安装与更新指南](docs/agent-installation.md)交给 Agent；也可以按[桌面安装步骤](docs/getting-started.md)，在 DSH“添加插件”中安装[成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/latest)。更新时自动备份、迁移并校验已有作品，详见[更新与数据迁移](docs/upgrade.md)。
+催更姬给 AI 提供查阅和维护这些资料的工具，让讨论留下来，下次能接着推进。资料按需要读取，写作要求跟着作品走，帮助减少长篇创作中的人物变味、伏笔断掉和情节跑偏。
 
-本次安装请在“包名或地址”填写 **`dsh-cuigengji-plugin@0.4.5`**，无需 Git。保留版本号可以避免宿主将不带版本的包名解析到旧版。
+就像身边多了随时可以讨论的编辑：一起琢磨人物，推敲下一章怎么走。**故事由你做主，大肥鱼陪你写下去。**
 
-安装后，从 DSH 左侧栏的 **催更姬** 进入。创建或选择一本作品，再在绑定这本作品的会话里讨论写作；空白会话也能打开工作台。
+## 交流与支持
 
-开发者可通过[源码预览](docs/getting-started.md#开发者源码预览)试用临时演示作品。
+- **QQ 交流群：1026457465**，欢迎分享作品体验、反馈问题和讨论后续功能。
+- **[爱发电 · 支持催更姬](https://ifdian.net/a/cuigengji)**：欢迎合作与投喂，每一份支持都会化作 token，帮助催更姬继续成长。
+- **[提交问题或建议](https://github.com/mistnest/dsh-cuigengji-plugin/issues)**：带上 DSH 与插件版本、操作步骤，更方便定位问题。
 
-## 你的小说与你的代码分开
+## 文档与开源
 
-这个公开仓库只提供插件源码、使用文档和测试用的合成样例，**不附带作者的小说、私人设定、聊天记录或工作数据备份**。
+[使用文档](docs/README.md) · [更新记录](docs/CHANGELOG.md) · [源码与贡献](docs/development.md) · [架构说明](docs/architecture.md)
 
-自己的作品请通过工作台管理，实际保存位置可在“导入 / 导出”中查看。可以选择作品、章节、设定分组、规划页或预设，也能备份整个工作库，详见[导入与导出](docs/import-export.md)；DSH 的聊天记录、附件与账号配置由 DSH 管理，需要另行备份。
+作品保存在独立的数据目录里，插件升级与源码更换不会把小说混进代码。实际位置可在「导入 / 导出」中查看，备份范围见[数据管理说明](docs/import-export.md)。
 
-## 一位随时可以讨论的写作搭档
-
-就像给自己配了几位随叫随到的编辑：一起琢磨人物，讨论情节，推敲下一章怎么走。正文、设定和规划，就是共同翻阅的案头资料。这是创作体验的比喻，插件本身不内置多个独立编辑 Agent。
-
-AI 的理解和写作能力仍取决于你在 DSH 中选择的模型以及作品资料的质量。催更姬提供共同创作的工作台，让讨论有依据、结果能留下来；最终方向和采用哪些内容，由你决定。
-
-**故事由你做主，大肥鱼陪你写下去。**
-
----
-
-- 交流群：**1026457465**
-- [支持催更姬开发](https://ifdian.net/a/cuigengji)：欢迎合作与投喂，支持会用于模型调用和持续开发。
-- [安装与开始使用](docs/getting-started.md)
-- [交给 Agent 安装（Windows）](docs/agent-installation.md)
-- [更新与数据迁移](docs/upgrade.md)
-- [开发、测试与发布](docs/development.md)
-- [模块划分与数据存储](docs/architecture.md)
-- [更新记录](docs/CHANGELOG.md)
-- [反馈问题或建议](https://github.com/mistnest/dsh-cuigengji-plugin/issues)
-
-源码采用 [MIT 许可证](LICENSE)。小说内容及自行导入的资料属于其各自作者，不受本仓库的源码许可证约束。
+本仓库提供正式版源码、构建产物、使用文档与合成测试样例。源码采用 [MIT 许可证](LICENSE)；小说内容和自行导入的资料属于各自作者。

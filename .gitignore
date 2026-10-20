@@ -12,5 +12,11 @@ playwright-report/
 /backups/
 /migration/
 /releases/
+# Development records and media projects stay local or in the private repository.
+/design/
+/archive/
+/notes/
+/reports/
+/recordings/
 *.cuigengji.json
 .cuigengji-upgrade-backups/
