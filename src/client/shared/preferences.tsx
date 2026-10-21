@@ -1,59 +1,12 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React,{useRef,useState} from 'react';
 import manifest from '../../../package.json' with { type: 'json' };
 import aboutSticker from '../assets/haoye.png';
-
-export interface Preferences {
-  fontSize: number; leading: number; directory: boolean;
-  planningView: 'canvas' | 'list'; memoryView: 'canvas' | 'list'; motion: 'system' | 'reduce';
-}
-export const defaults: Preferences = { fontSize: 18, leading: 1.95, directory: true, planningView: 'canvas', memoryView: 'list', motion: 'system' };
-const key = 'cuigengji:workbench:preferences:v1';
-function read(): Preferences {
-  try {
-    const p = JSON.parse(localStorage.getItem(key) || '{}');
-    return {fontSize: [16,18,20,22].includes(p.fontSize) ? p.fontSize : defaults.fontSize,
-      leading: [1.7,1.95,2.2].includes(p.leading) ? p.leading : defaults.leading,
-      directory: typeof p.directory === 'boolean' ? p.directory : defaults.directory,
-      planningView: p.planningView === 'list' ? 'list' : 'canvas', memoryView: p.memoryView === 'canvas' ? 'canvas' : 'list',
-      motion: p.motion === 'reduce' ? 'reduce' : 'system'};
-  } catch { return defaults; }
-}
-const Context = createContext({ preferences: defaults, update: (_: Partial<Preferences>) => {}, error: '' });
-export const useWorkbenchPreferences = () => useContext(Context);
-export function PreferencesProvider({children}: {children: React.ReactNode}) {
-  const [preferences, set] = useState(read), [error, setError] = useState('');
-  const update = (next: Partial<Preferences>) => set(previous => {
-    const value = {...previous, ...next};
-    try {localStorage.setItem(key, JSON.stringify(value)); setError('');}
-    catch {setError('当前浏览器无法保存偏好，本次会话仍然生效。');}
-    return value;
-  });
-  useEffect(() => {const sync = (e: StorageEvent) => {if(e.key === key) set(read());}; window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync);}, []);
-  return <Context.Provider value={{preferences, update, error}}>{children}</Context.Provider>;
-}
-export function Modal({title, close, children, className = ''}: {title: string; close: () => void; children: React.ReactNode; className?: string}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {const previous = document.activeElement as HTMLElement | null; ref.current?.showModal(); return () => {previous?.focus();};}, []);
-  return <dialog className={`utility-modal ${className}`} ref={ref} aria-label={title} onCancel={e => {e.preventDefault();close();}}>
-    <header className="utility-head"><h2>{title}</h2><button type="button" aria-label={`关闭${title}`} onClick={close}>×</button></header>
-    <div className="utility-content">{children}</div>
-  </dialog>;
-}
-export function PreferencesDialog({close, novelTitle, onPreset}: {close: () => void; novelTitle?: string; onPreset?: () => void}) {
-  const {preferences:p, update, error} = useWorkbenchPreferences();
-  return <Modal title="设置" close={close}>
-    {onPreset && <section className="preference-section"><div className="preference-work-heading"><h3>当前作品</h3><small title={novelTitle}>{novelTitle}</small></div><button className="preference-action" onClick={onPreset} aria-label="写作预设"><span><strong>写作预设</strong><small>叙述风格、表达习惯，以及希望 AI 遵守的写作要求</small></span><span aria-hidden="true">›</span></button></section>}
-    <section className="preference-section"><h3>正文显示</h3><div className="split">
-    <label>字号<select aria-label="默认正文字号" value={p.fontSize} onChange={e=>update({fontSize:Number(e.target.value)})}>{[16,18,20,22].map(n=><option key={n} value={n}>{n}</option>)}</select></label>
-    <label>行距<select aria-label="正文行距" value={p.leading} onChange={e=>update({leading:Number(e.target.value)})}><option value={1.7}>紧凑</option><option value={1.95}>适中</option><option value={2.2}>宽松</option></select></label></div>
-    <div className="reading-preview"><small>阅读预览</small><p style={{fontSize:p.fontSize,lineHeight:p.leading}}>雨停以后，街道重新安静下来。窗边的灯仍亮着，故事还在继续。</p></div></section>
-    <section className="preference-section"><h3>打开工作台时</h3><label className="preference-row">默认展开目录<input type="checkbox" checked={p.directory} onChange={e=>update({directory:e.target.checked})}/></label>
-      <label className="preference-row">规划默认视图<select value={p.planningView} onChange={e=>update({planningView:e.target.value as Preferences['planningView']})}><option value="canvas">流程图</option><option value="list">列表</option></select></label>
-      <label className="preference-row">设定默认视图<select value={p.memoryView} onChange={e=>update({memoryView:e.target.value as Preferences['memoryView']})}><option value="list">列表</option><option value="canvas">关系图</option></select></label><p className="muted">下次进入对应页面时生效。</p></section>
-    <section className="preference-section"><label className="preference-row">动画效果<select value={p.motion} onChange={e=>update({motion:e.target.value as Preferences['motion']})}><option value="system">跟随系统</option><option value="reduce">减少动态效果</option></select></label></section>
-    <footer className="utility-footer"><button onClick={()=>update(defaults)}>恢复默认设置</button><small role="status">{error || '偏好自动保存在此浏览器'}</small></footer>
-  </Modal>;
-}
+import {Modal} from './Modal.tsx';
+import {Icon} from './icons.tsx';
+import {useWorkbenchPreferences,type Preferences} from './settings/preferences-state.tsx';
+export {Modal} from './Modal.tsx';
+export {PreferencesProvider,useWorkbenchPreferences,defaults,type Preferences} from './settings/preferences-state.tsx';
+export {SettingsDialog as PreferencesDialog} from './settings/SettingsDialog.tsx';
 export function ProseDisplay() {
   const {preferences:p, update} = useWorkbenchPreferences();
   return <details className="menu prose-display"><summary aria-label="正文显示设置"><span aria-hidden="true">Aa</span>显示</summary><div className="menu-panel">
@@ -94,8 +47,8 @@ export function AboutDialog({close}: {close: () => void}) {
       <a className="about-contact" href="https://ifdian.net/a/cuigengji" target="_blank" rel="noopener noreferrer">
         <span className="about-contact-label">爱发电</span><strong>支持催更姬</strong><span className="about-contact-mark" aria-hidden="true">↗</span>
       </a>
-      <a className="about-contact" href="https://github.com/mistnest/dsh-cuigengji-plugin" target="_blank" rel="noopener noreferrer">
-        <span className="about-contact-label">GitHub</span><strong>查看开源项目</strong><span className="about-contact-mark" aria-hidden="true">↗</span>
+      <a className="about-contact" href="https://github.com/mistnest/dsh-cuigengji-plugin" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 给催更姬点个 Star（打开项目页面）">
+        <span className="about-contact-label">GitHub</span><span className="about-contact-copy"><strong className="about-star-title"><Icon name="star"/>给催更姬点个 Star</strong><small>登录 GitHub 后，点击项目页右上角 Star。</small></span><span className="about-contact-mark" aria-hidden="true">↗</span>
       </a>
     </div>
     <p className="about-copy-status" role="status">{copyStatus}</p>

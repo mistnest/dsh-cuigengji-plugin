@@ -47,7 +47,7 @@ try{
  await expect(page.locator('.creation')).toHaveCount(0);await expect(page.getByRole('textbox',{name:'情节标题',exact:true})).toBeFocused();
  await page.getByRole('textbox',{name:'情节标题',exact:true}).fill('雨夜潜入');await page.getByRole('textbox',{name:'情节摘要',exact:true}).fill('主角从河岸潜入，寻找失踪者留下的线索。');
  await page.screenshot({path:join(shots,'03-inline-create.png')});await page.locator('.canvas-draft').getByRole('button',{name:'创建',exact:true}).click();
- await expect(page.locator('.scene-card')).toHaveCount(1);await expect(page.locator('.canvas-inspector')).toHaveCount(0);
+ await expect(page.locator('.scene-card')).toHaveCount(1);await expect(page.locator('.workspace-detail')).toHaveCount(0);
  const base=(await call('planning.list',{novelId})).items[0];
  // Cancel a continuation without adding a card or edge.
  const port=page.getByRole('button',{name:'雨夜潜入：输出连接点',exact:true}),p=await port.boundingBox();
@@ -59,7 +59,7 @@ try{
  await page.locator('.canvas-draft').getByRole('button',{name:'创建',exact:true}).click();await expect(page.locator('.canvas-draft').getByRole('alert')).toBeVisible();
  await page.locator('.canvas-draft').getByRole('button',{name:'重试保存',exact:true}).click();await expect(page.locator('.canvas-draft')).toHaveCount(0);
  expect((await call('planning.list',{novelId})).items.length).toBe(2);
- await page.getByRole('button',{name:'雨夜潜入',exact:true}).dblclick();await expect(page.locator('.canvas-inspector')).toBeVisible();await expect(canvas).toBeVisible();
+ await page.getByRole('button',{name:'雨夜潜入',exact:true}).dblclick();await expect(page.locator('.workspace-detail')).toBeVisible();await expect(canvas).toBeVisible();
  // Canvas remains interactive next to a scrolling document inspector.
  const before=await page.locator('.planning-canvas').evaluate(el=>getComputedStyle(el).transform);
  const box=await canvas.boundingBox();await page.mouse.move(box.x+30,box.y+box.height-70);await page.mouse.down({button:'right'});await page.mouse.move(box.x+75,box.y+box.height-40,{steps:6});await page.mouse.up({button:'right'});
@@ -67,7 +67,7 @@ try{
  await page.screenshot({path:join(shots,'04-canvas-inspector.png')});
  // Saving the inspector must update the canvas revision before the next move.
  await page.getByRole('button',{name:'适应视图',exact:true}).click();
- const inspector=page.locator('.canvas-inspector');await inspector.getByRole('button',{name:'编辑规划',exact:true}).click();
+ const inspector=page.locator('.workspace-detail');await inspector.getByRole('button',{name:'编辑规划',exact:true}).click();
  await inspector.getByRole('textbox',{name:'摘要',exact:true}).fill('先查明警报的来源，再选择进入时机。');
  await inspector.getByRole('button',{name:'保存规划',exact:true}).click();
  await expect(page.getByRole('button',{name:'＋ 情节',exact:true})).toBeEnabled();
@@ -78,7 +78,7 @@ try{
  await expect(page.getByRole('alert')).toHaveCount(0);
  // A server revision can advance before the canvas has received it and unlocked.
  await expect(port).toBeEnabled();
- await page.getByRole('button',{name:'关闭详情',exact:true}).click();await expect(page.locator('.canvas-inspector')).toHaveCount(0);
+ await page.getByRole('button',{name:'‹ 返回规划',exact:true}).click();await expect(page.locator('.workspace-detail')).toHaveCount(0);
  await context(500,320);await page.getByRole('menuitem',{name:'文字批注',exact:true}).click();await page.getByRole('textbox',{name:'便签标题',exact:true}).fill('待讨论的动机');await page.getByRole('textbox',{name:'批注内容',exact:true}).fill('他为什么愿意冒险？');await page.locator('.canvas-draft').getByRole('button',{name:'创建',exact:true}).click();
  await expect(page.locator('.decoration-note')).toHaveCount(1);await page.getByRole('button',{name:'打开批注 待讨论的动机',exact:true}).dblclick();
  await expect(page.locator('.decoration-inline-editor')).toBeVisible();await page.getByRole('textbox',{name:'批注内容',exact:true}).fill('他希望找回失踪的同伴。');await page.locator('.decoration-inline-editor').getByRole('button',{name:'完成',exact:true}).click();

@@ -6,7 +6,7 @@ import {openAuthorPage} from './helpers/navigation.mjs';
 
 const root=resolve(import.meta.dirname,'..'),shots=join(root,'test-results','presets');
 await mkdir(shots,{recursive:true});
-const preview=spawn(process.execPath,['scripts/preview-workbench.mjs'],{cwd:root,stdio:['ignore','pipe','pipe']});
+const preview=spawn(process.execPath,['scripts/preview-workbench.mjs'],{cwd:root,stdio:['ignore','pipe','pipe'],windowsHide:true});
 let browser;
 try {
   const {url}=await new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(new Error('Preview timeout')),20000);preview.once('exit',code=>{clearTimeout(timer);reject(new Error(`Preview exit ${code}`));});preview.stdout.on('data',chunk=>{output+=chunk;const line=output.split('\n').find(line=>line.startsWith('{'));if(line){clearTimeout(timer);resolve(JSON.parse(line));}});});
@@ -16,7 +16,7 @@ try {
   const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url);
   const enter=()=>openAuthorPage(page,'写作预设');
   await enter();
-  const upload=async(raw)=>{if(!await page.getByLabel('导入文件',{exact:true}).isVisible())await page.getByRole('button',{name:'导入预设',exact:true}).click();await page.getByLabel('导入文件',{exact:true}).setInputFiles({name:'preset.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(raw))});await expect(page.getByRole('button',{name:'确认导入',exact:true})).toBeEnabled();if(await page.getByLabel('现有预设',{exact:true}).count())await page.getByLabel('现有预设',{exact:true}).selectOption('replace');};
+  const upload=async(raw,{name='preset.json',mimeType='application/json',policy='replace'}={})=>{if(!await page.getByLabel('导入文件',{exact:true}).isVisible())await page.getByRole('button',{name:'导入预设',exact:true}).click();await expect(page.getByRole('heading',{name:'导入写作预设',exact:true})).toBeVisible();await page.getByLabel('导入文件',{exact:true}).setInputFiles({name,mimeType,buffer:Buffer.from(typeof raw==='string'?raw:JSON.stringify(raw))});await expect(page.getByRole('button',{name:'确认导入',exact:true})).toBeEnabled();await expect(page.getByLabel('目标作品',{exact:true})).toHaveCount(0);await expect(page.getByRole('group',{name:'内容类型',exact:true})).toHaveCount(0);if(await page.getByLabel('现有预设',{exact:true}).count())await page.getByLabel('现有预设',{exact:true}).selectOption(policy);};
   const parse=async()=>{await expect(page.getByRole('button',{name:'确认导入',exact:true})).toBeEnabled();await page.getByRole('button',{name:'确认导入',exact:true}).click();await expect(page.getByRole('heading',{name:'导入完成',exact:true})).toBeVisible();await page.getByRole('button',{name:'‹ 返回写作预设',exact:true}).click();await expect(page.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();};
   const newerNotice=page.getByText('已保存的预设有更新，当前草稿仍保留。可保存后核对，或在预设设置里读取最新版本。',{exact:true});
   const save=async()=>{await page.getByLabel('启用',{exact:true}).check();await page.getByRole('button',{name:'保存预设',exact:true}).click();await expect(page.getByRole('button',{name:'保存预设',exact:true})).toBeDisabled();await expect(newerNotice).toHaveCount(0);};
@@ -45,11 +45,38 @@ try {
     console.log(JSON.stringify({officialPresetCharacters:effective.content.length}));
   }
   await page.setViewportSize({width:1100,height:900});
+  const other=(await call('novel.create',{title:'预设独立的另一部作品'})).id;
+  await call('chapter.create',{novelId:other,title:'第一章 不能串书',content:'另一部作品的正文。'});
+  await call('preset.set',{novelId:other,expectedRevision:0,preset:{name:'另一部作品的要求',enabled:true,blocks:[{identifier:'other',name:'独立要求',content:'另一部作品独有的写作要求。',enabled:true}]}});
+  const original=(await call('novel.export',{novelId})).novel,otherBefore=(await call('novel.export',{novelId:other})).novel;
+  const outsidePreset=value=>{const result=structuredClone(value);for(const key of ['preset','revision','updatedAt'])delete result[key];return result;};
+  const checkIsolation=async()=>{expect(outsidePreset((await call('novel.export',{novelId})).novel)).toEqual(outsidePreset(original));expect((await call('novel.export',{novelId:other})).novel).toEqual(otherBefore);expect(await call('novel.list')).toHaveLength(2);};
+  const markdown='# 写作要求\n\n## 第一章\n\n    保留 Markdown 和缩进。';
+  const previous=(await call('preset.get',{novelId})).blocks;
+  await upload(markdown,{name:'写作要求.md',mimeType:'text/markdown',policy:'append'});
+  await expect(page.getByLabel('导入预览')).toContainText('预设');
+  await page.screenshot({path:join(shots,'import-preset-1100.png')});
+  await page.setViewportSize({width:390,height:850});await page.screenshot({path:join(shots,'import-preset-390.png')});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.setViewportSize({width:1100,height:900});await parse();
+  expect((await call('preset.get',{novelId})).blocks.map(b=>b.content)).toEqual([...previous.map(b=>b.content),markdown]);await checkIsolation();
+  await upload('\uFEFF第一章 这不是正文章节\r\n\r\n    文风自然。\r\n',{name:'写作要求.txt',mimeType:'text/plain'});await parse();
+  expect((await call('preset.get',{novelId})).blocks[0].content).toBe('第一章 这不是正文章节\n\n    文风自然。\n');await checkIsolation();
+  await upload({name:'带说明的预设',description:'不能误识别为角色卡',prompts:[{identifier:'named',name:'正文要求',content:'使用近距离第三人称。'}]});await parse();await checkIsolation();
+  expect((await call('preset.get',{novelId})).blocks[0].content).toBe('使用近距离第三人称。');
+  await page.getByRole('button',{name:'导入预设',exact:true}).click();
+  await page.getByLabel('导入文件',{exact:true}).setInputFiles({name:'角色卡.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({name:'林澈',description:'来自旧港的主角。'}))});
+  await expect(page.getByRole('alert')).toContainText('不是写作预设');await expect(page.getByRole('button',{name:'确认导入',exact:true})).toHaveCount(0);await checkIsolation();
+  const workspace=await call('transfer.export',{selection:{kind:'workspace'}});
+  await upload(workspace.content,{name:workspace.filename});
+  await expect(page.getByLabel('导入方式',{exact:true})).toHaveCount(0);
+  await page.getByLabel('来源作品',{exact:true}).selectOption(other);await parse();
+  expect((await call('preset.get',{novelId})).blocks.map(b=>b.content)).toEqual(['另一部作品独有的写作要求。']);await checkIsolation();await save();
   await page.getByLabel('提示词内容',{exact:true}).fill('作者尚未保存的草稿。');
   const latest=await call('preset.get',{novelId});
   await call('preset.set',{novelId,expectedRevision:latest.revision,preset:{...latest,blocks:latest.blocks.map((block,i)=>i===0?{...block,content:'另一位作者的新要求。'}:block)}});
   await page.getByRole('button',{name:'刷新当前页面',exact:true}).click();
   await expect(newerNotice).toBeVisible();
   await expect(page.getByLabel('提示词内容',{exact:true})).toHaveValue('作者尚未保存的草稿。');
-  expect(errors).toEqual([]);console.log(JSON.stringify({ok:true,checks:['actual JSON uploads: full preset, Prompt Manager, standalone system prompt','ordering, disabled items, ignored role/placement/trigger rules','literal macros, original download, persistence and zero-content notice','own save does not report a stale resource as newer; real concurrent updates keep the local draft']}));
+  expect(errors).toEqual([]);console.log(JSON.stringify({ok:true,checks:['actual preset-entry uploads: TXT, Markdown, named JSON, full preset, Prompt Manager, standalone system prompt','preset destination is fixed; backup extraction imports only the selected preset; role cards are rejected','two-book isolation, manuscript and setting preservation, append/replace and narrow layout','ordering, disabled items, ignored role/placement/trigger rules','literal macros, original download, persistence and zero-content notice','own save does not report a stale resource as newer; real concurrent updates keep the local draft']}));
 } finally {await browser?.close();preview.kill();}

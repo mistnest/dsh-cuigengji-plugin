@@ -40,8 +40,9 @@ function catalogBook(novel) {
     },
     volumes: volumes.map(({ id, title }) => ({ id, title })),
     chapters: chapters.map((ch) => ({ id: ch.id, title: ch.title, volumeId: ch.volumeId, words: chapterCounts(ch).textCount })),
-    groups: Object.values(n.memoryGroups || {}).map(({ id, name }) => ({ id, name })),
-    memory: active(n.nodes).map(({ id, name, type, groupId, summary }) => ({ id, name, type, groupId: groupId ?? null, summary })),
+    groups: Object.values(n.memoryGroups || {}).map(({ id, name, parentId, pageId }) => ({ id, name, parentId: parentId ?? null, pageId: pageId ?? null })),
+    memory: active(n.nodes).map(({ id, name, type, groupId, pageId, summary }) => ({ id, name, type, groupId: groupId ?? null, pageId: pageId ?? null, summary })),
+    memoryPages: [{ id: null, name: "\u8BBE\u5B9A\u603B\u89C8" }, ...Object.values(n.memoryPages || {}).map(({ id, name }) => ({ id, name }))],
     pages,
     preset: n.preset ? { name: n.preset.name, blocks: n.preset.blocks.length } : null
   };
@@ -75,7 +76,7 @@ function checkSelection(value) {
 function checkIds(novel) {
   const safe = (id) => typeof id === "string" && !!id.trim() && !["__proto__", "constructor", "prototype"].includes(id);
   if (!safe(novel.id)) fail("\u4F5C\u54C1 ID \u65E0\u6548");
-  for (const map of [novel.volumes, novel.chapters, novel.nodes, novel.edges, novel.memoryGroups, novel.planning?.nodes, novel.planning?.edges, novel.planning?.groups, novel.planning?.pages, novel.planning?.decorations])
+  for (const map of [novel.volumes, novel.chapters, novel.nodes, novel.edges, novel.memoryGroups, novel.memoryPages, novel.planning?.nodes, novel.planning?.edges, novel.planning?.groups, novel.planning?.pages, novel.planning?.decorations])
     for (const id of Object.keys(map || {})) if (!safe(id)) fail("\u5185\u5BB9 ID \u65E0\u6548");
 }
 export {

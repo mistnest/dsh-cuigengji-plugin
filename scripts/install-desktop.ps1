@@ -11,9 +11,12 @@ if ([string]::IsNullOrWhiteSpace($DesktopExe)) {
 $DesktopExe = [IO.Path]::GetFullPath($DesktopExe)
 $desktopDirectory = Split-Path -Parent $DesktopExe
 $nodeShim = Join-Path $desktopDirectory 'resources\runtime\bin\node.cmd'
-$pnpm = @('resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs', 'resources\runtime\pnpm\bin\pnpm.mjs') |
-  ForEach-Object { Join-Path $desktopDirectory $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-if (-not $pnpm) { throw 'Required installed desktop package manager was not found.' }
+$pnpmCandidates = @(
+  (Join-Path $desktopDirectory 'resources\runtime\pnpm\bin\pnpm.mjs'),
+  # DSH 0.2.1-rc.2 moved bundled dependencies under primary-runtime.
+  (Join-Path $desktopDirectory 'resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs')
+)
+$pnpm = $pnpmCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 $profile = Join-Path $DshHome 'profiles\desktop'
 foreach ($path in @($DesktopExe, $nodeShim, $pnpm, (Join-Path $profile 'package.json'))) {
   if (-not (Test-Path -LiteralPath $path)) { throw "Required installed desktop path missing: $path" }
@@ -48,12 +51,15 @@ try {
   $installedRoot = Join-Path (Join-Path $profile 'node_modules') $manifest.name
   $installed = Get-Content -LiteralPath (Join-Path $installedRoot 'package.json') -Encoding UTF8 -Raw | ConvertFrom-Json
   if ($installed.version -ne $manifest.version) { throw 'Installed plugin version differs.' }
-  foreach ($relative in @('runtime\adapters\mcp\client.js', 'lib\client.js', 'README.md', 'package.json')) {
+  foreach ($relative in @('runtime\adapters\mcp\client.js', 'runtime\adapters\dsh\rename-installation.js', 'runtime\application\pet\desktop.js', 'src\desktop\pet.ps1', 'src\desktop\PetWindow.cs', 'src\client\assets\pets\bigfish-pet-poses.png', 'src\client\assets\pets\cuigengji-pet-poses.png', 'lib\client.js', 'README.md', 'package.json')) {
     $sourceHash = (Get-FileHash -LiteralPath (Join-Path $projectDirectory $relative)).Hash
     $installedHash = (Get-FileHash -LiteralPath (Join-Path $installedRoot $relative)).Hash
     if ($sourceHash -ne $installedHash) { throw "Installed file differs: $relative. Bump the plugin version and retry." }
   }
-  & $nodeShim (Join-Path $installedRoot 'runtime\adapters\dsh\rename-installation.js') --profile $profile --home $DshHome --apply --desktop-exe $DesktopExe
+  # The author workspace has the build/host dependencies. A desktop profile
+  # resolves host peers through DSH's loader, unavailable to standalone Node.
+  # Run the identical, hash-checked helper from the workspace instead.
+  & $nodeShim (Join-Path $projectDirectory 'runtime\adapters\dsh\rename-installation.js') --profile $profile --home $DshHome --apply --desktop-exe $DesktopExe
   if ($LASTEXITCODE -ne 0) { throw 'Installation identity migration failed; keep DSH closed and retain its configuration backup.' }
   Write-Output "Installed $($installed.name) $($installed.version) into $profile. Restart DeepSeek Harness."
 } finally {

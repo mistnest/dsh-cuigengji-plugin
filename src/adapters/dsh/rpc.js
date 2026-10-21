@@ -19,22 +19,35 @@ function failure(error) {
   };
 }
 
-export function registerRpcRoute(ctx, { dispatch, dataRoot, workData, transfer, maintenance }) {
+export function registerRpcRoute(ctx, services) {
+  const {dispatch,workData,transfer,maintenance,desktopPet,libraries}=services;
   const ensureReady = () => maintenance?.ensureReady();
-  const dispatchRpc = async (payload, signal) => {
+  const dispatchRpc = async (payload, signal, admitted=false) => {
+    if(libraries&&!admitted&&!String(payload?.action).startsWith('library.'))return libraries.use(()=>dispatchRpc(payload,signal,true)).catch(failure);
     try {
       signal.throwIfAborted();
       if (!record(payload) || !HUMAN_ACTIONS.includes(payload.action)) throw invalid('无效的催更姬操作');
-      const { action, args = {}, sessionId } = payload;
+      const { action, args:input = {}, sessionId } = payload;
+      const args=record(input)?{...input}:input;
       if (!record(args)) throw invalid('args 必须是对象');
+      if(args.__libraryRoot&&args.__libraryRoot!==services.dataRoot)throw Object.assign(new Error('作品库已切换，旧页面的编辑已保留，请刷新后继续'),{code:'LIBRARY_CHANGED'});
+      delete args.__libraryRoot;
       if (sessionId !== undefined && (typeof sessionId !== 'string' || !sessionId.trim() || sessionId.length > 512)) {
         throw invalid('sessionId 必须是有效的会话标识');
       }
-      if (!action.startsWith('transfer.') && !['novel.list', 'novel.create', 'novel.import', 'legacy.preview', 'settings.get', 'maintenance.status', 'maintenance.verify', 'workspace.status', 'workspace.export', 'workspace.preview', 'workspace.import'].includes(action) && !sessionId) {
+      if (!action.startsWith('library.')&&!action.startsWith('transfer.') && !['activity.today','activity.stats','pet.desktop','novel.list', 'novel.create', 'novel.import', 'legacy.preview', 'settings.get', 'maintenance.status', 'maintenance.verify', 'workspace.status', 'workspace.export', 'workspace.preview', 'workspace.import'].includes(action) && !sessionId) {
         throw Object.assign(new Error('请选择一个 DSH 会话'), { code: 'SESSION_REQUIRED' });
       }
       if (action === 'settings.get') {
-        return { ok: true, value: { dataRoot, pluginVersion: manifest.version, supportedDsh: manifest.peerDependencies['@deepseek-ai/dsh-tools'] } };
+        return { ok: true, value: { dataRoot:services.dataRoot, pluginVersion: manifest.version, supportedDsh: manifest.peerDependencies['@deepseek-ai/dsh-tools'] } };
+      }
+      if(action.startsWith('library.')){
+        if(!libraries)throw invalid('作品库管理服务未初始化');
+        if(action==='library.pick'){
+          const capability=ctx.get?.('directoryPicker')?.capability();
+          return {ok:true,value:{path:capability?.kind==='native'?await capability.pick(signal):null,manual:capability?.kind!=='native'}};
+        }
+        return {ok:true,value:action==='library.status'?await libraries.status():action==='library.inspect'?await libraries.inspect(args.path):await libraries.change(args)};
       }
       if (action === 'legacy.preview') return { ok: true, value: convertLegacyExport(args.input) };
       if (action === 'maintenance.status') {
@@ -58,6 +71,10 @@ export function registerRpcRoute(ctx, { dispatch, dataRoot, workData, transfer, 
         return { ok: true, value: await workData[method](args.backup) };
       }
       await ensureReady();
+      if (action === 'pet.desktop') {
+        return {ok: true, value: desktopPet ? await desktopPet.sync({...args, sessionId: sessionId || ''}) : {supported: false, available: false}};
+      }
+
       return { ok: true, value: await dispatch(action, args, { kind: 'human', sessionId }) };
     } catch (error) {
       return failure(error);

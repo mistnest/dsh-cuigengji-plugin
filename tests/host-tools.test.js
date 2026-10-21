@@ -26,7 +26,10 @@ test('registered DSH tools execute through session policy and real MCP', async t
   const novel = await dispatch('novel.create', { title: '工具边界测试' });
   await dispatch('binding.set', { novelId: novel.id });
   assert.equal((await execute('cuigengji_project', 'novel.get')).id, novel.id);
-  await assert.rejects(execute('cuigengji_project','novel.get',{novelId:'other'}),/另一部小说/);
+  await assert.rejects(execute('cuigengji_project','novel.get',{novelId:'other'}),{code:'NOT_FOUND'});
+  const other=await execute('cuigengji_project','novel.create',{title:'工具指定的其他作品'});
+  assert.equal((await execute('cuigengji_project','novel.handoff',{novelId:other.id})).novel.id,other.id);
+  assert.equal((await execute('cuigengji_context','binding.get')).novelId,novel.id);
   const tx=await execute('cuigengji_plan','planning.apply',{requestId:'host-planning',operations:[{op:'node.create',value:{title:'雨夜来客'}}]});
   assert.equal(tx.changed.length,1);
   const chapter = await execute('cuigengji_project', 'chapter.create', { title: '第一章', content: '雨停了。' });

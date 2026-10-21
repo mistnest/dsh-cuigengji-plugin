@@ -1,3 +1,4 @@
+import {selectPlanningPage,selectedPlanningPage,showOrganization} from './helpers/navigation.mjs';
 import {spawn} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
@@ -27,9 +28,9 @@ try{
  await expect(manuscript).toHaveValue(/后续段落。$/,{timeout:10000});expect(await scroll.evaluate(el=>el.scrollTop)).toBeGreaterThan(700);
  await page.screenshot({path:join(shots,'unified-manuscript.png')});
  await page.getByRole('button',{name:'规划',exact:true}).click();await expect(page.locator('.planning-card')).toHaveCount(1);
- await page.getByRole('button',{name:'新建规划页面',exact:true}).click();const pageDialog=page.getByRole('dialog',{name:'新建规划页面',exact:true});
- await pageDialog.getByLabel('页面名称').fill('港口篇');await pageDialog.getByLabel('用途摘要').fill('与当前主线独立的新情节');await pageDialog.getByRole('button',{name:'保存页面',exact:true}).click();
- await expect(page.getByRole('combobox',{name:'规划页面',exact:true}).locator('option:checked')).toHaveText('港口篇');await expect(page.locator('.planning-card')).toHaveCount(0);
+ await page.getByRole('button',{name:'新建画布',exact:true}).click();const pageDialog=page.getByRole('dialog',{name:'新建画布',exact:true});
+ await pageDialog.getByLabel('画布名称').fill('港口篇');await pageDialog.getByLabel('用途摘要').fill('与当前主线独立的新情节');await pageDialog.getByRole('button',{name:'保存画布',exact:true}).click();
+ await expect(selectedPlanningPage(page)).toContainText('港口篇');await expect(page.locator('.planning-card')).toHaveCount(0);
  const pageId=(await call('planning.pages',{novelId})).find(p=>p.name==='港口篇').id;
  const canvas=page.locator('.planning-canvas-scroll');
  const context=async(x=80,y=85)=>{await expect(page.getByRole('button',{name:'＋ 情节',exact:true})).toBeEnabled();await expect(page.locator('.graph-status [role=status]')).toHaveCount(0);await canvas.click({button:'right',position:{x,y}});await expect(page.getByRole('menu',{name:'画布操作'})).toBeVisible();};
@@ -43,16 +44,18 @@ try{
  const drag=async locator=>{await expect(locator).toBeEnabled();await locator.scrollIntoViewIfNeeded();const b=await locator.boundingBox();await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();await page.mouse.move(b.x+b.width/2+40,b.y+b.height/2+50,{steps:5});await page.mouse.up();};
  await drag(page.locator('.decoration-note header'));
  await expect.poll(async()=>(await call('planning.decorations',{novelId,pageId})).items.find(d=>d.id===note.id).position.y).toBe(note.position.y+50);await expect(page.getByRole('dialog')).toHaveCount(0);
- await context(70,320);await page.getByRole('menuitem',{name:'讨论框',exact:true}).click();dialog=page.locator('.canvas-draft');await dialog.getByLabel('讨论框标题',{exact:true}).fill('港口讨论区域');await dialog.getByLabel('批注内容',{exact:true}).fill('先理清动机，再考虑冲突');await dialog.getByRole('button',{name:'创建',exact:true}).click();await expect(page.locator('.decoration-frame')).toHaveCount(1);await page.getByRole('button',{name:'打开批注 港口讨论区域',exact:true}).dblclick();dialog=page.locator('.decoration-inline-editor');await dialog.locator('summary').filter({hasText:'外观'}).click();await dialog.getByLabel('批注底色').selectOption('sage');await dialog.getByRole('button',{name:'完成',exact:true}).click();
+ // Legacy discussion frames remain editable; new organization is created with folders.
+ await call('planning.apply',{novelId,requestId:crypto.randomUUID(),operations:[{op:'decoration.create',value:{kind:'frame',pageId,title:'港口讨论区域',content:'先理清动机，再考虑冲突',position:{x:70,y:420},width:480,height:260}}]});
+ await page.getByRole('button',{name:'刷新当前页面',exact:true}).click();await expect(page.locator('.decoration-frame')).toHaveCount(1);await page.getByRole('button',{name:'打开批注 港口讨论区域',exact:true}).dblclick();dialog=page.locator('.decoration-inline-editor');await dialog.locator('summary').filter({hasText:'外观'}).click();await dialog.getByLabel('批注底色').selectOption('sage');await dialog.getByRole('button',{name:'完成',exact:true}).click();
  let frame=(await call('planning.decorations',{novelId,pageId})).items.find(d=>d.kind==='frame');
  await drag(page.getByRole('button',{name:'调整批注尺寸 港口讨论区域',exact:true}));
  await expect.poll(async()=>(await call('planning.decorations',{novelId,pageId})).items.find(d=>d.id===frame.id).width).toBe(frame.width+40);
  await page.screenshot({path:join(shots,'planning-page-wide.png')});
  // Existing main page never receives either the new scene or visual annotations.
- await page.getByRole('combobox',{name:'规划页面',exact:true}).selectOption('');await expect(page.locator('.planning-card')).toContainText('原有主线');await expect(page.locator('.planning-decoration')).toHaveCount(0);
- await page.getByRole('combobox',{name:'规划页面',exact:true}).selectOption(pageId);await expect(page.locator('.planning-decoration')).toHaveCount(2);
+ await selectPlanningPage(page,'');await expect(page.locator('.planning-card')).toContainText('原有主线');await expect(page.locator('.planning-decoration')).toHaveCount(0);
+ await selectPlanningPage(page,pageId);await expect(page.locator('.planning-decoration')).toHaveCount(2);
  await page.reload();await page.getByRole('button',{name:'规划',exact:true}).click();await expect(page.locator('.planning-card')).toContainText('抵达港口');await expect(page.locator('.planning-decoration')).toHaveCount(2);
- await page.getByRole('button',{name:'规划页面设置',exact:true}).click();dialog=page.getByRole('dialog',{name:'页面设置',exact:true});await expect(dialog.getByRole('button',{name:'删除空页面'})).toBeDisabled();await dialog.getByLabel('页面名称').fill('港口篇 · 备选');await dialog.getByRole('button',{name:'保存页面'}).click();await expect(page.getByRole('combobox',{name:'规划页面',exact:true})).toContainText('港口篇 · 备选');
+ await page.getByRole('button',{name:'画布设置',exact:true}).click();dialog=page.getByRole('dialog',{name:'画布设置',exact:true});await expect(dialog.getByRole('button',{name:'删除空画布'})).toBeDisabled();await dialog.getByLabel('画布名称').fill('港口篇 · 备选');await dialog.getByRole('button',{name:'保存画布'}).click();await expect(page.getByLabel('规划画布',{exact:true})).toContainText('港口篇 · 备选');
  // Editing a stored note preserves style and catches a concurrent agent write.
  await page.getByRole('button',{name:'打开批注 待讨论的动机',exact:true}).dblclick();dialog=page.locator('.decoration-inline-editor');await dialog.locator('summary').filter({hasText:'外观'}).click();await expect(dialog.getByLabel('批注字体')).toHaveValue('serif');await dialog.getByLabel('批注内容').fill('作者未保存的讨论');
  let latest=(await call('planning.decorations',{novelId,pageId})).items.find(d=>d.id===note.id);
@@ -62,9 +65,9 @@ try{
  await expect(dialog).toHaveCount(0);await expect.poll(async()=>(await call('planning.decorations',{novelId,pageId})).items.find(d=>d.id===note.id).content).toBe('作者未保存的讨论\nAI 补充了另一条疑问');await expect(page.locator('.decoration-note')).toContainText('作者未保存的讨论');
  await page.setViewportSize({width:420,height:850});await context(390,380);const menu=await page.getByRole('menu',{name:'画布操作'}).boundingBox();expect(menu.x).toBeGreaterThanOrEqual(0);expect(menu.x+menu.width).toBeLessThanOrEqual(420);await page.screenshot({path:join(shots,'planning-context-narrow.png')});await page.keyboard.press('Escape');await expect(page.getByRole('menu')).toHaveCount(0);
  await page.evaluate(()=>{document.documentElement.style.cssText='--dsw-alias-bg-base:#20251f;--dsw-alias-label-primary:#e4e8de;--dsw-alias-label-secondary:#a8b0a0;--dsw-alias-border-l1:#404a3b;--dsw-alias-state-success-primary:#a4c195';});await page.setViewportSize({width:1100,height:900});await page.screenshot({path:join(shots,'planning-page-dark.png')});
- await page.getByRole('button',{name:'多选',exact:true}).click();await page.getByLabel('选择 抵达港口',{exact:true}).check();await page.getByLabel('批量移动目标',{exact:true}).selectOption('page:');await page.getByRole('region',{name:'批量管理',exact:true}).getByRole('button',{name:'移动',exact:true}).click();
+ await page.getByRole('button',{name:'多选',exact:true}).click();await page.locator('.scene-card').filter({hasText:'抵达港口'}).click();await page.getByLabel('批量移动目标',{exact:true}).selectOption('page:');await page.getByRole('region',{name:'批量管理',exact:true}).getByRole('button',{name:'移动',exact:true}).click();
  await expect(page.locator('.planning-card')).toHaveCount(2);expect((await call('planning.list',{novelId,pageId})).total).toBe(0);expect((await call('planning.decorations',{novelId,pageId})).total).toBe(2);
- await page.getByRole('button',{name:'新建规划页面',exact:true}).click();dialog=page.getByRole('dialog',{name:'新建规划页面',exact:true});await dialog.getByLabel('页面名称').fill('临时页');await dialog.getByRole('button',{name:'保存页面'}).click();await page.getByRole('button',{name:'规划页面设置',exact:true}).click();await page.getByRole('dialog',{name:'页面设置',exact:true}).getByRole('button',{name:'删除空页面',exact:true}).click();
- await expect(page.getByRole('combobox',{name:'规划页面',exact:true})).not.toContainText('临时页');
+ await page.getByRole('button',{name:'新建画布',exact:true}).click();dialog=page.getByRole('dialog',{name:'新建画布',exact:true});await dialog.getByLabel('画布名称').fill('临时页');await dialog.getByRole('button',{name:'保存画布'}).click();await page.getByRole('button',{name:'画布设置',exact:true}).click();await page.getByRole('dialog',{name:'画布设置',exact:true}).getByRole('button',{name:'删除空画布',exact:true}).click();
+ await expect(page.getByLabel('规划画布',{exact:true})).not.toContainText('临时页');
  expect(errors).toEqual([]);console.log(JSON.stringify({ok:true,checks:['single manuscript keeps scroll across saves and remote sync','page creation/isolation/rename/reload','right-click scene, styled note, background frame','drag annotation and resize frame persist','annotation conflict retains author draft','narrow context menu and dark screenshots']}));
 }catch(error){if(page)await page.screenshot({path:join(shots,'failure.png')}).catch(()=>{});throw error;} finally{await browser?.close();preview.kill();}

@@ -16,6 +16,9 @@ const dir=join(root,'releases',release.tag), stateFile=join(dir,'release-state.j
 const archive=join(dir,release.asset), sums=join(dir,'SHA256SUMS'), notesFile=join(dir,'release-notes.md');
 const desktopExe=value('--desktop-exe') || process.env.CUIGENGJI_DESKTOP_EXE;
 const oldDesktopExe=value('--old-desktop-exe') || process.env.CUIGENGJI_PREVIOUS_DESKTOP_EXE;
+// Optional dependency source for disposable archive installs only. npm publication
+// and its package-name acceptance always use the official registry.
+const registry=value('--registry');
 let state;
 let locked=false;
 const lock=join(dir,'.release-lock');
@@ -113,7 +116,7 @@ async function waitWorkflow(name,allowDispatch=false) {
 async function native(spec,label,oldPackage) {
   const report=join(dir,`${label}.json`);
   await run(process.execPath,[join(root,'scripts/check-release-install.mjs'),'--desktop-exe',state.desktopExe,
-    '--package',spec,...(oldPackage?['--old-package',oldPackage,...(state.oldDesktopExe?['--old-desktop-exe',state.oldDesktopExe]:[])]:[]),'--report',report]);
+    '--package',spec,...(oldPackage?['--old-package',oldPackage,...(state.oldDesktopExe?['--old-desktop-exe',state.oldDesktopExe]:[])]:[]),...(state.acceptanceRegistry?['--registry',state.acceptanceRegistry]:[]),'--report',report]);
   const result=JSON.parse(await readFile(report,'utf8')); assert.equal(result.ok,true); return result;
 }
 
@@ -142,7 +145,7 @@ async function prepare() {
     if (state.sha256) assert.equal(sha256(await readFile(archive)),state.sha256,'Interrupted preparation archive changed');
   } else assert.equal(await exists(archive),false,'Untracked archive has no preparation state; use --reset before publication');
   state={schemaVersion:1,...release,sourceCommit:src.commit,sha256:null,checks:{},
-    desktopExe:resolve(desktopExe),...(oldDesktopExe?{oldDesktopExe:resolve(oldDesktopExe)}:{}),dshBaseline:pkg.engines.dsh,startedAt:new Date().toISOString(),github:{published:false},npm:{published:false},market:{}};
+    desktopExe:resolve(desktopExe),...(oldDesktopExe?{oldDesktopExe:resolve(oldDesktopExe)}:{}),...(registry?{acceptanceRegistry:registry}:{}),dshBaseline:pkg.engines.dsh,startedAt:new Date().toISOString(),github:{published:false},npm:{published:false},market:{}};
   await save();
   await run('npm',['test']); state.checks.unitTests=true;
   await run('npm',['run','typecheck']); state.checks.typecheck=true;
@@ -159,7 +162,7 @@ async function prepare() {
   await save();
   state.checks.freshNoGit=await native(archive,'fresh-no-git'); await save();
   const hostReport=join(dir,'host-compatibility.json');
-  await run(process.execPath,[join(root,'scripts/check-host-compat.mjs'),'--desktop-exe',state.desktopExe,'--package',archive,'--report',hostReport]);
+  await run(process.execPath,[join(root,'scripts/check-host-compat.mjs'),'--desktop-exe',state.desktopExe,'--package',archive,...(state.acceptanceRegistry?['--registry',state.acceptanceRegistry]:[]),'--report',hostReport]);
   state.checks.hostCompatibility=JSON.parse(await readFile(hostReport,'utf8'));assert.equal(state.checks.hostCompatibility.ok,true);await save();
   // Test both the most recent stable archive and the old-name migration boundary.
   const releases=await jsonGH('release','list','--limit','100','--json','tagName,isDraft,isPrerelease');

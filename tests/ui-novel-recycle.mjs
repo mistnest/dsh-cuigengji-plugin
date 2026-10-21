@@ -57,7 +57,8 @@ try {
   expect((await call('novel.list')).length).toBe(3);
   await card().getByRole('button',{name:`打开作品 ${book.title}`,exact:true}).click();
   await expect(page.getByRole('button',{name:'正文',exact:true})).toBeVisible();
-  expect((await call('binding.get')).novelId).toBe(book.id);
+  expect(await call('binding.get')).toBeNull();
+  expect(actions.filter(a=>a==='binding.set')).toHaveLength(0);
   const second=await context.newPage();second.on('pageerror',error=>errors.push(error.message));
   await second.goto(url);await expect(second.getByRole('button',{name:'正文',exact:true})).toBeVisible();
   await home();const binds=actions.filter(a=>a==='binding.set').length;

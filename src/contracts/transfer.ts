@@ -1,5 +1,7 @@
 import type {Board} from './planning.ts';
+import type {CollaborationData,CollaborationProgress} from './collaboration.ts';
 import type {Group} from '../domain/memory/groups.ts';
+import type {MemoryPage} from '../domain/memory/pages.ts';
 
 export type ContentKind = 'works' | 'chapters' | 'memory' | 'planning' | 'preset';
 export type ExportKind = ContentKind | 'workspace';
@@ -13,20 +15,31 @@ export interface MemoryFields extends Entity {
   name: string; summary: string; content: string;
   status: 'active' | 'stale' | 'unconfirmed' | 'retired'; factType: string;
   sources: ChapterRef[]; dependsOn: string[]; knownBy: string[]; aliases: string[]; storyTime: string;
-  groupId?: string | null; tavern?: {fingerprint: string; format: string; index: number};
+  groupId?: string | null; pageId?:string|null; tavern?: {fingerprint: string; format: string; index: number};
 }
-export interface MemoryNode extends MemoryFields {type: 'character_card' | 'world_entry' | 'world_book'}
+export interface MemoryVersion {
+  revision: number; content: string; contentHash: string;
+  sources: ChapterRef[]; dependsOn: string[]; knownBy: string[]; groupId?: string | null;
+  status: MemoryFields['status']; factType: string;
+  actor?: {kind: string; sessionId: string | null}; [key: string]: unknown;
+}
+export interface MemoryNode extends MemoryFields {type: 'character_card' | 'world_entry' | 'world_book'; versions?: MemoryVersion[]}
 export interface MemoryEdge extends MemoryFields {from: string; to: string}
 export interface PresetBlock {identifier: string; name: string; content: string; enabled: boolean; [key: string]: unknown}
 export interface PresetData {id?: string; revision?: number; name: string; enabled: boolean; blocks: PresetBlock[]; raw?: unknown; importFormat?: string; warnings?: string[]; [key: string]: unknown}
 export interface Novel extends Entity {
+  directoryOrder?:Record<string,string[]>;
   title: string; description: string; archived: boolean; archivedAt?: string; volumes: Record<string, Volume>; chapters: Record<string, Chapter>;
   nodes: Record<string, MemoryNode>; edges: Record<string, MemoryEdge>; memoryGroups?: Record<string, Group>;
+  memoryPages?:Record<string,MemoryPage>;
+  memoryPageFolders?:Record<string,string>;memoryFolderWorkspace?:boolean;
   planning?: Board; plan?: Board['legacy'] | null; preset?: PresetData;
+  collaboration?: CollaborationData;
+  collaborationProgress?: CollaborationProgress;
   tavernSources?: Record<string, {format: string; raw: unknown}>;
   transferScope?: {mainPage: boolean};
 }
-export interface Workspace {schemaVersion: number; novels: Record<string, Novel>; bindings: Record<string, Record<string, unknown>>; requests: Record<string, {signature: string; result?: unknown; timestamp?: string; novelId?: string}>}
+export interface Workspace {schemaVersion: number; guidance?:Record<string,boolean>; novels: Record<string, Novel>; bindings: Record<string, Record<string, unknown>>; requests: Record<string, {signature: string; result?: unknown; timestamp?: string; novelId?: string}>}
 
 /** Omitted IDs select all active content; [] explicitly selects nothing. */
 export interface Selection {
@@ -39,8 +52,9 @@ export interface CatalogBook {
   id: string; title: string; revision: number; archived: boolean; counts: Counts;
   volumes: {id: string; title: string}[];
   chapters: {id: string; title: string; volumeId: string | null; words: number}[];
-  groups: {id: string; name: string}[];
-  memory: {id: string; name: string; type: string; groupId: string | null; summary: string}[];
+  groups: {id: string; name: string; parentId?:string|null;pageId?:string|null}[];
+  memory: {id: string; name: string; type: string; groupId: string | null;pageId?:string|null; summary: string}[];
+  memoryPages: {id:string|null;name:string}[];
   pages: {id: string | null; name: string; beats: number; decorations: number}[];
   preset: {name: string; blocks: number} | null;
 }
@@ -49,6 +63,8 @@ export interface PackagePayload {kind: ContentKind; projects: Novel[]; warnings:
 export interface DataPackage {format: 'cuigengji-package'; version: 1; exportedAt: string; sha256: string; payload: PackagePayload}
 export interface TransferFile {name: string; text?: string; json?: unknown; pngBase64?: string}
 export interface ImportOptions {
+  /** An entry-specific intent must survive inspection, preview and commit. */
+  intent?: 'preset';
   selection?: Selection; mode?: 'copy' | 'restore'; targetId?: string | null; title?: string;
   orderId?: string; presetPolicy?: 'append' | 'replace';
 }

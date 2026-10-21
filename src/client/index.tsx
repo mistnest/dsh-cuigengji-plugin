@@ -1,40 +1,37 @@
-// The workbench is the typed migration boundary; legacy JSX modules are intentionally
-// consumed without declaration generation while they are migrated incrementally.
-// @ts-nocheck
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {PreferencesProvider, PreferencesDialog, AboutDialog, useWorkbenchPreferences} from './shared/preferences.tsx';
-import { styles } from './style.ts';
-import { DialogProvider, useDialog } from './dialog.tsx';
-import { LocaleContext, registerLocale } from './locale.js';
-import { Memory } from './features/memory/index.jsx';
-import { Manage } from './features/manage/index.tsx';
-import { TransferPage } from './features/transfer/index.tsx';
-import {Welcome} from './features/welcome/index.tsx';
-import { Chapters } from './features/chapters/index.jsx';
-import { Planning } from './features/planning/index.jsx';
-import { Preset } from './features/preset/index.tsx';
-import { SessionScope, usePreference, useResource } from './shared/state.js';
-import { ResourceState } from './shared/ui.jsx';
-import { Launcher } from './launcher.tsx';
-import {WorkbenchHeader} from './shared/WorkbenchHeader.tsx';
-import {RefreshProvider, useWorkbenchRefresh} from './shared/refresh.tsx';
-import {notifyLibraryChanged, subscribeLibraryChanges} from './shared/library-events.ts';
-
+import React from 'react';
+import {LocaleContext,registerLocale} from './locale.js';
+import {Launcher} from './launcher.tsx';
+import {openWritingLibrary} from './shared/library-workspace.ts';
+import {WorkbenchBoundary} from './shared/WorkbenchBoundary.tsx';
+import {WorkbenchRoot,type WorkbenchRPC} from './WorkbenchShell.tsx';
+import {createWorkbenchRPC} from './shared/rpc.ts';
+import {PetOverlay,PetBoundary} from './features/pet/index.tsx';
+import {createRecordsNavigation} from './features/pet/records-navigation.ts';
+import {invalidatePetActivity} from './features/pet/activity.ts';
+import {SurfaceActivity} from './shared/surface-activity.ts';
+export {Workbench} from './WorkbenchShell.tsx';
 const ID = 'dsh-cuigengji-plugin';
+const PET_ID = 'dsh-cuigengji-pet';
 const RPC_ENDPOINT = 'cuigengji/dispatch';
-const message = error => error?.message || String(error);
-export const inject = ['connection', 'slots', 'sidebarRight', 'sidebarRightTabs', 'locale', 'layout', 'uiWorkspace', 'workspaces'];
-export function apply(ctx) {
-  const rpc = async (action, args, sessionId) => {
-    const result = await ctx.connection.rpc.call('/api', RPC_ENDPOINT, { action, args, sessionId });
-    if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
-    return result.value;
-  };
+export const inject = ['connection', 'slots', 'sidebarRight', 'sidebarRightTabs', 'locale', 'layout', 'uiWorkspace', 'workspaces','sessions','uiSession'];
+export function apply(ctx:any) {
+  const lifetime=new AbortController();
+  ctx.effect(()=>()=>lifetime.abort());
+  const rpc=createWorkbenchRPC((action,args,sessionId,signal)=>ctx.connection.rpc.call('/api',RPC_ENDPOINT,{action,args,sessionId},signal),{signal:lifetime.signal});
   return applyWithRPC(ctx, rpc);
 }
 
-export function applyWithRPC(ctx, rpc) {
-  const t = ctx.locale ? registerLocale(ctx) : key => ({ title: '催更姬', open: '打开小说目录、正文和设定' }[key]);
+export function applyWithRPC(ctx:any, rpc:WorkbenchRPC) {
+  const recordsNavigation = createRecordsNavigation();
+  const transport = rpc;
+  rpc = async (action, args, sessionId) => {
+    const value = await transport(action, args, sessionId);
+    if (/^(chapter\.(create|update)|graph\.(create|update|continue)|planning\.(apply|continue|page\.|group\.)|novel\.(archive|restore|purge)|binding\.set)/.test(action)) {
+      invalidatePetActivity(rpc, action === 'binding.set' || action.startsWith('novel.'));
+    }
+    return value;
+  };
+  const t = ctx.locale ? registerLocale(ctx) : (key:string) => ({ title: '催更姬', open: '打开小说目录、正文和设定' } as Record<string,string>)[key];
   ctx.effect(() => ctx.sidebarRightTabs.register({
     id: ID, kind: 'cuigengji', keepMounted: true,
     patterns: ['dsh-resource://cuigengji/**'], title: () => t('title'),
@@ -43,92 +40,36 @@ export function applyWithRPC(ctx, rpc) {
     name: 'sidebar.footer.action', id: ID, order: 40,
     inject: () => ({
       hooks: {novelSession:ctx.sidebarRight.mounted,novelWorkspaces:ctx.workspaces.list},
-      openNovel: sessionId => ctx.sidebarRight.openResource(`dsh-resource://cuigengji/${encodeURIComponent(sessionId)}`),
+      openNovel: (sessionId:string) => ctx.sidebarRight.openResource(`dsh-resource://cuigengji/${encodeURIComponent(sessionId)}`),
       revealConversation: () => ctx.layout.selectPanel(null),
-      openWorkspace: (id,beforeOpen) => ctx.uiWorkspace.openWorkspace(id,beforeOpen),
+      openWorkspace: (id:string,beforeOpen:()=>void) => ctx.uiWorkspace.openWorkspace(id,beforeOpen),
+      openLibrary:ctx.workspaces.create ? (beforeOpen:()=>void)=>openWritingLibrary((action,args)=>rpc(action,args as Record<string,unknown>),input=>ctx.workspaces.create(input),(id,before)=>ctx.uiWorkspace.openWorkspace(id,before),beforeOpen) : undefined,
     }),
   }, Launcher));
   ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
     name: 'sidebar.right.pane.tab', key: ID,
-  }, props => {
-    const tab = props.useTabInfo();
-    const address = tab.tab.navigation.address;
-    const sessionId = decodeURIComponent(address.slice(address.lastIndexOf('/') + 1));
-    return <LocaleContext.Provider value={ctx.locale}><Workbench key={sessionId} sessionId={sessionId} rpc={rpc} /></LocaleContext.Provider>;
-  }));
+  }, (props:any) => <WorkbenchBoundary key={props.sessionId}><WorkbenchTab {...props} locale={ctx.locale} rpc={rpc} recordsNavigation={recordsNavigation}/></WorkbenchBoundary>));
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay', id: `${PET_ID}-overlay`, order: 45,
+    inject: () => ({
+      // mounted is the public on-screen session even with the sidebar closed.
+      // retainedBy.mainView is a lifetime count, not the selected conversation.
+      hooks: { mounted: ctx.sidebarRight.mounted },
+      rpc, statusSource: ctx.uiSession?.sessionStatus,
+      openPet: () => {
+        const sessionId = ctx.sidebarRight.mounted.getSnapshot();
+        if (sessionId) {
+          recordsNavigation.request(sessionId);
+          ctx.sidebarRight.openResource(`dsh-resource://cuigengji/${encodeURIComponent(sessionId)}`);
+        }
+      },
+    }),
+  }, (props:any) => <PetBoundary><PetOverlay useMounted={props.useMounted} openPet={props.openPet} rpc={props.rpc} statusSource={props.statusSource}/></PetBoundary>));
 }
 
-export function Workbench(props) {
-  return <SessionScope.Provider value={props.sessionId}><RefreshProvider><PreferencesProvider><DialogProvider><WorkbenchContent {...props} /></DialogProvider></PreferencesProvider></RefreshProvider></SessionScope.Provider>;
-}
-
-function WorkbenchContent({ sessionId, rpc }) {
-  const {preferences}=useWorkbenchPreferences();
-  const {refresh}=useWorkbenchRefresh();
-  const [utility,setUtility]=useState(null);
-  const [homeOpen,setHomeOpen]=useState(false);
-  const [tab, setTab] = usePreference('page', 'chapters');
-  const [managementReturn, setManagementReturn] = usePreference('management-return', 'chapters');
-  useEffect(()=>{if(tab==='context')setTab('chapters');},[tab]);
-  const [returnTarget,setReturnTarget]=useState(null);
-  const [transferInitial,setTransferInitial]=useState(null);
-  const [transferVisit,setTransferVisit]=useState(0);
-  const [manageInitial,setManageInitial]=useState('overview');
-  const [error, setError] = useState(''), [busy, setBusy] = useState(false), [tick, setTick] = useState(0);
-  const { ask, confirm } = useDialog();
-  const call = useCallback((action, args = {}) => rpc(action, args, sessionId), [rpc, sessionId]);
-  const resource = useResource(() => Promise.all([call('novel.list', {includeArchived:true}), call('binding.get')]), [call, tick]);
-  const [library = [], binding = null] = resource.value || [];
-  const books=library.filter(book=>!book.archived), recycledCount=library.length-books.length;
-  useEffect(()=>subscribeLibraryChanges(()=>setTick(value=>value+1)),[]);
-  const novelId = binding?.novelId, novel = books.find(n => n.id === novelId);
-  const showHome=homeOpen||(!novelId&&!['data','manage'].includes(tab));
-  useEffect(()=>{
-    const outside=event=>{document.querySelectorAll('.cuigengji details.menu[open]').forEach(menu=>{if(!menu.contains(event.target))menu.open=false;});};
-    const escape=event=>{if(event.key==='Escape'){document.querySelectorAll('.cuigengji details.menu[open]').forEach(menu=>{menu.open=false;menu.querySelector('summary')?.focus();});}};
-    const activate=event=>{const menu=event.target.closest?.('details.menu');if(menu&&event.target.closest('button'))menu.open=false;};
-    document.addEventListener('click',activate);document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape);
-    return()=>{document.removeEventListener('click',activate);document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape);};
-  },[]);
-  const running = useRef(false);
-  const run = async fn => {
-    if (running.current) return;
-    running.current = true;
-    setBusy(true); setError('');
-    try { await fn(); setTick(x => x + 1); return true; }
-    catch (e) { setError(message(e)); return false; }
-    finally { running.current = false; setBusy(false); }
-  };
-  const create = async () => { const title = await ask('作品名称'); if (title?.trim()) run(async () => { const n = await call('novel.create', { title }); await call('binding.set', { novelId: n.id }); setHomeOpen(false);setTab('chapters'); }); };
-  const openNovel=id=>run(async()=>{await call('binding.set',{novelId:id});setHomeOpen(false);setTab('chapters');setReturnTarget(null);});
-  const openManagement=(page,initial='overview')=>{if(homeOpen||!novelId)setManagementReturn('welcome');else if(['chapters','plan','memory'].includes(tab))setManagementReturn(tab);setHomeOpen(false);setReturnTarget(null);setManageInitial(initial);setTab(page);};
-  const recycleNovel=async book=>{
-    if(busy||!await confirm(`将《${book.title}》移入回收站？\n正文、章节历史、设定、规划和写作预设会完整保留，之后可以恢复。相关会话将解除作品绑定。`))return;
-    await run(async()=>{await call('novel.archive',{novelId:book.id,expectedRevision:book.revision,requestId:crypto.randomUUID(),confirm:true});notifyLibraryChanged();});
-  };
-  const openTransfer=initial=>{if(homeOpen||!novelId)setManagementReturn('welcome');else if(['chapters','plan','memory','preset','manage'].includes(tab))setManagementReturn(tab);setHomeOpen(false);setTransferInitial(initial);setTransferVisit(value=>value+1);setReturnTarget(null);setTab('data');};
-  const returnFromManagement=()=>{setReturnTarget(null);setHomeOpen(managementReturn==='welcome');setTab(['chapters','plan','memory','preset','manage'].includes(managementReturn)?managementReturn:'chapters');};
-  const managementBack={onBack:returnFromManagement,backLabel:managementReturn==='welcome'?'返回作品首页':novelId?'返回'+({plan:'规划',memory:'设定',chapters:'正文',preset:'写作预设',manage:'作品与备份'}[managementReturn]||'正文'):'返回作品选择'};
-  const welcomeProps={books,busy,recycledCount,onOpen:openNovel,onCreate:create,onImport:()=>openTransfer({mode:'import'}),onManage:()=>openManagement('manage'),onRecycle:recycleNovel,onTrash:()=>openManagement('manage','recycle')};
-  const manageProps={call,novelId,novel,run,busy,tick,initialView:manageInitial,onTransfer:openTransfer,...managementBack};
-  const jump=(page,key,id)=>{setReturnTarget(tab);try{localStorage.setItem(`cuigengji:ui:${sessionId}:${novelId}:${key}`,JSON.stringify(id));}catch{}setTab(page);};
-  return <section className="cuigengji" data-motion={preferences.motion} style={{'--prose-size':`${preferences.fontSize}px`,'--prose-leading':preferences.leading}} aria-label="催更姬小说工作台">
-    <style>{styles}</style>
-    <WorkbenchHeader home={showHome} novelTitle={novel?.title} tab={tab} busy={busy} refreshing={resource.loading} onHome={()=>{setHomeOpen(true);setReturnTarget(null);}} onTab={page=>{setReturnTarget(null);setTab(page);}} onRefresh={refresh} onSettings={()=>setUtility('settings')} onAbout={()=>setUtility('about')}/>
-    {error && <div className="notice error" role="alert">{error}<button onClick={()=>setError('')}>关闭提示</button></div>}
-
-    <ResourceState resource={resource}>
-      {homeOpen?<Welcome {...welcomeProps}/>:tab==='data'?<TransferPage key={transferVisit} {...{call,run,busy,novelId}} {...managementBack} initial={transferInitial} onOpen={openNovel}/>:<>
-      {!novelId ? (tab==='manage'?<Manage {...manageProps}/>:<Welcome {...welcomeProps}/>) : <div className="workbench-body" key={novelId}>{returnTarget&&<div className="return-strip"><button onClick={()=>{setTab(returnTarget);setReturnTarget(null);}}>‹ 返回{({plan:'规划',memory:'设定'})[returnTarget]||'上一页'}</button></div>}
-        {tab==='chapters' && <Chapters {...{call,novelId,tick,run,busy}} onTransfer={openTransfer}/>}
-        {tab==='memory' && <Memory {...{call,novelId,tick,run,busy}} onTransfer={openTransfer} onChapter={id=>jump('chapters','chapter',id)}/>}
-        {tab==='plan' && <Planning {...{call,novelId,tick,run,busy}} onTransfer={openTransfer} onMemory={id=>jump('memory','memory-selected',id)} onChapter={id=>jump('chapters','chapter',id)}/>}
-        {tab==='preset' && <Preset {...{call,novelId,run,busy}} {...managementBack} onTransfer={openTransfer}/>}
-        {tab==='manage' && <Manage {...manageProps}/>}
-      </div>}
-      </>}
-    </ResourceState>
-    {utility==='settings'&&<PreferencesDialog close={()=>setUtility(null)} novelTitle={novel?.title} onPreset={novelId?()=>{setUtility(null);openManagement('preset');}:undefined}/>}
-    {utility==='about'&&<AboutDialog close={()=>setUtility(null)}/>}
-  </section>;
+function WorkbenchTab(props:any) {
+  const tab = props.useTabInfo();
+  const address = tab.tab.navigation.address;
+  const sessionId = decodeURIComponent(address.slice(address.lastIndexOf('/') + 1));
+  return <LocaleContext.Provider value={props.locale}><SurfaceActivity.Provider value={tab.tab.visible!==false}><WorkbenchRoot key={sessionId} sessionId={sessionId} rpc={props.rpc} recordsNavigation={props.recordsNavigation}/></SurfaceActivity.Provider></LocaleContext.Provider>;
 }

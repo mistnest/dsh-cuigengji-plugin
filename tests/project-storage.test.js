@@ -28,7 +28,7 @@ async function fixture(t) {
   ]});
   const directories=JSON.parse(await readFile(join(root,'library.json'),'utf8')).directories, base=bookPath(novel.id,directories);
   const chapters=JSON.parse(await readFile(join(root,base,'chapters','index.json'),'utf8')), nodes=JSON.parse(await readFile(join(root,base,'settings','index.json'),'utf8')), planning=JSON.parse(await readFile(join(root,base,'planning','index.json'),'utf8'));
-  const paths={chapter:storedChapterFile(chapters[chapter.id],chapter.id,4),otherChapter:storedChapterFile(chapters[otherChapter.id],otherChapter.id,4),memory:storedSettingFile(nodes[memory.id],memory.id,4),page:storedPageFile(planning,initial.mapping.page,4),main:storedPageFile(planning,null,4)};
+  const paths={chapter:storedChapterFile(chapters[chapter.id],chapter.id,5),otherChapter:storedChapterFile(chapters[otherChapter.id],otherChapter.id,5),memory:storedSettingFile(nodes[memory.id],memory.id,5),page:storedPageFile(planning,initial.mapping.page,5),main:storedPageFile(planning,null,5),scene:planning.nodeFiles[initial.mapping.scene],note:planning.decorationFiles[initial.mapping.note]};
   return {root,store,actor,novel,base,run,chapter,otherChapter,memory,otherMemory,initial,paths};
 }
 
@@ -59,7 +59,7 @@ test('indexes and targeted reads never open unrelated prose, settings, pages or 
   const read=store.readText.bind(store);store.readText=async path=>{reads.push(path);return read(path);};
   for(const action of ['binding.get','preset.read','novel.handoff','chapter.list','planning.pages','planning.list','graph.list']) {
     reads.length=0;await run(action);
-    assert.ok(reads.every(path=>!/^novels\/[^/]+\/(chapters\/[^/]+\.json|settings\/entries\/|planning\/[^/]+\.json|history\/)/.test(path)||path.endsWith('/index.json')),`${action} must use metadata only`);
+    assert.ok(reads.every(path=>!/^novels\/[^/]+\/(chapters\/|settings\/entries\/|planning\/|history\/)/.test(path)||path.endsWith('/index.json')||path.endsWith('/planning/groups.json')),`${action} must use metadata only`);
   }
   reads.length=0;assert.equal((await run('chapter.get',{chapterId:chapter.id})).content,'雨落在旧书铺的门前。');
   assert.deepEqual(reads.filter(path=>/^novels\/[^/]+\/chapters\/(?!index)/.test(path)),[`${base}/chapters/${paths.chapter}`]);
@@ -67,8 +67,49 @@ test('indexes and targeted reads never open unrelated prose, settings, pages or 
   reads.length=0;assert.equal((await run('graph.get',{nodeId:memory.id})).content,'她经营旧书铺，保存账册。');
   assert.deepEqual(reads.filter(path=>path.includes('/settings/entries/')),[`${base}/settings/entries/${paths.memory}`]);
   reads.length=0;assert.equal((await run('planning.get',{nodeId:initial.mapping.scene})).node.content,'专页的原文也需要保留。');
-  assert.deepEqual(reads.filter(path=>/^novels\/[^/]+\/planning\/(?!index)/.test(path)),[`${base}/planning/${paths.page}`]);
+  assert.deepEqual(reads.filter(path=>/^novels\/[^/]+\/planning\/(?!index)/.test(path)).sort(),[`${base}/planning/${paths.page}`,`${base}/planning/${paths.scene}`,`${base}/planning/${paths.note}`].sort());
   assert.ok(reads.every(path=>!path.includes('/history/')));
+});
+
+test('setting history is opt-in, restorable and stored separately from the current entry',async t=>{
+  const {root,run,memory,base,paths,novel}=await fixture(t);
+  const current=await run('graph.get',{nodeId:memory.id});
+  assert.equal(current.content,'她经营旧书铺，保存账册。');
+  assert.equal('versions' in current,false);
+
+  const summary=await run('graph.history',{nodeId:memory.id});
+  assert.deepEqual(summary.map(item=>item.revision),[1]);
+  assert.equal('content' in summary[0],false);
+
+  const updated=await run('graph.update',{nodeId:memory.id,expectedRevision:current.revision,content:'她经营旧书铺，也替街坊保管失物。',reason:'补充人物当前行动'});
+  assert.equal(updated.revision,2);
+  assert.equal('versions' in updated,false);
+  const all=await Promise.all([1,2].map(revision=>run('graph.history',{nodeId:memory.id,revision,includeContent:true}).then(items=>items[0])));
+  assert.deepEqual(all.map(item=>item.revision),[1,2]);
+  assert.equal(all[0].content,'她经营旧书铺，保存账册。');
+  assert.equal(all[1].content,'她经营旧书铺，也替街坊保管失物。');
+  assert.equal('content' in (await run('graph.list',{query:'店主'}))[0],false);
+
+  const historyPath=join(root,base,'history','settings',`${fileId(memory.id)}.json`);
+  const stored=JSON.parse(await readFile(historyPath,'utf8'));
+  assert.deepEqual(stored.map(item=>item.revision),[1,2]);
+  assert.equal(JSON.parse(await readFile(join(root,base,'settings','entries',paths.memory),'utf8')).content,'她经营旧书铺，也替街坊保管失物。');
+
+  const restored=await run('graph.restore',{nodeId:memory.id,expectedRevision:2,targetRevision:1,reason:'作者确认恢复旧设定'});
+  assert.equal(restored.revision,3);
+  assert.equal((await run('graph.get',{nodeId:memory.id})).content,'她经营旧书铺，保存账册。');
+  assert.deepEqual((await run('graph.history',{nodeId:memory.id})).map(item=>item.revision),[1,2,3]);
+
+  // A pre-history project is upgraded only when history is requested. The
+  // current setting remains in its entry file while the generated snapshot
+  // is written to the dedicated history file.
+  const indexPath=join(root,base,'settings','index.json'),index=JSON.parse(await readFile(indexPath,'utf8'));
+  delete index[memory.id].versions; await writeFile(indexPath,JSON.stringify(index));
+  await rm(historyPath,{force:true});
+  const legacy=new Store(root),legacyHistory=await legacy.dispatch('graph.history',{novelId:novel.id,nodeId:memory.id}, {kind:'human',sessionId:'legacy-reader'});
+  assert.deepEqual(legacyHistory.map(item=>item.revision),[3]);
+  assert.equal((await stat(historyPath)).isFile(),true);
+  assert.equal(JSON.parse(await readFile(indexPath,'utf8'))[memory.id].versions.length,1);
 });
 
 test('page changes and chapter autosave leave unrelated durable files untouched',async t=>{
@@ -78,7 +119,7 @@ test('page changes and chapter autosave leave unrelated durable files untouched'
   const mainTime=(await stat(join(root,main))).mtimeMs,otherTime=(await stat(join(root,other))).mtimeMs;
   writes.length=0;
   await run('planning.apply',{requestId:randomUUID(),operations:[{op:'node.update',id:initial.mapping.scene,expectedRevision:1,value:{position:{x:-240,y:300}}}]});
-  assert.ok(writes.includes(`${base}/planning/${paths.page}`));
+  assert.ok(writes.includes(`${base}/planning/${paths.scene}`));
   assert.ok(!writes.includes(main));assert.equal((await stat(join(root,main))).mtimeMs,mainTime);
   writes.length=0;
   await run('chapter.update',{chapterId:chapter.id,expectedRevision:chapter.revision,content:'雨停了，店主走出书铺。'});
@@ -161,7 +202,7 @@ test('another project and unrelated malformed history cannot block a targeted re
 test('missing indexed page records cannot silently become empty content in reads or backups',async t=>{
   const {root,store,run,novel,base,initial,paths}=await fixture(t);
   const path=join(root,base,'planning',paths.page),page=JSON.parse(await readFile(path,'utf8'));
-  delete page.nodes[initial.mapping.scene];await writeFile(path,JSON.stringify(page));
+  page.nodeIds=page.nodeIds.filter(id=>id!==initial.mapping.scene);await writeFile(path,JSON.stringify(page));
   await assert.rejects(run('planning.get',{nodeId:initial.mapping.scene}),{code:'CORRUPT_STORE'});
   await assert.rejects(new WorkData(store).export(),{code:'CORRUPT_STORE'});
 });

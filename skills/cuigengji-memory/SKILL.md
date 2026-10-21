@@ -1,92 +1,58 @@
 ---
 name: cuigengji-memory
-description: 讨论、设计或完善人物动机、世界规则、阵营与关系时使用；主动复用设定卡与关系图，保留未决提案并区分既定事实。
+description: 讨论人物动机、世界规则、阵营或关系时，主动复用与维护设定卡和关系图，区分既定事实和未决提案。
 ---
 
-# 共同维护设定与关系图
+# 共同维护人物与世界
 
-设定区和正文、规划一样，由作者与 Agent 共用。支持提前构建世界观，也支持从已写正文维护连续性；并非必须先写出章节才能建人物或世界规则。
+共享协作规则：shared-canvas-v12。
 
-作者请求设计、完善人物动机、世界规则或阵营关系时，主动查找并维护相关条目与关系，不要求先说“保存到设定”。作者明确给定的信息可记录为设定；仍在比较的方案保留待确认。已有条目同时包含事实和提案时，在 content 中划出待讨论部分，保留原事实与来源，不把整张卡改成一个未定人设。后续反馈更新原条目，不反复创建同一人物。
+作者请求设计、完善人物、世界规则或阵营关系时，主动查找并维护相应卡片与连线，不等他说“保存到设定”。同一人物后续补充修改原卡；不要把聊天逐句拆卡。明确只聊不保存、简单知识问答和只读审阅时不写入。
 
-未来人物行动与剧情走向进入规划讨论页，设定图展示身份、动机、阵营与相互关系；复杂问题可以同时使用两者。简单知识问答、只读审阅或明确只聊不保存时不写入；只记录会影响作品的实质信息。保存后简短说明更新了哪些条目与尚未决定的关系。
+设定图展示人物、地点、组织、规则之间的关系。人物将采取的行动、剧情走向和备选结果进入规划画布，复杂讨论可以同时维护两者。每部作品独立维护人物和世界；引用其他作品的构想时须按作者意图改编，不把别书事实和 sources 当成本书证据。
 
-## 先分清信息的性质
+## 一轮协作怎么做
 
-| 来源 | 如何记录 |
-| --- | --- |
-| 作者明确规定的世界规则、人物背景 | 可作为作品设定保存；在正文内容中注明作者设定，尚未在故事中揭示的部分不写成角色已经知道的事。没有章节证据时不编造 sources |
-| 已保存正文中明确发生的事件 | 核对相关片段，用真实章节 ID 和 revision 记录 sources |
-| 作者正在比较的方案、Agent 提议、推测 | 保持未确认；未来情节优先留在规划，不冒充当前人物事实 |
-| 角色的认知、谎言或误解 | 在正文中明确是谁的认知，区分 belief / misunderstanding 与客观事实 |
+所有动作调用 `cuigengji_memory`，用 `{action,args}` 包装。
 
-作者的新设定与已发生正文冲突时，指出具体冲突，再判断是未来补充、角色误解还是作者要修订前文。不要悄悄覆盖正文来迁就设定。
+1. 首次整理旧版设定时用 `graph.workspace.ensure {requestId}` 将旧画布无损收进顶层文件夹；它返回旧 pageId 到新 groupId 的 folders 映射。升级后重读目录和目标 revision，不沿用旧页 ID、旧版本；新库可直接检索，不把升级操作变成每轮门禁。`graph.groups` 返回整棵资源目录与 path，`graph.list {query?,type?,groupId?}` 按名称、别名、摘要和当前正文检索，必要时换合理关键词；列表不返回正文。人物 character_card，规则、地点、组织用 world_entry；旧 world_book 可读。
+2. `graph.get {nodeId}` 读取全文和 revision；`edge.list {nodeId}` 读直接关系，必要时 `edge.get {edgeId}` 读某条详情。按当前人物逐步扩展，不每轮遍历全图。
+3. 同一对象用 graph.update，只提交改动字段。更新 content 会替换正文，先读完整条目并合并，不用摘要覆盖全文。只有独立新对象才 graph.create。name 是标题，summary 供检索，content 自由组织内容。
+4. 有真实关系才用 `edge.create {from,to,name?,content?}`；已存在相同语义时改原边。关系文字会在线上显示；无信息就留空，不为了凑图编属性，也不机械创建对称反向边。
+5. 新卡不必手算坐标。`graph.arrange {members:[{id,expectedRevision}],requestId}` 默认 mode:missing，只安放这些卡中尚无位置的对象。作者要求整理时用 mode:all，可限定局部；不会顺手挪其他卡片。回读并简短报告改了哪些内容和哪些仍待讨论。
 
-## 查找、复用、更新
+界面切图、目录搜索、“只看相关”和缩放是本机偏好，工具仍可读取全量真实关系。看不到当前详情页、光标和未保存草稿时不要假装知道。
 
-所有下述 action 调用 `cuigengji_memory`，用 `{action,args}` 包装。
+## 事实、提案与知情范围
 
-1. 根据人物名称、别名或场景关键词用 `graph.list {query,type?,groupId?}` 查找。query 会搜索名称、摘要、别名和正文，但列表不返回正文。没有命中时换合理别名；空结果不等于人物一定不存在。
-2. 用 `graph.get {nodeId}` 读取命中的全文和 revision；需要关系时 `edge.list {nodeId}`，详细核对某条边用 `edge.get {edgeId}`。不用每轮遍历整个图谱。
-3. 补充同一个人物或规则优先 `graph.update`。只有新的独立对象才 `graph.create {type,name,summary,content,...}`；新角色用 character_card，世界规则、地点、组织等用 world_entry。旧 world_book 数据可以读取，日常新增使用前两类。
-4. 保留作者的表述、别名、来源、知情范围和分组。只改本次涉及的字段；更新 content 是替换整个条目正文，必须先读完整条目并合并，不拿一段摘要覆盖全文。
-5. name 是界面标题，summary 用于扫列表与检索，content 是自由正文。不要把每条聊天消息拆成一张卡，也不要把审阅指令、预设或 skill 写入世界书。
+作者明确规定的规则/背景可作为设定，注明作者设定，不能因此说角色已经知晓；没有正文证据就不编 sources。已发生事件核对保存的正文片段，用真实 `{chapterId,revision}` 记录 sources。
 
-## 分组与关系各司其职
+仍在比较的方案保持 unconfirmed。已有卡含事实和提案时，在正文中分清待讨论部分，保留原事实；不要把整张人物卡降为一个未定提案。角色认知或谎言用 belief/misunderstanding，不能混成客观事实。
 
-- 用 `graph.groups` 读已有目录。创建组：`graph.group.create {name,summary?}`；修改/删除：`graph.group.update/delete {groupId,expectedRevision,...}`，删除还需 confirm:true。
-- 单条归组：graph.update 的 groupId；多条归组：`graph.move {groupId,members:[{id,expectedRevision}]}`。groupId:null 表示未分组；删除组不会删人物或设定。分组操作可能更新成员 revision，后续写入重读版本。
-- 分组用于查找，例如“雨城人物”“帝国制度”；人物“隶属某组织”属于世界关系，需要组织条目与连线，不能只靠文件夹位置表达。
-- 连线：`edge.create {from,to,name?,content?}`。有准确的信息才填名称/说明，文字会直接显示在关系图的边上；无信息时允许只有箭头，不硬编关系属性。
-- 更新/断线：`edge.update/delete {edgeId,expectedRevision,...}`；删除带 confirm:true。删除一条边不删除两个端点。已存在相同语义的关系时更新旧边，不反复创建；不要为了对称而机械补一条反向边。
-- 规划箭头表示情节推进，设定箭头表示人物或世界关系，两个图的 ID 与工具不混用。
+status:active/stale/unconfirmed/retired 与 factType:fact/belief/misunderstanding/unconfirmed/plan 是两件事，active 不等于已证实。作者明确采用可用 active+fact；待定构想用 unconfirmed+unconfirmed。新设定与已发生正文冲突时指出冲突，不悄悄改正文。
 
-## 共同操作关系画布
+knownBy 可放知情角色卡 ID；空数组不意味着全员知道。dependsOn 放真实设定 ID；storyTime 表示适用阶段。读取全文不会替你过滤秘密或未来信息，取材时核对。正文更新导致 stale 时，只处理相关记录并校正真实来源，不批量消除提示。
 
-卡片的 position 为有限的 `{x,y}` 世界坐标，可正可负。作者平移和缩放视图不会修改作品数据，视图也不作为 Agent 上下文。默认保留作者布局，只有本次要求整理位置时才移动已有卡片；判断关系依据连线和正文，不依赖空间距离。
+## 分组、图和安全修改
 
-以下批量动作均先检查所有对象的 expectedRevision，再一次提交，最多 200 个对象。每次写入带唯一 requestId；只有原样重试复用它。遇到冲突先重读并合并意图，不自动替换版本号覆盖作者后续修改。
+- 设定是资源库：目录即查看范围，点文件夹就看内部和子文件夹资源及真实关系。浏览、收纳、换范围不复制卡片，不改变模型的检索权限。全书根目录可直接放卡片和任意嵌套文件夹。
+- `graph.groups` 返回 parentId 和完整路径 path；按用途复用已有文件夹，`graph.group.create {name,parentId?,requestId}` 建子组，`graph.group.update {groupId,expectedRevision,parentId,requestId}` 移动整组，parentId:null 为顶层。不要用 graph.page.create 另建设定画布列表；旧 page 接口只为兼容保留，文件夹 ID 不能当作 pageId。
+- 角色卡和世界书可混放一夹；type 决定内容类型，groupId 只管归类。单卡 graph.update 的 groupId，多卡 `graph.move {groupId,members:[{id,expectedRevision}],requestId}`；null 为全书根目录。人物只有一份当前资料，规划通过 memoryRefs 引用原 ID。
+- 文件夹同时派生画布区域；可展开、收纳，跨文件夹关系保留，界面提供外部关联跳转。`graph.group.create {name,parentId?,members:[{id,expectedRevision}],requestId}` 可收纳已有卡片，无须新建一套框或副本。目录折叠和画布收纳各自保存。
+- graph.list 按父文件夹筛选会包含全部子文件夹，目录折叠和筛选不会限制工具检索。排序只改目录顺序，归类不改变类型、正文或画布坐标。删除文件夹将卡片和子文件夹上移一级，内容保留。文件夹不是关系：“隶属组织”仍需要组织条目与连线。
+- 有意调整坐标可用 `graph.layout {positions:[{nodeId,expectedRevision,position}],requestId}`，通常优先 graph.arrange 让软件计算。默认保留作者布局，判断关系不依赖空间距离。
+- `graph.continue {nodeId,expectedRevision,side?,value,requestId}` 同时新建并连线，继承文件夹；out 为源→新，in 为新→源。
+- 断线 `edge.delete {edgeId,expectedRevision,confirm:true}` 或 edge.disconnect 的 edges 数组；只删关系不删卡。
+- graph.remove 批量软删除卡及相连边，须 members、confirm:true、requestId；retired 保留不再使用的内容。graph.duplicate 仅在明确需要副本时用，不用来记录同一人物的补充。
 
-| 需要做的事 | 操作 |
-| --- | --- |
-| 移动多张卡片 | `graph.layout {positions:[{nodeId,expectedRevision,position}],requestId}`；只更新坐标，保留全文、来源与关系 |
-| 新建卡片并与已有对象连接 | `graph.continue {nodeId,expectedRevision,side,value,requestId}`；value 是 graph.create 的字段，默认继承源节点分组；out 为源→新，in 为新→源。返回 node、edge |
-| 明确要求复制一组卡片 | `graph.duplicate {members:[{id,expectedRevision,position?}],requestId}`；复制全文与组内连线，返回 nodes、edges；不要用它记录同一人物的补充 |
-| 删除多张卡片 | `graph.remove {members:[{id,expectedRevision}],confirm:true,requestId}`；软删除卡片及相连关系，先核对范围 |
-| 断开多条关系 | `edge.disconnect {edges:[{id,expectedRevision}],confirm:true,requestId}`；保留两端卡片 |
+修改先读 expectedRevision，每次写入用唯一 requestId，只有原样重试复用；冲突后重读并合并实际差异，不换版本号覆盖作者内容。批量最多 200 个对象，全部通过版本核对后再提交。归组/整理后 revision 可能改变，应重读。
 
-创建并连接不会只留下孤立卡片。关系名称和说明仍可在创建后用 edge.update 按已读版本补充；有信息才填写，未确认的联系保留相应状态。
+## 历史版本按需查看
 
-## 状态、来源与人物知情
+普通的 `graph.list`、`graph.get`、`novel.handoff` 和正文写作只使用当前设定。历史正文默认不进入上下文，也不能因为“可能有用”就主动把旧版本混入人物或世界事实；当前版本被作者更新后，以当前版本为准。
 
-`status` 可用 active（当前可用）、stale（来源变化待核对）、unconfirmed（待确认）、retired（不再使用）。`factType` 可用 fact、belief、misunderstanding、unconfirmed、plan。状态与事实性质是两回事：默认创建可能是 active + unconfirmed，不能把 active 自动理解为已证实。
+只有作者明确要求查看、比较、追溯或恢复某条设定时，才调用 `graph.history {nodeId}`。它默认返回版本摘要，包含 revision、时间、来源、原因、changedFields 和 kind；kind 区分 baseline、content、organization、layout，位置和分组整理不等于正文变化。需要某版全文时调用 `graph.history {nodeId,revision:N,includeContent:true}`；每次仅取一个明确版本，比较两版时分别读取，不能省略 revision 整批拉取历史正文。用户在界面查看历史不会自动注入对话；旧版仅供追溯，不代表当前事实。
 
-作者明确采纳的规则可用 active + fact；未定构思用 unconfirmed + unconfirmed。角色卡同时含事实和猜测时，在 content 中清楚区分，不用一个笼统标签掩盖不确定部分。
+作者确认恢复后，先重新读取当前 `graph.get` 取得最新 revision，再调用 `graph.restore {nodeId,expectedRevision,targetRevision,reason?,requestId}`。恢复会生成新的当前版本并保留完整历史；不要删除历史、伪造 revision，或用旧全文绕过版本检查。恢复完成后回读 `graph.get`，确认当前内容，再决定是否需要同步受影响的正文、规划或关系。
 
-`sources` 是 `[{chapterId,revision}]`，版本必须真实存在；`knownBy` 可放知情角色卡 ID；`dependsOn` 放依赖的设定节点 ID；`storyTime` 用文本说明适用阶段。knownBy 为空不等于所有人物都知道，仍需结合正文核对。直接 graph.get 不会替你过滤未来信息或角色秘密，取材时自己检查。
-
-正文更新会把引用该章及依赖它的资料标为 stale。只对当前任务相关记录核对最新来源，修正文案并更新 sources 后再恢复 active；不要批量消除提示。retired 用于保留不再使用的内容；graph.delete 会软删除条目及其连线，先核对作者是否真的要连关系一起删除。
-
-## 调用示例
-
-大写 ID 必须换成真实查询结果；revision=1 是示例读取值。每个操作生成唯一 requestId，只有原样重试复用它。
-
-作者要求补充一名已有角色的身份，用原节点保存。此例假设已合并完原文；其他字段省略即保留：
-
-```json
-{"action":"graph.update","args":{"nodeId":"CHARACTER_ID","expectedRevision":1,"requestId":"update-character-unique","summary":"经营夜间书铺，熟悉旧账册的修复。","content":"她继承了母亲留下的书铺。作者补充：她以书铺为生，擅长修补受潮的账册；这项能力尚未在正文中展示。","status":"active","factType":"fact"}}
-```
-
-将已查明的几条资料移动到已有分组，不改正文和关系：
-
-```json
-{"action":"graph.move","args":{"groupId":"MEMORY_GROUP_ID","requestId":"move-settings-unique","members":[{"id":"CHARACTER_ID","expectedRevision":1},{"id":"PLACE_ID","expectedRevision":1}]}}
-```
-
-只在已有连线检查后建立人物与地点的关系。来源必须来自已经保存并读过的章节；若关系只是作者新设定，省略 sources 并在说明中注明：
-
-```json
-{"action":"edge.create","args":{"from":"CHARACTER_ID","to":"PLACE_ID","name":"经营","content":"在本章时点负责书铺日常经营。","factType":"fact","status":"active","sources":[{"chapterId":"CHAPTER_ID","revision":1}],"requestId":"connect-settings-unique"}}
-```
-
-保存后回读相关条目或关系，报告新增/更新/归组了什么。不要因为整理了设定就声称正文已改；若正文保存成功而设定维护失败，说明具体剩余工作。
+需要完整的更新人物、来源引用和关系调用范例时，按需读 [references/operations.md](references/operations.md)，路径相对本 Skill 的 resourceBase。

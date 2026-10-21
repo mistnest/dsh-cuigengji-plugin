@@ -3,6 +3,7 @@ import React, {useRef} from 'react';
 import {useDraft} from './state.js';
 import {useDialog} from '../dialog.tsx';
 import {GroupSelect, type GroupItem} from './groups.tsx';
+import {SelectionCount} from './SelectionCount.tsx';
 
 export interface DocumentDraft {title: string; summary: string; content: string; groupId: string | null}
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 export function CreateDocument({draftKey,label,initial,groups,busy,context,chapter,close,createGroup,save}: Props) {
   const {value,change,accept,dirty,cacheError} = useDraft(draftKey,initial);
   const request = useRef({payload:'',id:''});
+  const scroll = useRef<HTMLDivElement>(null);
   const submit = async () => {
     const payload=JSON.stringify(value);
     if(request.current.payload!==payload)request.current={payload,id:crypto.randomUUID()};
@@ -23,8 +25,8 @@ export function CreateDocument({draftKey,label,initial,groups,busy,context,chapt
   const {ask,confirm} = useDialog();
   const set = (field: keyof DocumentDraft, next: string | null) => change((old: DocumentDraft)=>({...old,[field]:next}));
   const cancel = async () => {if(!dirty || await confirm('取消新建并丢弃这份草稿？')) {accept(initial);close();}};
-  return <section className="creation"><header className="creation-bar"><button disabled={busy} onClick={cancel}>‹ 取消</button><span className="grow">{label}</span><button className="primary" disabled={busy||!value.title.trim()} onClick={submit}>创建</button></header>
-    <div className="creation-scroll"><div className="creation-document">{context&&<p className="creation-context">{context}</p>}<div className="creation-settings">
+  return <section className="creation"><header className="creation-bar"><button disabled={busy} onClick={cancel}>‹ 取消</button><span className="grow">{label}</span><SelectionCount scope={scroll}/><button className="primary" disabled={busy||!value.title.trim()} onClick={submit}>创建</button></header>
+    <div className="creation-scroll" ref={scroll}><div className="creation-document">{context&&<p className="creation-context">{context}</p>}<div className="creation-settings">
       {chapter?<label>所属卷<select value={value.groupId||''} onChange={e=>set('groupId',e.target.value||null)}><option value="">未分卷</option>{groups.map(g=><option value={g.id} key={g.id}>{g.name}</option>)}</select></label>:<GroupSelect groups={groups} value={value.groupId} onChange={id=>set('groupId',id)}/>}
       <button disabled={busy} onClick={async()=>{const name=await ask(chapter?'新卷名称':'新建分组名称');if(name?.trim()){const g=await createGroup(name);if(g)set('groupId',g.id);}}}>＋ {chapter?'新建卷':'新建分组'}</button></div>
       <fieldset className="editor-fields document-fields" disabled={busy}><label>标题<input autoFocus placeholder="写一个清晰的标题" value={value.title} onChange={e=>set('title',e.target.value)}/></label>

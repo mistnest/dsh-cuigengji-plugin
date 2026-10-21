@@ -20,6 +20,7 @@ function createHandoff(novel, sessionBinding, { chapterLimit = 20 } = {}) {
       description: excerpt(novel.description, 500)
     },
     binding: binding ? {
+      scope: "library",
       chapterId: binding.chapterId,
       stage: binding.stage,
       goal: excerpt(binding.goal, 500),

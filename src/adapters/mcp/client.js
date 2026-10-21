@@ -24,6 +24,7 @@ export class MemoryBridge {
     this.store = store;
     this.dispatch = options.dispatch ?? ((action, args, actor) => store.dispatch(action, args, actor));
     this.resolveNovel = options.resolveNovel;
+    this.resolveBinding = options.resolveBinding;
     this.timeoutMs = options.timeoutMs ?? 30_000;
     const runtime = memoryRuntime(options);
     this.nodeCommand = runtime.command;
@@ -70,22 +71,36 @@ export class MemoryBridge {
       assertMemoryAction(action);
       if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('参数必须是对象');
       const actor = { kind: 'agent', sessionId };
-      const novelId = await this.boundNovel(sessionId);
-      if (!novelId) throw new Error('当前会话尚未绑定小说');
-      if (args.novelId && args.novelId !== novelId) throw new Error('不能访问其他小说');
+      const onDemandGuidance = action === 'guidance.read';
+      const novelId = onDemandGuidance
+        ? await this.boundNovelOptional(sessionId, args.novelId)
+        : await this.boundNovel(sessionId, args.novelId);
+      if (!onDemandGuidance && !novelId) throw new Error('当前会话尚未绑定小说');
+      if (args.novelId && novelId && args.novelId !== novelId) throw new Error('不能访问其他小说');
       // Never forward model-supplied session/actor identities.
       const { sessionId: _session, actor: _actor, ...safeArgs } = args;
-      const result = await this.dispatch(action, { ...safeArgs, novelId }, actor);
+      const result = await this.dispatch(action, { ...safeArgs, ...(novelId ? {novelId} : {}) }, actor);
       reply(200, { result });
     } catch (error) {
       reply(400, { error: error.message });
     }
   }
 
-  async boundNovel(sessionId) {
-    if (this.resolveNovel) return this.resolveNovel(sessionId);
+  async boundNovel(sessionId, requested) {
+    if (this.resolveNovel) return this.resolveNovel(sessionId, requested);
     const binding = await this.store.dispatch('binding.get', {}, { kind: 'agent', sessionId });
+    if (requested && binding?.novelId !== requested) throw new Error('不能访问其他小说');
     return binding?.novelId;
+  }
+
+  async boundNovelOptional(sessionId, requested) {
+    if (requested) return this.boundNovel(sessionId, requested);
+    if (this.resolveBinding) {
+      const binding = await this.resolveBinding(sessionId);
+      return binding?.activeNovelId || binding?.novelId || null;
+    }
+    const binding = await this.store.dispatch('binding.get', {}, { kind: 'agent', sessionId });
+    return binding?.activeNovelId || binding?.novelId || null;
   }
 
   async connection(sessionId) {

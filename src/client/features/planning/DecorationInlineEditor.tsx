@@ -1,13 +1,17 @@
 import React, {useRef, useState} from 'react';
 import {useDraft} from '../../shared/state.js';
+import {useCanvasPanel} from '../../shared/useCanvasPanel.ts';
 import type {Decoration,Point} from '../../../contracts/planning.ts';
 
-export function DecorationInlineEditor({initial,latest,point,scopeKey,busy,save,close}: {
+export function DecorationInlineEditor({initial,latest,point,scopeKey,busy,save,close,ensureVisible,screenPoint}: {
   initial:Decoration;latest?:Decoration;point:Point;scopeKey:string;busy:boolean;
   save:(value:Decoration,requestId:string)=>Promise<boolean|undefined>;close:()=>void;
+  ensureVisible?:(point:Point,width:number,height:number)=>void;
+  screenPoint:Point;
 }) {
   const {value,base,change,accept,cacheError}=useDraft(`${scopeKey}:decoration:${initial.id}`,initial);
   const [error,setError]=useState(''),request=useRef({payload:'',id:''});
+  const panel=useRef<HTMLFormElement>(null);useCanvasPanel(panel,point,ensureVisible);
   const field=(key:string,next:unknown)=>change((old:Decoration)=>({...old,[key]:next}));
   const submit=async()=>{
     if(busy)return;
@@ -16,7 +20,7 @@ export function DecorationInlineEditor({initial,latest,point,scopeKey,busy,save,
     if(await save(draft,request.current.id)){accept(value);close();}
     else setError('保存未完成，草稿已保留。');
   };
-  return <form className={`canvas-draft decoration-inline-editor draft-${value.kind}`} data-graph-editor="true" aria-label="编辑画布批注" style={{left:point.x,top:point.y}}
+  return <form ref={panel} className={`canvas-draft decoration-inline-editor draft-${value.kind}`} data-graph-editor="true" aria-label="编辑画布批注" style={{left:screenPoint.x,top:screenPoint.y}}
     onPointerDown={e=>e.stopPropagation()} onDoubleClick={e=>e.stopPropagation()} onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
     onSubmit={e=>{e.preventDefault();void submit();}}
     onKeyDown={e=>{if(e.nativeEvent.isComposing)return;if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();void submit();}}}>

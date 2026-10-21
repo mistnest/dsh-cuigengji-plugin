@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ChapterSync,mergeText} from '../src/client/features/chapters/sync.ts';
 import {groupHistory} from '../src/client/features/chapters/history.ts';
+import {draftKey,draftScope} from '../src/client/shared/drafts.js';
 const initial={id:'one',revision:1,contentHash:'h1',deleted:false,title:'第一章',content:'甲段。\n\n乙段。',volumeId:null,order:0};
 const cache=()=>{const map=new Map();return{getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};};
 function setup(t,custom={}){
@@ -9,6 +10,22 @@ function setup(t,custom={}){
  const sync=new ChapterSync({key:'chapter',initial:server,storage:cache(),read:async()=>server,write:async(value,base,id)=>{writes.push({value,base,id});if(base.revision!==server.revision)throw Object.assign(new Error('conflict'),{code:'CONFLICT'});server={...value,revision:server.revision+1,contentHash:'h'+(server.revision+1)};return server;},onSaved:()=>{},delay:60000,...custom});
  t.after(()=>sync.dispose());return{sync,writes,get:()=>server,set:v=>server=v};
 }
+
+test('same-ID chapters in two libraries keep separate queues and drafts; legacy drafts recover in only their original library',t=>{
+ const storage=cache(),entity='book:chapter:one',session='same-session';
+ const legacy={base:initial,value:{...initial,content:'旧作品库尚未保存的正文'}};
+ storage.setItem(draftKey(session,entity),JSON.stringify(legacy));
+ const keyA=draftKey(draftScope('D:/library-a',session),entity),keyB=draftKey(draftScope('D:/library-b',session),entity);
+ const a=setup(t,{key:keyA,storage}),b=setup(t,{key:keyB,storage});
+ assert.equal(a.sync.state.value.content,legacy.value.content);
+ assert.equal(b.sync.state.value.content,initial.content);
+ b.sync.change(v=>({...v,content:'第二个库独立的草稿'}));
+ assert.equal(a.sync.state.value.content,legacy.value.content);
+ assert.equal(JSON.parse(storage.getItem(keyB)).value.content,'第二个库独立的草稿');
+ const reopened=setup(t,{key:keyA,storage});
+ assert.equal(reopened.sync.state.value.content,legacy.value.content);
+ assert.equal(storage.getItem(draftKey(session,entity)),JSON.stringify(legacy));
+});
 test('clean editor follows remote updates without a confirmation',async t=>{
  const s=setup(t);s.set({...initial,content:'AI 新正文',revision:2});await s.sync.refresh();assert.equal(s.sync.state.value.content,'AI 新正文');assert.equal(s.sync.dirty,false);
 });

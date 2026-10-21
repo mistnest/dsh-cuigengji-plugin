@@ -6,6 +6,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { memoryRuntime } from '../src/adapters/mcp/client.js';
+import { createSessionPolicy } from '../src/application/bindings/session.js';
+import { readGuidance } from '../src/adapters/dsh/guidance.js';
 
 test('desktop child runs as Node without inheriting host credentials', () => {
   const runtime = {
@@ -89,6 +91,26 @@ test('bridge rejects unscoped HTTP calls and cancellation; disposal revokes conn
   await assert.rejects(bridge.call('session-a', 'graph.list'), /已关闭/);
 });
 
+test('MCP guidance can be read without a bound novel while preset reads stay session-scoped', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'cuigengji-guidance-mcp-'));
+  const store = new Store(directory);
+  const policy = createSessionPolicy({ store, audit: async () => {} });
+  const bridge = new MemoryBridge(store, {
+    dispatch: (action, args, actor) => action === 'guidance.read'
+      ? readGuidance({ store, actor, resolveBinding: policy.resolveBinding, section: args.section, novelId: args.novelId })
+      : policy.dispatch(action, args, actor),
+    resolveNovel: policy.resolveNovel,
+    resolveBinding: policy.resolveBinding,
+  });
+  t.after(async () => { await bridge.close(); await rm(directory, { recursive: true, force: true }); });
+  const core = await bridge.call('unbound-guidance', 'guidance.read', { section: 'core' });
+  assert.equal(core.novelId, null);
+  assert.equal(core.modules.length, 1);
+  const preset = await bridge.call('unbound-guidance', 'guidance.read', { section: 'preset' });
+  assert.equal(preset.preset.unavailable, true);
+  assert.match(preset.preset.reason, /尚未选择作品/);
+});
+
 test('real persistent store CRUD over MCP preserves revision conflicts and delete confirmation', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'cuigengji-mcp-'));
   const store = new Store(directory);
@@ -104,6 +126,11 @@ test('real persistent store CRUD over MCP preserves revision conflicts and delet
     nodeId: node.id, expectedRevision: node.revision, summary: '发现都市传说的人',
   });
   assert.equal(updated.revision, node.revision + 1);
+  const versions=await bridge.call('real-session','graph.history',{nodeId:node.id});
+  assert.deepEqual(versions.map(v=>v.revision),[1,2]);
+  assert.ok(versions.every(v=>!('content' in v)));
+  await assert.rejects(bridge.call('real-session','graph.history',{nodeId:node.id,includeContent:true}),/revision/);
+  assert.deepEqual((await bridge.call('real-session','graph.history',{nodeId:node.id,revision:1,includeContent:true})).map(v=>v.content),['正文设定']);
   const edge = await bridge.call('real-session', 'edge.create', {
     from: node.id, to: node.id, name: '自省',
   });

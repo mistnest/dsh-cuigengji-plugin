@@ -1,3 +1,4 @@
+import {selectSettingsCategory} from './helpers/navigation.mjs';
 import {spawn} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
@@ -23,6 +24,9 @@ try {
   const drawer=page.getByRole('dialog',{name:'章节目录抽屉'}),close=page.getByRole('button',{name:'关闭章节目录',exact:true});
   await expect(drawer).toBeVisible();
   const reopen=async()=>{await page.getByRole('button',{name:/^(打开目录|‹ 目录)$/}).click();await expect(drawer).toBeVisible();};
+  // Closing an unselected directory must survive navigation and a cold reload.
+  await close.click();await page.getByRole('button',{name:'规划',exact:true}).click();await page.getByRole('button',{name:'正文',exact:true}).click();await expect(drawer).toHaveCount(0);
+  await page.reload();await expect(page.getByRole('button',{name:'打开目录',exact:true})).toBeVisible();await expect(drawer).toHaveCount(0);await reopen();
   for(const width of [360,590,750]) {
     await page.setViewportSize({width,height:780});
     for(const [fx,fy] of [[.1,.1],[.9,.1],[.1,.9],[.9,.9],[.5,.5]]) {
@@ -65,14 +69,29 @@ try {
   await page.setViewportSize({width:1100,height:820});
   await page.locator('.chapter-item').first().click();
   await page.getByRole('button',{name:'收起章节目录',exact:true}).click();
+  const workspace=page.locator('.chapter-workspace');
+  const expectCollapsed=async()=>{await expect(workspace).toHaveClass(/directory-collapsed/);await expect(page.getByRole('button',{name:'展开章节目录',exact:true})).toBeVisible();};
+  await page.getByRole('button',{name:'规划',exact:true}).click();await page.getByRole('button',{name:'正文',exact:true}).click();await expectCollapsed();
+  await page.getByRole('button',{name:'设定',exact:true}).click();await page.getByRole('button',{name:'正文',exact:true}).click();await expectCollapsed();
+  await page.getByRole('button',{name:'设置',exact:true}).click();await selectSettingsCategory(page,'AI与写作');await page.getByRole('button',{name:'写作预设',exact:true}).click();await page.getByRole('button',{name:'‹ 返回设置',exact:true}).click();await page.getByRole('button',{name:'关闭设置',exact:true}).click();await expectCollapsed();
+  await page.getByRole('button',{name:'刷新当前页面',exact:true}).click();await expectCollapsed();
+  await page.reload();await expectCollapsed();
+  await page.getByRole('button',{name:'作品首页',exact:true}).click();await page.locator('.welcome-book').filter({hasText:'催更姬 · 试用作品'}).click();await expectCollapsed();
+  await page.setViewportSize({width:390,height:780});await expect(drawer).toHaveCount(0);await reopen();await close.click();
+  await page.getByRole('button',{name:'设置',exact:true}).click();await expect(page.getByRole('dialog',{name:'设置',exact:true}).getByRole('button',{name:'多agent协作',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'关闭设置',exact:true}).click();await expect(drawer).toHaveCount(0);
+  await page.getByRole('button',{name:'规划',exact:true}).click();await page.getByRole('button',{name:'正文',exact:true}).click();await expect(drawer).toHaveCount(0);
+  await page.setViewportSize({width:1100,height:820});await expectCollapsed();
   await page.getByRole('button',{name:'展开章节目录',exact:true}).click();
+  await page.getByRole('button',{name:'规划',exact:true}).click();await page.getByRole('button',{name:'正文',exact:true}).click();await expect(workspace).not.toHaveClass(/directory-collapsed/);
+  // The reload above also clears this fixture's injected host theme.
+  await page.evaluate(()=>{document.documentElement.style.cssText='--dsw-alias-bg-base:#17191f;--dsw-alias-label-primary:#e8eaf0;--dsw-alias-label-secondary:#a1a6b3;--dsw-alias-border-l1:#343946;--dsw-alias-state-business-primary:#6c8aff;';});
   await page.getByRole('button',{name:'规划',exact:true}).click();
-  await expect(page.getByRole('combobox',{name:'规划页面',exact:true})).toBeVisible();
+  await expect(page.getByLabel('规划画布',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'＋ 情节',exact:true})).toHaveCSS('background-color','rgb(108, 138, 255)');
   await page.screenshot({path:join(shots,'planning-dark.png')});
   await page.evaluate(()=>{document.documentElement.style.cssText='';});
   await expect(page.getByRole('button',{name:'＋ 情节',exact:true})).toHaveCSS('background-color','rgb(77, 107, 254)');
   await page.screenshot({path:join(shots,'planning-light.png')});
   expect(errors).toEqual([]);
-  console.log(JSON.stringify({ok:true,checks:['drawer corners/center hit at 360/590/750px','close remains fixed while directory scrolls','Enter, Escape, backdrop and focus return','inside-to-outside drag does not dismiss','embedded DSH pane: top/center/bottom hit coordinates','desktop collapse, blue fallback and host dark accent']}));
+  console.log(JSON.stringify({ok:true,checks:['drawer corners/center hit at 360/590/750px','close remains fixed while directory scrolls','Enter, Escape, backdrop and focus return','inside-to-outside drag does not dismiss','embedded DSH pane: top/center/bottom hit coordinates','closed drawer and desktop collapse survive navigation/preset/home/refresh/reload; explicit expansion stays open','desktop collapse, blue fallback and host dark accent']}));
 } finally {await browser?.close();preview.kill();}

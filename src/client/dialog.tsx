@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useText } from './locale.js';
 
-interface DialogAPI { ask(label: string, value?: string): Promise<string | null>; confirm(label: string): Promise<boolean> }
+interface DialogAPI { ask(label: string, value?: string): Promise<string | null>; confirm(label: string): Promise<boolean>;dismiss():void }
 interface DialogState { kind: 'prompt' | 'confirm'; label: string; value: string }
 const DialogContext = createContext<DialogAPI | null>(null);
 export const useDialog = () => { const value = useContext(DialogContext); if (!value) throw new Error('DialogProvider is required'); return value; };
@@ -29,7 +29,7 @@ export function DialogProvider({ children }: {children: React.ReactNode}) {
   useEffect(() => {
     if (dialog && element.current && !element.current.open) element.current.showModal();
   }, [dialog]);
-  return <DialogContext.Provider value={{ ask: (label, value = '') => request('prompt', label, value) as Promise<string | null>, confirm: label => request('confirm', label) as Promise<boolean> }}>
+  return <DialogContext.Provider value={{ ask: (label, value = '') => request('prompt', label, value) as Promise<string | null>, confirm: label => request('confirm', label) as Promise<boolean>,dismiss:()=>{if(pending.current)finish(pending.current.kind==='prompt'?null:false);} }}>
     {children}
     {dialog && <dialog ref={element} className="cuigengji cuigengji-dialog" aria-label={dialog.label}
       onCancel={event => { event.preventDefault(); finish(dialog.kind === 'prompt' ? null : false); }}>

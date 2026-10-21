@@ -1,6 +1,9 @@
 import { ensurePlanning } from "../../domain/planning/model.js";
 import { previewTavern } from "../../infrastructure/migrations/tavern.js";
 import { active, copy, fail, hash, checkSelection, own } from "./model.js";
+import { portableNovel } from "../../domain/collaboration/legacy.js";
+import { directoryKey } from "../../domain/directory/order.js";
+import { groupDescendants, groupTrail } from "../../domain/directory/groups.js";
 const pick = (map, ids) => Object.fromEntries([...ids].map((id) => [id, copy(map[id])]));
 const required = (map, ids, label) => {
   for (const id of ids) if (id !== null && !own(map, id)) fail(`${label}\u5DF2\u4E0D\u5B58\u5728\uFF0C\u8BF7\u91CD\u65B0\u9009\u62E9`);
@@ -11,7 +14,8 @@ function selectProjects(source, selection) {
   if (selection.kind === "works") {
     const ids = selection.novelIds ?? source.map((n2) => n2.id);
     if (!ids.length) fail("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u90E8\u4F5C\u54C1");
-    const projects = ids.map((id) => copy(source.find((n2) => n2.id === id) ?? fail("\u6240\u9009\u4F5C\u54C1\u5DF2\u4E0D\u5B58\u5728")));
+    const state = { novels: Object.fromEntries(source.map((n2) => [n2.id, n2])) };
+    const projects = ids.map((id) => portableNovel(state, source.find((n2) => n2.id === id) ?? fail("\u6240\u9009\u4F5C\u54C1\u5DF2\u4E0D\u5B58\u5728")));
     return { projects, warnings: [], dependencies: [] };
   }
   const original = source.find((n2) => n2.id === selection.novelId) ?? fail("\u8BF7\u9009\u62E9\u4E00\u90E8\u4F5C\u54C1");
@@ -29,15 +33,20 @@ function selectProjects(source, selection) {
     }
     if (selection.chapterIds === void 0 && selection.volumeIds === void 0) for (const c of active(n.chapters)) chapters.add(c.id);
   } else if (selection.kind === "memory") {
+    if (selection.pageIds !== void 0) {
+      required(n.memoryPages || {}, selection.pageIds, "\u8BBE\u5B9A\u753B\u5E03");
+      for (const m of active(n.nodes)) if (selection.pageIds.includes(m.pageId ?? null)) nodes.add(m.id);
+    }
     if (selection.nodeIds !== void 0) {
       required(n.nodes, selection.nodeIds, "\u8BBE\u5B9A");
       for (const id of selection.nodeIds) if (!n.nodes[id].deleted) nodes.add(id);
     }
     if (selection.groupIds !== void 0) {
       required(n.memoryGroups || {}, selection.groupIds, "\u8BBE\u5B9A\u5206\u7EC4");
-      for (const m of active(n.nodes)) if (selection.groupIds.includes(m.groupId ?? null)) nodes.add(m.id);
+      const ids = new Set(selection.groupIds.flatMap((id) => id ? [...groupDescendants(Object.values(n.memoryGroups || {}), id)] : [null]));
+      for (const m of active(n.nodes)) if (ids.has(m.groupId ?? null)) nodes.add(m.id);
     }
-    if (selection.nodeIds === void 0 && selection.groupIds === void 0) for (const m of active(n.nodes)) nodes.add(m.id);
+    if (selection.nodeIds === void 0 && selection.groupIds === void 0 && selection.pageIds === void 0) for (const m of active(n.nodes)) nodes.add(m.id);
     if (selection.memoryType) {
       for (const id of nodes) if (selection.memoryType === "world_entry" ? n.nodes[id].type === "character_card" : n.nodes[id].type !== "character_card") nodes.delete(id);
     }
@@ -52,7 +61,7 @@ function selectProjects(source, selection) {
     for (const b of active(board.nodes)) if (pages.has(b.pageId ?? null)) beats.add(b.id);
     for (const d of active(board.decorations)) if (pages.has(d.pageId ?? null)) decorations.add(d.id);
   } else if (!n.preset) fail("\u8FD9\u90E8\u4F5C\u54C1\u8FD8\u6CA1\u6709\u5199\u4F5C\u9884\u8BBE");
-  if (selection.kind === "chapters" && !chapters.size || selection.kind === "memory" && !nodes.size || selection.kind === "planning" && !pages.size) fail("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u9879\u5185\u5BB9");
+  if (selection.kind === "chapters" && !chapters.size || selection.kind === "memory" && !nodes.size && !selection.pageIds?.length && !selection.groupIds?.length || selection.kind === "planning" && !pages.size) fail("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u9879\u5185\u5BB9");
   const initialChapters = new Set(chapters), initialNodes = new Set(nodes);
   if (selection.includeDependencies) {
     for (const id of beats) {
@@ -74,10 +83,12 @@ function selectProjects(source, selection) {
   const warnings = [], dependencies = [];
   for (const id of chapters) if (!initialChapters.has(id)) dependencies.push({ kind: "\u6B63\u6587", title: n.chapters[id].title });
   for (const id of nodes) if (!initialNodes.has(id)) dependencies.push({ kind: "\u8BBE\u5B9A", title: n.nodes[id].name });
-  const result = { ...copy(n), volumes: {}, chapters: pick(n.chapters, chapters), nodes: pick(n.nodes, nodes), edges: {}, memoryGroups: {}, plan: null };
+  const result = { ...copy(n), volumes: {}, chapters: pick(n.chapters, chapters), nodes: pick(n.nodes, nodes), edges: {}, memoryGroups: {}, memoryPages: {}, plan: null };
   delete result.planning;
   delete result.preset;
   delete result.tavernSources;
+  delete result.collaboration;
+  delete result.collaborationProgress;
   const volumes = /* @__PURE__ */ new Set();
   for (const ch of Object.values(result.chapters)) {
     if (ch.volumeId) volumes.add(ch.volumeId);
@@ -99,6 +110,18 @@ function selectProjects(source, selection) {
     }
     if ("groupId" in m && m.groupId && n.memoryGroups?.[m.groupId]) result.memoryGroups[m.groupId] = copy(n.memoryGroups[m.groupId]);
   }
+  for (const m of Object.values(result.nodes)) for (const v of m.versions || []) {
+    const missing = v.sources.some((ref) => !chapters.has(ref.chapterId)) || v.dependsOn.some((id) => !nodes.has(id)) || v.knownBy.some((id) => own(n.nodes, id) && !nodes.has(id));
+    v.sources = v.sources.filter((ref) => chapters.has(ref.chapterId));
+    v.dependsOn = v.dependsOn.filter((id) => nodes.has(id));
+    v.knownBy = v.knownBy.filter((id) => !own(n.nodes, id) || nodes.has(id));
+    if (v.groupId && n.memoryGroups?.[v.groupId]) result.memoryGroups[v.groupId] = copy(n.memoryGroups[v.groupId]);
+    else v.groupId = null;
+    if (missing) {
+      v.status = "unconfirmed";
+      v.factType = "unconfirmed";
+    }
+  }
   const retainedSources = /* @__PURE__ */ new Set();
   for (const [fingerprint, original2] of Object.entries(n.tavernSources || {})) {
     const members = Object.values(result.nodes).filter((m) => m.tavern?.fingerprint === fingerprint);
@@ -116,8 +139,20 @@ function selectProjects(source, selection) {
   }
   for (const m of Object.values(result.nodes)) if (m.tavern && !retainedSources.has(m.tavern.fingerprint)) delete m.tavern;
   if (selection.kind === "memory") {
-    for (const id of selection.groupIds || []) if (id && n.memoryGroups?.[id]) result.memoryGroups[id] = copy(n.memoryGroups[id]);
+    for (const id of selection.groupIds || []) if (id) {
+      for (const child of groupDescendants(Object.values(n.memoryGroups || {}), id)) if (n.memoryGroups?.[child]) result.memoryGroups[child] = copy(n.memoryGroups[child]);
+    }
   }
+  if (selection.kind === "memory" && selection.nodeIds === void 0 && selection.groupIds === void 0 && selection.pageIds === void 0) result.memoryGroups = copy(n.memoryGroups || {});
+  if (selection.kind === "memory" && selection.pageIds) {
+    for (const id of selection.pageIds) if (id && n.memoryPages?.[id]) result.memoryPages[id] = copy(n.memoryPages[id]);
+  }
+  if (selection.kind === "memory" && selection.pageIds) {
+    for (const group of Object.values(n.memoryGroups || {})) if (selection.pageIds.includes(group.pageId ?? null)) result.memoryGroups[group.id] = copy(group);
+  }
+  for (const group of Object.values(result.memoryGroups || {})) for (const ancestor of groupTrail(Object.values(n.memoryGroups || {}), group.id)) result.memoryGroups[ancestor.id] = copy(ancestor);
+  for (const item of [...Object.values(result.nodes), ...Object.values(result.memoryGroups || {}), ...Object.values(result.nodes).flatMap((m) => m.versions || [])]) if (item.pageId && n.memoryPages?.[item.pageId]) result.memoryPages[item.pageId] = copy(n.memoryPages[item.pageId]);
+  if (result.memoryPageFolders) result.memoryPageFolders = Object.fromEntries(Object.entries(result.memoryPageFolders).filter(([, groupId]) => own(result.memoryGroups, groupId)));
   if (selection.kind === "planning") {
     result.transferScope = { mainPage: pages.has(null) };
     result.planning = {
@@ -127,7 +162,7 @@ function selectProjects(source, selection) {
       nodes: pick(board.nodes, beats),
       edges: {},
       pages: pick(board.pages || {}, new Set([...pages].filter((id) => id !== null))),
-      groups: {},
+      groups: Object.fromEntries(Object.values(board.groups).filter((g) => !g.deleted && pages.has(g.pageId ?? null)).map((g) => [g.id, copy(g)])),
       decorations: pick(board.decorations || {}, decorations)
     };
     for (const e of active(board.edges)) if (beats.has(e.from) && beats.has(e.to)) result.planning.edges[e.id] = copy(e);
@@ -144,8 +179,17 @@ function selectProjects(source, selection) {
       if (b.groupId && board.groups[b.groupId]) result.planning.groups[b.groupId] = copy(board.groups[b.groupId]);
       delete b.lastSequence;
     }
+    for (const group of Object.values(result.planning.groups)) for (const ancestor of groupTrail(Object.values(board.groups), group.id)) result.planning.groups[ancestor.id] = copy(ancestor);
   }
   if (selection.kind === "preset") result.preset = copy(n.preset);
+  if (result.directoryOrder) {
+    result.directoryOrder = Object.fromEntries(Object.entries(result.directoryOrder).flatMap(([key, order]) => {
+      if (key === "graph" || key.startsWith("graph:")) return [[key, order.filter((id) => own(result.nodes, id))]];
+      const pageId = key.slice("planning:".length) || null;
+      if (!result.planning || pageId && !own(result.planning.pages, pageId) || !pageId && result.transferScope?.mainPage === false) return [];
+      return [[directoryKey("planning", pageId), order.filter((id) => own(result.planning.nodes, id))]];
+    }));
+  }
   if (detached) warnings.push(`\u672A\u643A\u5E26\u7684 ${detached} \u9879\u6B63\u6587\u6216\u8BBE\u5B9A\u5F15\u7528\u4F1A\u79FB\u9664\uFF1B\u76F8\u5173\u8BBE\u5B9A\u9700\u91CD\u65B0\u786E\u8BA4\u3002`);
   return { projects: [result], warnings, dependencies };
 }

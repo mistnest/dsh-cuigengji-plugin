@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium,expect} from '@playwright/test';
+import {selectSettingsCategory} from '../tests/helpers/navigation.mjs';
 
 const argv=process.argv.slice(2),arg=name=>argv[argv.indexOf(name)+1];
 assert.ok(argv.includes('--desktop-exe')&&argv.includes('--package'),'--desktop-exe <exe> --package <tgz> [--report <json>]');
@@ -23,18 +24,20 @@ try {
   await mkdir(profile,{recursive:true});
   await writeFile(join(profile,'package.json'),JSON.stringify({name:'isolated-host-compatibility',private:true,dsh:{profile:{bundles:['@deepseek-ai/dsh-base','@deepseek-ai/dsh-web-app']}}}));
   const installed=spawnSync(exe,['--expose-internals',fileURLToPath(new URL('./desktop-package-operation.mjs',import.meta.url)),JSON.stringify({
-    context:{profile:'compatibility',dir:profile,cwd:root,home},args:['add',archive],options:{execution:'service',outputBytes:5000,activateNewBundles:true,idleTimeoutMs:120000,lookupTimeoutMs:20000,lockWaitMs:10000},
+    context:{profile:'compatibility',dir:profile,cwd:root,home},args:['add',archive,...(argv.includes('--registry')?['--registry='+arg('--registry')]:[])],options:{execution:'service',outputBytes:5000,activateNewBundles:true,idleTimeoutMs:120000,lookupTimeoutMs:20000,lockWaitMs:10000},
   })],{env,encoding:'utf8',windowsHide:true,timeout:240000});
   assert.equal(installed.status,0,installed.stderr||installed.stdout||installed.error?.message);
   const installation=JSON.parse(installed.stdout.trim().split(/\r?\n/).at(-1));
   assert.equal(installation.exitCode,0,installation.output);report.dshVersion=installation.runtimeVersion;
+  const metadata=spawnSync(exe,['--expose-internals',fileURLToPath(new URL('./check-installed-metadata.mjs',import.meta.url)),profile],{env,encoding:'utf8',windowsHide:true,timeout:30000});
+  assert.equal(metadata.status,0,metadata.stderr||metadata.stdout);report.metadata=JSON.parse(metadata.stdout.trim());
   const probe=join(root,'probe.mjs');
   await mkdir(join(root,'writing-workspace'));
   await writeFile(probe,`export const inject=['connection','cuigengji','tools','skills','workspaceRegistry'];
 export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cuigengji-probe',methods:['POST'],requestBody:'buffered',fetch:async request=>{
   const {sessionId,name,action,args}=await request.json();
   if(name==='fixture-workspace')return Response.json({id:(await ctx.workspaceRegistry.create(args.path,'兼容验收')).id});
-  const tools=['cuigengji_project','cuigengji_plan','cuigengji_memory','cuigengji_context','cuigengji_maintenance'];
+  const tools=['cuigengji_project','cuigengji_plan','cuigengji_memory','cuigengji_context','cuigengji_guidance','cuigengji_maintenance'];
   for(const tool of tools)if(!ctx.tools.get(tool))throw new Error('Missing tool '+tool);
   const skills=(await ctx.skills.list()).filter(skill=>skill.name.startsWith('cuigengji-')).map(skill=>skill.name);
   const result=await ctx.tools.get(name).execute({action,args},{agent:{id:sessionId},callId:crypto.randomUUID(),signal:request.signal});
@@ -54,6 +57,7 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
   page.on('request',request=>{if(request.url().endsWith('/api/cuigengji/dispatch')){const payload=request.postDataJSON()?.payload;if(payload?.sessionId)sessionId=payload.sessionId;}});
   page.on('response',response=>{if(response.url().endsWith('/api/cuigengji/dispatch')&&response.status()!==200)failedRpc.push(response.status());});
   await page.goto(url);const launcher=page.getByRole('button',{name:'打开催更姬',exact:true});await expect(launcher).toBeVisible();
+  await expect(launcher.locator('img.cg-launcher-icon')).toHaveJSProperty('naturalWidth',192);
   // DSH's first-run preview notice and optional login prompt, without credentials.
   const next=page.getByRole('button',{name:'继续',exact:true});await next.waitFor({state:'visible',timeout:2500}).catch(()=>{});if(await next.isVisible())await next.click();
   const onboarding=page.getByText('开始使用',{exact:true});await onboarding.waitFor({state:'visible',timeout:2500}).catch(()=>{});
@@ -73,23 +77,46 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
       return {status:response.status,result:(await response.json()).result};
     },{action,args,sessionId});assert.equal(result.status,200);assert.equal(result.result.ok,true,JSON.stringify(result));return result.result.value;
   };
-  const novelId=(await rpc('binding.get')).novelId;
+  assert.equal(await rpc('binding.get'),null,'browsing and creating a work must not bind the conversation');
+  const novelId=(await rpc('novel.list')).find(book=>book.title==='雾港 · 新宿主兼容验收').id;
   const chapter=await rpc('chapter.create',{novelId,title:'第一章 兼容验收',content:'　　雨停以后，灯还亮着。'});
   await rpc('graph.create',{novelId,type:'character_card',name:'林岚',summary:'雾港守夜人',content:'她在雨夜寻找失踪的信使。'});
+  await rpc('graph.create',{novelId,type:'world_entry',name:'雾港街区',summary:'逐行编辑验收',content:''});
   await rpc('planning.apply',{novelId,requestId:crypto.randomUUID(),operations:[{op:'node.create',value:{title:'灯塔来信',summary:'在码头发现新线索',content:'两条行动线索在灯塔会合。',position:{x:200,y:200}}}]});
   await workbench.getByRole('complementary',{name:'章节目录',exact:true}).getByText('第一章 兼容验收',{exact:true}).click();const prose=workbench.getByRole('textbox',{name:'正文',exact:true});await expect(prose).toHaveValue('　　雨停以后，灯还亮着。');
   const edited='　　雨停以后，灯还亮着。\n\n　　门外传来脚步声。';await prose.fill(edited);await expect.poll(async()=>(await rpc('chapter.get',{novelId,chapterId:chapter.id})).content).toBe(edited);
   report.checks.push('sidebar entry, first work, manuscript read/edit/autosave');
-  await workbench.getByRole('button',{name:'规划',exact:true}).click();await expect(workbench.getByText('灯塔来信',{exact:true})).toBeVisible();
-  await workbench.getByRole('button',{name:'设定',exact:true}).click();await expect(workbench.getByText('林岚',{exact:true})).toBeVisible();
-  await workbench.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'写作预设',exact:true}).click();await expect(workbench.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'作品首页',exact:true}).click();await workbench.getByRole('button',{name:'导入 / 导出',exact:true}).click();await expect(workbench.getByRole('heading',{name:'导入 / 导出',exact:true})).toBeVisible();
+  await workbench.getByRole('button',{name:'规划',exact:true}).click();await expect(workbench.getByRole('button',{name:'灯塔来信',exact:true})).toBeVisible();
+  await workbench.getByRole('button',{name:'设定',exact:true}).click();await expect(workbench.getByRole('button',{name:'林岚',exact:true})).toBeVisible();
+  for(const name of ['林岚','雾港街区']) {
+    await workbench.locator('.planning-card .planning-title').filter({hasText:name}).dblclick();
+    await workbench.getByRole('button',{name:'编辑',exact:true}).click();
+    const editor=workbench.getByRole('textbox',{name:'全文',exact:true});await editor.fill('');await editor.click();
+    let body='',previousTop=0;
+    for(let line=1;line<=65;line++) {
+      const text=`第${String(line).padStart(2,'0')}行记录`;
+      await page.keyboard.insertText(text);await page.keyboard.press('Enter');body+=text+'\n';
+      if(line===20)await page.waitForTimeout(5200); // Polling must not disturb a live draft.
+      const position=await editor.evaluate(element=>({start:element.selectionStart,end:element.selectionEnd,innerTop:element.scrollTop,top:element.closest('.detail-scroll').scrollTop,clipped:element.scrollHeight-element.clientHeight}));
+      assert.equal(position.start,body.length,`${name} line ${line}: caret`);assert.equal(position.end,body.length);
+      assert.ok(position.clipped<=1,`${name} line ${line}: clipped text`);assert.equal(position.innerTop,0);
+      assert.ok(position.top>=previousTop-1,`${name} line ${line}: upward scroll jump`);previousTop=position.top;
+    }
+    await expect(editor).toHaveValue(body);await workbench.getByRole('button',{name:'保存设定',exact:true}).click();
+    await expect(workbench.getByRole('button',{name:'编辑',exact:true})).toBeVisible();
+    const node=(await rpc('graph.list',{novelId})).find(node=>node.name===name);assert.equal((await rpc('graph.get',{novelId,nodeId:node.id})).content,body);
+    await workbench.getByRole('button',{name:'‹ 返回设定',exact:true}).click();
+  }
+  report.checks.push('real DSH character/world editors: 65 Enter lines, background polling, caret/scroll and saved content');
+  await workbench.getByRole('button',{name:'设置',exact:true}).click();await selectSettingsCategory(page,'AI与写作');await page.getByRole('button',{name:'写作预设',exact:true}).click();await expect(workbench.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'作品首页',exact:true}).click();await workbench.getByRole('button',{name:'导出《雾港 · 新宿主兼容验收》',exact:true}).click();await expect(workbench.getByRole('heading',{name:'导入 / 导出',exact:true})).toBeVisible();await expect(workbench.getByRole('button',{name:'下载文件',exact:true})).toBeEnabled();
   report.checks.push('planning canvas, character/world settings, presets, transfer');
   const probeTool=async(name,action,args={})=>{
     const response=await page.request.post(new URL('/api/isolated-cuigengji-probe',url).href,{headers:{origin:new URL(url).origin},data:{sessionId,name,action,args}});assert.equal(response.status(),200);return response.json();
   };
+  await probeTool('cuigengji_project','novel.focus',{novelId});
   const handoff=await probeTool('cuigengji_project','novel.handoff');assert.equal(handoff.result.novel.id,novelId);assert.equal(handoff.skills.length,6);
-  const memory=await probeTool('cuigengji_memory','graph.list');assert.equal(memory.result[0].name,'林岚');
+  const memory=await probeTool('cuigengji_memory','graph.list');assert.ok(memory.result.some(node=>node.name==='林岚'));
   const planning=await probeTool('cuigengji_plan','planning.list');assert.equal(planning.result.items[0].title,'灯塔来信');
   const maintenance=await probeTool('cuigengji_maintenance','verify',{expectedVersion:manifest.version,expectedNovelIds:[novelId]});assert.equal(maintenance.result.verified,true);
   report.checks.push('real host tool and Skill registries, handoff, MCP, planning, integrity');

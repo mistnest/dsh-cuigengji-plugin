@@ -19,6 +19,10 @@ export const navigationStyles = `
 .cuigengji .preference-action strong {display:block;font-size:14px;font-weight:500;}
 .cuigengji .preference-action small {display:block;font-size:11px;color:var(--cg-muted);margin-top:5px;line-height:1.8;}
 .cuigengji .preference-action>span:last-child {color:var(--cg-muted);font-size:18px;}
+.cuigengji .preference-action+.preference-action {margin-top:10px;}
+.cuigengji .pet-settings-tools {display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0 18px;}
+.cuigengji .pet-settings-tools button {font-size:11px;border:0;background:none;color:var(--cg-accent);padding:4px 0;}
+.cuigengji .pet-settings-tools small {font-size:10px;color:var(--cg-muted);}
 .cuigengji .module-toolbar .module-select {border:0;background:none;color:var(--cg-muted);font-size:12px;padding:6px 8px;}
 .cuigengji .module-add {display:flex;align-items:stretch;gap:1px;}
 .cuigengji .module-add>button {border-radius:8px 0 0 8px;}
@@ -48,7 +52,7 @@ export const navigationStyles = `
 .cuigengji .prose-display label:last-child {margin-bottom:0;}
 .cuigengji .prose-display select {width:100%;color:var(--cg-ink);}
 .cuigengji .chapter-toolbar>.prose-display {margin-left:auto;}
-.cuigengji .canvas-selection-tools {position:absolute;top:12px;left:12px;z-index:5;display:flex;align-items:center;gap:4px;flex-wrap:wrap;max-width:calc(100% - 24px);padding:5px 7px;border:1px solid var(--cg-line);border-radius:10px;background:var(--cg-paper);box-shadow:0 4px 16px color-mix(in srgb,var(--cg-ink) 7%,transparent);}
+.cuigengji .canvas-selection-tools {display:flex;align-items:center;gap:4px;flex-wrap:wrap;max-width:100%;padding:5px 7px;border:1px solid var(--cg-line);border-radius:10px;background:var(--cg-paper);box-shadow:0 4px 16px color-mix(in srgb,var(--cg-ink) 7%,transparent);pointer-events:auto;}
 .cuigengji .canvas-selection-tools>span {font-size:11px;color:var(--cg-muted);padding:0 7px;white-space:nowrap;}
 .cuigengji .canvas-selection-tools button,.cuigengji .canvas-selection-tools .menu>summary {border:0;background:none;min-height:30px;padding:5px 8px;font-size:11px;white-space:nowrap;}
 .cuigengji .canvas-selection-tools .selection-clear {font-size:17px;padding-inline:7px;color:var(--cg-muted);}
@@ -68,6 +72,18 @@ export const navigationStyles = `
  .cuigengji .navigation-book {display:none;}
  .cuigengji .navigation-actions {gap:6px;}
  .cuigengji .module-toolbar .toolbar-spacer {display:none;}
+}
+@container(max-width:599px) {
+ .cuigengji .navigation-actions .navigation-action>span {display:none;}
+}
+@container(min-width:560px) and (max-width:759px) {
+ .cuigengji .workbench-header.workbench-navigation {grid-template-columns:minmax(0,1fr) auto auto;gap:8px;min-height:56px;}
+ .cuigengji .workbench-navigation .navigation-tabs {grid-column:2;grid-row:1;width:auto;margin:0;}
+ .cuigengji .navigation-tabs button {min-width:44px;padding:10px 7px;}
+ .cuigengji .navigation-actions {grid-column:3;grid-row:1;}
+ .cuigengji .navigation-actions .navigation-action>span {display:none;}
+ .cuigengji .navigation-origin {gap:8px;}
+ .cuigengji .navigation-book {max-width:130px;}
 }
 @media(prefers-reduced-motion:reduce) {.cuigengji .is-refreshing .app-icon {animation:none;}}
 .cuigengji[data-motion=reduce] .is-refreshing .app-icon {animation:none;}

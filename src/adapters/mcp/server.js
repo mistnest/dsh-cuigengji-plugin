@@ -2,6 +2,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { MEMORY_ACTIONS, toolName } from './actions.js';
+import { memoryArgsSchema, memoryActionDescription } from '../dsh/memory-schema.js';
 
 // This process owns no project files. Its capability is one session-bound token.
 const endpoint = process.env.CUIGENGJI_MEMORY_ENDPOINT;
@@ -16,8 +17,12 @@ const server = new Server({ name: 'cuigengji-memory', version: '0.1.0' }, { capa
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: MEMORY_ACTIONS.map(action => ({
     name: toolName(action),
-    description: `当前小说记忆操作 ${action}。小说由会话绑定；修改须携带读取到的版本。`,
-    inputSchema: { type: 'object', additionalProperties: true },
+    description: action === 'guidance.read'
+      ? '按需读取催更姬的写作指引模块，填写 section。基础规则不要求绑定作品；preset/all 会附带目标作品的有效预设，未选作品时注明预设不可用，规则仍可读取。参考文件相对返回的 resourceBase。'
+      : memoryActionDescription(action),
+    inputSchema: action.startsWith('graph.')||action.startsWith('edge.') ? memoryArgsSchema
+      : action==='guidance.read' ? {type:'object',additionalProperties:true,properties:{section:{type:'string',enum:['core','project','write','plan','memory','revise','preset','all']},novelId:{type:'string'}}}
+      : { type: 'object', additionalProperties: true },
   })),
 }));
 server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {

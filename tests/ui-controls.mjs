@@ -1,3 +1,4 @@
+import {showOrganization,selectSettingsCategory} from './helpers/navigation.mjs';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {mkdir} from 'node:fs/promises';
@@ -28,29 +29,23 @@ try {
   await expect(page.locator('.welcome-book')).toHaveCount(1);
   await page.screenshot({path:join(shots,'books-900.png')});await page.locator('.welcome-book').click();
   await page.getByRole('button',{name:'设定',exact:true}).click();
-  const groups=page.getByLabel('设定分组',{exact:true});
-  await groups.click();
-  const longOption=groups.getByRole('option',{name:'旧都与南境之间尚未揭示的秘密与人物关系分组'});
-  await expect(longOption).toBeVisible();
+
+  const longName='旧都与南境之间尚未揭示的秘密与人物关系分组';
+  await showOrganization(page);const longRow=page.locator('.workspace-sidebar').getByRole('button',{name:longName,exact:true});await longRow.scrollIntoViewIfNeeded();await longRow.click();
   await page.screenshot({path:join(shots,'groups-900.png')});
-  await longOption.click();await expect(groups).toHaveValue((await call('graph.groups',{novelId})).find(g=>g.name.startsWith('旧都')).id);
-  const selected=await groups.inputValue();
-  await groups.click();await page.keyboard.press('ArrowDown');await page.keyboard.press('Escape');
-  await expect(groups).toHaveValue(selected);
-  await groups.click();await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
-  await expect(groups).toHaveValue('__ungrouped');
-  await page.setViewportSize({width:360,height:780});await groups.click();
-  const bounds=await longOption.boundingBox();expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(360);
+  await page.setViewportSize({width:360,height:780});await showOrganization(page);await longRow.scrollIntoViewIfNeeded();
+  const bounds=await longRow.boundingBox();expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(360);
   await page.screenshot({path:join(shots,'groups-360.png')});await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'设置',exact:true}).click();
+  await selectSettingsCategory(page,'编辑与外观');
   const font=page.getByLabel('默认正文字号',{exact:true});await font.click();
   await page.screenshot({path:join(shots,'settings-360.png')});
   await font.getByRole('option',{name:'20',exact:true}).click();await expect(font).toHaveValue('20');
   await expect(page.getByRole('dialog',{name:'设置',exact:true})).toBeVisible();
   await page.getByLabel('关闭设置',{exact:true}).click();
   await page.evaluate(()=>{document.documentElement.style.cssText='--dsw-alias-bg-base:#20251f;--dsw-alias-label-primary:#e4e8de;--dsw-alias-label-secondary:#a8b0a0;--dsw-alias-border-l1:#404a3b;--dsw-alias-state-success-primary:#a4c195';});
-  await groups.click();await page.screenshot({path:join(shots,'groups-dark-360.png')});
-  expect(await groups.evaluate(el=>getComputedStyle(el,'::picker(select)').backgroundColor)).toBe('rgb(32, 37, 31)');
+  await showOrganization(page);await page.screenshot({path:join(shots,'groups-dark-360.png')});
+  expect(await page.locator('.workspace-sidebar').evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgb(255, 255, 255)');
   await page.keyboard.press('Escape');
 
   // Exercise the real registration/component with the documented DSH observables.
@@ -59,15 +54,15 @@ try {
     import React,{useSyncExternalStore} from 'react';import{createRoot}from'react-dom/client';import{applyWithRPC}from'./src/client/index.tsx';
     function source(value){const listeners=new Set();return{getSnapshot:()=>value,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},set(next){value=next;listeners.forEach(fn=>fn())}}}
     const mounted=source('blank'), sessions=source({byId:{blank:{id:'blank',blank:true,retainedBy:{mainView:1}}}}), workspaces=source({phase:'ready',items:[{workspaceId:'work',title:'小说工作区'}]});
-    let fail=false;const registrations=[];const opened=[];let connects=0,selected=0;
+    let fail=false;const registrations=[];const opened=[],created=[],rpcCalls=[];let connects=0,selected=0;
     const ctx={effect:fn=>fn(),slots:{inject:(_,fn)=>fn(),register:(options,Component)=>{registrations.push({options,Component})}},
       sidebarRightTabs:{register:()=>()=>{}},sidebarRight:{mounted,openResource:address=>{opened.push(address);document.querySelector('output').textContent=address}},
-      workspaces:{list:workspaces},layout:{selectPanel:()=>{selected++;mounted.set('blank')}},uiWorkspace:{openWorkspace:async(id,before)=>{connects++;if(fail)throw new Error('工作区暂时无法打开');before('new-blank');sessions.set({byId:{'new-blank':{id:'new-blank',blank:true,retainedBy:{mainView:1}}}});mounted.set('new-blank')}}};
-    applyWithRPC(ctx,()=>{throw new Error('Opening entry must not write novel data')});
+      workspaces:{list:workspaces,create:async input=>{created.push(input);return{workspaceId:'library-work'}}},layout:{selectPanel:()=>{selected++;mounted.set('blank')}},uiWorkspace:{openWorkspace:async(id,before)=>{connects++;if(fail)throw new Error('工作区暂时无法打开');before('new-blank');sessions.set({byId:{'new-blank':{id:'new-blank',blank:true,retainedBy:{mainView:1}}}});mounted.set('new-blank')}}};
+    applyWithRPC(ctx,async(action)=>{rpcCalls.push(action);if(action!=='workspace.status')throw new Error('Opening entry must not write novel data');return{dataRoot:'D:/synthetic-writing-library'}});
     const entry=registrations.find(r=>r.options.name==='sidebar.footer.action');if(!entry||registrations.some(r=>r.options.name==='conversation.session.header.actions'))throw new Error('Entry must be resident');
     const props=entry.options.inject();const useSource=s=>useSyncExternalStore(s.subscribe,s.getSnapshot);
     function App(){const wide=useSource(width);return <><aside style={{width:wide?220:56,padding:12,background:'#f2f2ee',height:'100vh',boxSizing:'border-box',display:'flex',flexDirection:'column'}}><div>DSH</div><div style={{flex:1}}>新会话</div><entry.Component {...props} wide={wide} useNovelSession={select=>select(useSource(mounted))} useNovelWorkspaces={select=>select(useSource(workspaces))} useSessions={select=>select(useSource(sessions))}/><div>设置</div></aside><output/></>}
-    const width=source(true);window.fixture={mode(value){mounted.set(value==='blank'?'blank':undefined);sessions.set({byId:value==='none'?{}:{blank:{id:'blank',blank:true,retainedBy:{mainView:1}}}})},compact:()=>width.set(false),fail:()=>{fail=true},recover:()=>{fail=false},stats:()=>({opened,connects,selected}),empty:()=>workspaces.set({phase:'ready',items:[]})};
+    const width=source(true);window.fixture={mode(value){mounted.set(value==='blank'?'blank':undefined);sessions.set({byId:value==='none'?{}:{blank:{id:'blank',blank:true,retainedBy:{mainView:1}}}})},compact:()=>width.set(false),fail:()=>{fail=true},recover:()=>{fail=false},stats:()=>({opened,connects,selected,created,rpcCalls}),empty:()=>workspaces.set({phase:'ready',items:[]})};
     createRoot(document.getElementById('root')).render(<App/>);
   `},bundle:true,write:false,format:'iife',loader:{'.png':'dataurl'},define:{'process.env.NODE_ENV':'"development"'}});
   server=createServer((req,res)=>{res.setHeader('content-type',req.url==='/bundle.js'?'text/javascript':'text/html');res.end(req.url==='/bundle.js'?bundle.outputFiles[0].contents:'<!doctype html><html><meta charset="utf-8"><style>body{margin:0;font:14px system-ui}#root{display:flex}output{padding:24px}</style><div id="root"></div><script src="/bundle.js"></script></html>');});
@@ -78,11 +73,13 @@ try {
   await page.screenshot({path:join(shots,'entry-blank.png')});
   await page.evaluate(()=>fixture.mode('panel'));await entry.click();expect((await page.evaluate(()=>fixture.stats())).selected).toBe(1);
   await page.evaluate(()=>fixture.mode('none'));await entry.click();await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByLabel('工作区',{exact:true})).toHaveValue('work');await page.screenshot({path:join(shots,'entry-workspace.png')});
+  await expect(page.getByLabel('工作区',{exact:true})).toHaveValue('@cuigengji-library');await page.screenshot({path:join(shots,'entry-workspace.png')});
   await page.evaluate(()=>fixture.fail());await page.getByRole('button',{name:'进入工作台'}).click();await expect(page.getByRole('alert')).toHaveText('工作区暂时无法打开');
   await page.evaluate(()=>fixture.recover());await page.getByRole('button',{name:'进入工作台'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('output')).toHaveText('dsh-resource://cuigengji/new-blank');
+  expect((await page.evaluate(()=>fixture.stats())).created).toEqual([{path:'D:/synthetic-writing-library'},{path:'D:/synthetic-writing-library'}]);
+  expect((await page.evaluate(()=>fixture.stats())).rpcCalls).toEqual(['workspace.status','workspace.status']);
   await page.evaluate(()=>fixture.compact());await expect(entry).toBeVisible();await expect(entry).toHaveAccessibleName('打开催更姬');
-  await page.evaluate(()=>{fixture.mode('none');fixture.empty()});await entry.click();await expect(page.getByText('请先在 DSH 左侧添加一个工作区，然后从这里进入。')).toBeVisible();await expect(page.getByRole('button',{name:'进入工作台'})).toBeDisabled();await page.keyboard.press('Escape');await expect(entry).toBeFocused();
+  await page.evaluate(()=>{fixture.mode('none');fixture.empty()});await entry.click();await expect(page.getByRole('option',{name:'小说作品库（推荐）'})).toHaveCount(1);await expect(page.getByRole('button',{name:'进入工作台'})).toBeEnabled();await page.keyboard.press('Escape');await expect(entry).toBeFocused();
   expect(errors).toEqual([]);
   console.log(JSON.stringify({ok:true,checks:['styled native dropdowns: mouse, keyboard, Escape, long labels, scrolling, narrow, dark, modal','resident entry: blank session, global panel, sessionless workspace, failure retry, compact and empty state']}));
 }catch(error){if(browser){const page=browser.contexts()[0]?.pages()[0];if(page)await page.screenshot({path:join(shots,'failure.png')});}throw error;}

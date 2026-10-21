@@ -16,22 +16,35 @@ function failure(error) {
     }
   };
 }
-function registerRpcRoute(ctx, { dispatch, dataRoot, workData, transfer, maintenance }) {
+function registerRpcRoute(ctx, services) {
+  const { dispatch, workData, transfer, maintenance, desktopPet, libraries } = services;
   const ensureReady = () => maintenance?.ensureReady();
-  const dispatchRpc = async (payload, signal) => {
+  const dispatchRpc = async (payload, signal, admitted = false) => {
+    if (libraries && !admitted && !String(payload?.action).startsWith("library.")) return libraries.use(() => dispatchRpc(payload, signal, true)).catch(failure);
     try {
       signal.throwIfAborted();
       if (!record(payload) || !HUMAN_ACTIONS.includes(payload.action)) throw invalid("\u65E0\u6548\u7684\u50AC\u66F4\u59EC\u64CD\u4F5C");
-      const { action, args = {}, sessionId } = payload;
+      const { action, args: input = {}, sessionId } = payload;
+      const args = record(input) ? { ...input } : input;
       if (!record(args)) throw invalid("args \u5FC5\u987B\u662F\u5BF9\u8C61");
+      if (args.__libraryRoot && args.__libraryRoot !== services.dataRoot) throw Object.assign(new Error("\u4F5C\u54C1\u5E93\u5DF2\u5207\u6362\uFF0C\u65E7\u9875\u9762\u7684\u7F16\u8F91\u5DF2\u4FDD\u7559\uFF0C\u8BF7\u5237\u65B0\u540E\u7EE7\u7EED"), { code: "LIBRARY_CHANGED" });
+      delete args.__libraryRoot;
       if (sessionId !== void 0 && (typeof sessionId !== "string" || !sessionId.trim() || sessionId.length > 512)) {
         throw invalid("sessionId \u5FC5\u987B\u662F\u6709\u6548\u7684\u4F1A\u8BDD\u6807\u8BC6");
       }
-      if (!action.startsWith("transfer.") && !["novel.list", "novel.create", "novel.import", "legacy.preview", "settings.get", "maintenance.status", "maintenance.verify", "workspace.status", "workspace.export", "workspace.preview", "workspace.import"].includes(action) && !sessionId) {
+      if (!action.startsWith("library.") && !action.startsWith("transfer.") && !["activity.today", "activity.stats", "pet.desktop", "novel.list", "novel.create", "novel.import", "legacy.preview", "settings.get", "maintenance.status", "maintenance.verify", "workspace.status", "workspace.export", "workspace.preview", "workspace.import"].includes(action) && !sessionId) {
         throw Object.assign(new Error("\u8BF7\u9009\u62E9\u4E00\u4E2A DSH \u4F1A\u8BDD"), { code: "SESSION_REQUIRED" });
       }
       if (action === "settings.get") {
-        return { ok: true, value: { dataRoot, pluginVersion: manifest.version, supportedDsh: manifest.peerDependencies["@deepseek-ai/dsh-tools"] } };
+        return { ok: true, value: { dataRoot: services.dataRoot, pluginVersion: manifest.version, supportedDsh: manifest.peerDependencies["@deepseek-ai/dsh-tools"] } };
+      }
+      if (action.startsWith("library.")) {
+        if (!libraries) throw invalid("\u4F5C\u54C1\u5E93\u7BA1\u7406\u670D\u52A1\u672A\u521D\u59CB\u5316");
+        if (action === "library.pick") {
+          const capability = ctx.get?.("directoryPicker")?.capability();
+          return { ok: true, value: { path: capability?.kind === "native" ? await capability.pick(signal) : null, manual: capability?.kind !== "native" } };
+        }
+        return { ok: true, value: action === "library.status" ? await libraries.status() : action === "library.inspect" ? await libraries.inspect(args.path) : await libraries.change(args) };
       }
       if (action === "legacy.preview") return { ok: true, value: convertLegacyExport(args.input) };
       if (action === "maintenance.status") {
@@ -55,6 +68,9 @@ function registerRpcRoute(ctx, { dispatch, dataRoot, workData, transfer, mainten
         return { ok: true, value: await workData[method](args.backup) };
       }
       await ensureReady();
+      if (action === "pet.desktop") {
+        return { ok: true, value: desktopPet ? await desktopPet.sync({ ...args, sessionId: sessionId || "" }) : { supported: false, available: false } };
+      }
       return { ok: true, value: await dispatch(action, args, { kind: "human", sessionId }) };
     } catch (error) {
       return failure(error);

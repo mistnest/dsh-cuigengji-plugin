@@ -22,6 +22,7 @@ npm run preview:workbench
 | `src/application/` | 作品操作、会话绑定、查询、备份和导入导出 |
 | `src/infrastructure/` | 持久化、文件事务与旧数据转换 |
 | `src/adapters/`、`src/contracts/` | DSH / MCP 接入及共享契约 |
+| `src/desktop/` | Windows透明桌宠窗口及启动脚本 |
 | `skills/` | Agent 写作与安装维护指南 |
 | `tests/`、`scripts/` | 测试源码、合成样例、构建与验收工具 |
 | `docs/`、`.github/` | 使用文档、功能截图、项目展示素材与 CI |
@@ -44,14 +45,17 @@ npm run check:build
 | 修改范围 | 主要入口 |
 | --- | --- |
 | 正文编辑、同步和章节顺序 | `test:manuscript`、`test:chapter-order` |
-| 规划、设定与多页操作 | `test:graph`、`test:pages` |
+| 规划、设定与多页操作 | `test:graph`、`test:pages`、`test:ui-director-workspaces` |
+| 嵌套目录与拖拽排序 | `test:ui-folders`、`test:ui-content-order` |
+| 正文查找与替换 | `test:manuscript-search`、`test:ui-manuscript-search` |
+| 桌宠、日期统计和会话范围 | `test:pet`、`test:records`、`test:session-access` |
 | 目录与工作台导航 | `test:directory`、`test:navigation` |
 | 作品管理、欢迎页与回收站 | `test:management`、`test:welcome-batch`、`test:novel-recycle` |
 | 写作预设、导入导出 | `test:presets`、`test:transfer` |
 | 完整作者操作流程 | `test:author-workflow` |
 | 旧库升级 | `test:upgrade` |
 
-以上入口通过 `npm run <入口>` 执行，界面脚本需要 Playwright 浏览器。`test:ui` 是早期冒烟脚本，部分界面名称尚未同步；以相应专项验收为准。测试代码与合成 fixture 保留在公开仓库，验收输出和截图存入被忽略的临时目录。
+以上入口通过 `npm run <入口>` 执行，界面脚本需要 Playwright 浏览器。`test:review-ui` 汇总执行主要流程，也可在 `--` 后指定流程名；检查失败需查看对应日志，不只看汇总数量。测试代码与合成 fixture 保留在公开仓库，验收输出和截图存入被忽略的临时目录。
 
 ## 数据兼容与安装验收
 

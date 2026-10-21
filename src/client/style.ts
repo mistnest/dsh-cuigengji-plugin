@@ -6,6 +6,11 @@ import {transferStyles} from './features/transfer/style.ts';
 import {welcomeStyles} from './features/welcome/style.ts';
 import {batchStyles} from './shared/batch-style.ts';
 import {navigationStyles} from './shared/navigation-style.ts';
+import {organizedStyles} from './shared/organized-style.ts';
+import {settingsStyles} from './shared/settings/style.ts';
+import {canvasExportStyles} from './shared/canvas-export-style.ts';
+import {documentStyles} from './shared/document-style.ts';
+import {manuscriptSearchStyles} from './features/chapters/search-style.ts';
 export const styles = `
 .cuigengji { color:var(--dsw-alias-label-primary,#252936); font-family:var(--dsw-font-family,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif); font-size:13px; padding:14px; height:100%; overflow:auto; box-sizing:border-box; }
 .cuigengji * { box-sizing:border-box; }
@@ -45,6 +50,7 @@ export const styles = `
 
 /* Workbench layout follows the panel width, including DSH full-screen mode. */
 .cuigengji:not(dialog) { container-type:inline-size; display:flex; flex-direction:column; padding:0; font-size:14px; min-height:0; height:100%; overflow:hidden; background:var(--dsw-alias-bg-base,#fff); }
+.cuigengji .workbench-base {display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;overflow:hidden;}
 .cuigengji .workbench-header { flex:none; padding:8px 16px 0; border-bottom:1px solid var(--dsw-alias-border-l1,#8884); }
 .cuigengji .eyebrow { font-size:12px; color:var(--dsw-alias-label-secondary,#737780); letter-spacing:.04em; }
 .cuigengji .identity { padding-bottom:4px; }
@@ -273,4 +279,4 @@ export const styles = `
  .cuigengji .chapter-main .manuscript {padding-left:8px;padding-right:8px;}
  .cuigengji .chapter-toolbar {gap:8px;}
 }
-` + visualStyles + selectStyles + graphStyles + managementStyles + transferStyles + welcomeStyles + batchStyles + navigationStyles;
+` + visualStyles + selectStyles + graphStyles + managementStyles + transferStyles + welcomeStyles + batchStyles + navigationStyles + organizedStyles + settingsStyles + canvasExportStyles + documentStyles + manuscriptSearchStyles;

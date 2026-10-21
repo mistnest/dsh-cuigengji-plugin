@@ -60,9 +60,10 @@ test('preset persistence enforces human authorship and CAS; enabled requirements
   assert.equal(saved.importFormat,'chat-completion');
   await assert.rejects(store.dispatch('preset.set',{expectedRevision:0,preset},human),{code:'CONFLICT'});
   const handlers={},audit=[];registerPrompt({on:(name,fn)=>handlers[name]=fn},{store,contextChars:2000,audit:async(...v)=>audit.push(v)});
+  await store.dispatch('guidance.set',{enabled:true},human);
   const base={sections:[{name:'host',text:'DSH'}],contexts:[],tools:[],variables:{}};
   const assemble=id=>handlers['system-prompt/assemble'](base,{agent:{id}},async()=>base);
-  assert.equal((await assemble('unbound')).sections.length,2);
+  assert.equal((await assemble('unbound')).sections.length,1);
   const bound=await assemble('author');
   assert.equal(bound.sections.some(s=>s.name==='cuigengji:handoff'),false);
   assert.ok(bound.sections.some(s=>s.name==='cuigengji:writing'));

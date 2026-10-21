@@ -12,7 +12,7 @@ test('session policy scopes novel data access without restricting host tools', a
   } };
   const policy = createSessionPolicy({ store, audit: async () => {} });
   assert.equal(await policy.dispatch('binding.get', {}, { kind: 'agent', sessionId: 's1' }), null);
-  await assert.rejects(policy.dispatch('novel.get', {}, { kind: 'agent', sessionId: 's1' }), /先在催更姬/);
+  await assert.rejects(policy.dispatch('novel.get', {}, { kind: 'agent', sessionId: 's1' }), /需要目标作品/);
   assert.equal(calls[0].actor.sessionId, 's1');
 });
 
@@ -33,18 +33,18 @@ test('prompt only reads the bound writing preset, without fetching story context
   const listeners = {};
   const ctx = { on: (name, fn) => { listeners[name] = fn; } };
   const calls = [];
-  const store = { dispatch: async action => calls.push(action) };
+  const store = { dispatch: async (action,args,actor) => {calls.push(action);return action==='guidance.get'?{enabled:actor.sessionId==='bound'}:null;} };
   const audited = [];
   registerPrompt(ctx, { store, contextChars: 2000, audit: async (...args) => audited.push(args), resolveBinding: async id => id === 'bound' ? { novelId: 'n1' } : null });
   const next = async () => ({ sections: [{ name: 'base', text: 'base' }], contexts: [], tools: [], variables: {} });
   const unbound = await listeners['system-prompt/assemble']({ sections: [], contexts: [] }, { agent: { id: 'none' } }, next);
-  assert.equal(unbound.sections.length, 2);
+  assert.equal(unbound.sections.length, 1);
   const bound = await listeners['system-prompt/assemble']({ sections: [], contexts: [] }, { agent: { id: 'bound' } }, next);
   assert.equal(bound.sections.some(section => section.name === 'cuigengji:writing'), true);
   assert.equal(bound.contexts.length, 0);
   assert.equal(bound.sections.some(section => section.name === 'cuigengji:handoff'), false);
   assert.deepEqual(audited, []);
-  assert.deepEqual(calls, ['preset.read']);
+  assert.deepEqual(calls, ['guidance.get','guidance.get','preset.read']);
 });
 
 test('reassembly removes old plugin content and preserves host entries', async () => {
@@ -69,6 +69,6 @@ test('reassembly removes old plugin content and preserves host entries', async (
   assert.equal(first.variables, original.variables);
   assert.doesNotMatch(JSON.stringify(first), /OLD_/);
   const unbound = await assemble({}, context, async () => second);
-  assert.equal(unbound.sections.filter(section => section.name === 'cuigengji:writing').length, 1);
+  assert.equal(unbound.sections.filter(section => section.name === 'cuigengji:writing').length, 0);
   assert.deepEqual(unbound.contexts, [hostContext]);
 });

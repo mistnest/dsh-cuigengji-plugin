@@ -77,7 +77,7 @@ test('recycled works reject binding, model reads, stale human edits and cached w
   await assert.rejects(f.run('chapter.create',f.chapterArgs),{code:'NOVEL_RECYCLED'});
   await assert.rejects(f.run('chapter.create',{title:'旧任务不能继续写',content:'拒绝写入'}),{code:'NOVEL_RECYCLED'});
   const policy=createSessionPolicy({store:f.store,audit:async()=>{}});
-  await assert.rejects(policy.dispatch('chapter.list',{}, {kind:'agent',sessionId:'author'}),/先在催更姬/);
+  await assert.rejects(policy.dispatch('chapter.list',{}, {kind:'agent',sessionId:'author'}),/需要目标作品/);
   const transfers=new TransferService(f.store),file={name:'新片段.txt',text:'不能导入回收站中的作品。'};
   const before=await storageSnapshot(f.root);
   await assert.rejects(transfers.preview({file,options:{mode:'copy',targetId:f.novel.id}}),{code:'NOVEL_RECYCLED'});
@@ -123,6 +123,21 @@ test('an AI starting during recycle disk reads is checked again inside the write
   await assert.rejects(policy.dispatch('novel.archive',{novelId:f.novel.id,expectedRevision:f.before.novels[f.novel.id].revision,confirm:true},f.actor),{code:'NOVEL_BUSY'});
   assert.equal((await f.store.dispatch('novel.list')).length,2);
   assert.equal((await f.store.dispatch('binding.get',{},f.actor)).novelId,f.novel.id);
+});
+
+test('an active agent temporarily working in another book protects that book until its turn ends',async t=>{
+  const f=await fixture(t),listeners={};
+  const policy=createSessionPolicy({store:f.store,audit:async()=>{}});
+  policy.register({on:(event,fn)=>{listeners[event]=fn;}},{disconnect:async()=>{}});
+  const agent={kind:'agent',sessionId:'other-author'};
+  listeners['agent/status']({agent:{id:agent.sessionId},status:'running'});
+  await policy.dispatch('chapter.list',{novelId:f.novel.id},agent);
+  assert.equal((await policy.resolveBinding(agent.sessionId)).novelId,f.other.id,'temporary tool targets do not change the conversation focus');
+  const args={novelId:f.novel.id,expectedRevision:f.before.novels[f.novel.id].revision,confirm:true};
+  await assert.rejects(policy.dispatch('novel.archive',args,f.actor),{code:'NOVEL_BUSY'});
+  listeners['agent/status']({agent:{id:agent.sessionId},status:'idle'});
+  await policy.dispatch('novel.archive',args,f.actor);
+  assert.equal((await f.store.dispatch('novel.list')).length,1);
 });
 
 test('permanent delete removes the complete managed directory and its cached commands, preserves other works and is retryable',async t=>{

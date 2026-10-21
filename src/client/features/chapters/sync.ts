@@ -1,4 +1,4 @@
-import { persistDraft, restoreDraft } from '../../shared/drafts.js';
+import { persistDraft, restoreDraft, claimLegacyDraft } from '../../shared/drafts.js';
 
 export interface Chapter {
   id: string; revision: number; contentHash: string; deleted: boolean;
@@ -60,6 +60,7 @@ export class ChapterSync {
   options:Options;
   constructor(options:Options){
     this.options=options;
+    claimLegacyDraft(options.storage, options.key);
     const restored=restoreDraft(options.storage,options.key,options.initial);
     this.state={...restored,phase:same(restored.base,restored.value)?'saved':'waiting',error:'',cacheError:'',notice:'',remote:null};
   }

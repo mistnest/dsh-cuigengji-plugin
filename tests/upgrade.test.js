@@ -1,3 +1,4 @@
+import {ordinaryBindings} from '../src/application/bindings/state.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, readFile, writeFile, readdir, rm, stat, mkdir} from 'node:fs/promises';
@@ -90,7 +91,7 @@ for (const version of [1,2,3,4]) test(`public 0.3.13 data and physical v${versio
   await writeFile(join(root,'extra-file.txt'),'作者额外记录');
   const store = new Store(root), upgrade = new UpgradeCoordinator(store), result = await upgrade.start();
   assert.equal(result.status,'ready',JSON.stringify(result.error)); assert.equal(result.fromStorageVersion,version);
-  assert.deepEqual(await store.readStoredWorkspace(),state);
+  assert.deepEqual(await store.readStoredWorkspace(),{...state,bindings:ordinaryBindings(state.bindings)});
   assert.equal((await upgrade.verify({expectedVersion:currentVersion,expectedDataRoot:root,expectedNovelIds:Object.keys(state.novels)})).verified,true);
   const backup = await verifyUpgradeBackup(root,result.backupPath);
   assert.ok(backup.entries.some(e => e.path === 'extra-empty-directory' && e.kind === 'directory'));
@@ -109,7 +110,7 @@ test('interrupted migration resumes the same complete backup and persisted logic
   const recovered = await new UpgradeCoordinator(new Store(root)).start();
   assert.equal(recovered.status,'ready',JSON.stringify(recovered.error)); assert.equal(recovered.fromStorageVersion,1);
   assert.equal(recovered.backupPath,failed.backupPath); assert.equal(recovered.beforeStateDigest,failed.beforeStateDigest);
-  assert.deepEqual(await new Store(root).readStoredWorkspace(),state);
+  assert.deepEqual(await new Store(root).readStoredWorkspace(),{...state,bindings:ordinaryBindings(state.bindings)});
   assert.equal((await readdir(backupParent(root))).length,1);
 });
 

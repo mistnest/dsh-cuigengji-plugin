@@ -1,19 +1,21 @@
 import { createHash } from 'node:crypto';
 import { chapterCounts, CHAPTER_COUNTS } from '../../domain/chapters/metadata.ts';
 import { planProjectDirectories, type ProjectDirectories } from './project-directories.ts';
+import {projectCollaboration,collaborationIndex} from '../../domain/collaboration/projection.ts';
+import {validManagedPath, treeChapterFiles, treeSettingFiles, treePlanningFiles, pageManifest} from './tree-layout.ts';
 
 // Preserve existing versioned business records, including fields from imports.
 // Their semantic validation belongs to Store/domain; this layer partitions them.
 export type Row = Record<string, any>;
 export type Workspace = { schemaVersion: number; novels: Record<string, Row>; bindings: Record<string, Row>; requests: Record<string, Row>; [key: string]: any };
-export type StorageVersion = 2 | 3 | 4;
-export const STORAGE_VERSION = 4;
+export type StorageVersion = 2 | 3 | 4 | 5;
+export const STORAGE_VERSION = 5;
 export type OccupiedProjectFiles = {chapters?: string[]; settings?: string[]; planning?: string[]};
-export type Library = { format: 'cuigengji-library'; storageVersion: 3 | 4; metadata: Row; novels: Record<string, Row>; directories: ProjectDirectories };
+export type Library = { format: 'cuigengji-library'; storageVersion: 3 | 4 | 5; metadata: Row; novels: Record<string, Row>; directories: ProjectDirectories };
 export type LegacyLibrary = Omit<Library, 'storageVersion' | 'directories'> & {storageVersion: 2};
 export type Project = { novel: Row; sections: string[]; preview: Row };
 export type ChapterIndex = { metadata: Row; charCount: number; textCount: number; versions: Row[]; file?: string };
-export type PlanningIndex = { board: Row; nodes: Record<string, Row>; edges: Record<string, Row>; decorations: Record<string, Row>; hasDecorations: boolean; hasLegacy: boolean; legacyPreview?: Row | null; pageIds: (string | null)[]; pageFiles?: Record<string, string>; transactions: Row[] };
+export type PlanningIndex = { board: Row; nodes: Record<string, Row>; edges: Record<string, Row>; decorations: Record<string, Row>; hasDecorations: boolean; hasLegacy: boolean; legacyPreview?: Row | null; pageIds: (string | null)[]; pageFiles?: Record<string, string>; nodeFiles?: Record<string,string>; decorationFiles?: Record<string,string>; transactions: Row[] };
 
 export const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 export const without = (value: Row, keys: string[]): Row => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
@@ -66,22 +68,27 @@ export const bookPath = (id: string, directories: ProjectDirectories) => {
 };
 export const legacyBookPath = (id: string) => 'novels/' + fileId(id);
 export const pageKey = (id: string | null) => id === null ? '~main' : fileId(id);
-export const sections = ['chapters', 'nodes', 'edges', 'memoryGroups', 'planning', 'preset', 'plan', 'tavernSources'] as const;
-export const libraryRow = (novel: Row) => Object.fromEntries(['id', 'title', 'description', 'revision', 'archived', 'archivedAt', 'createdAt', 'updatedAt'].filter(key => own(novel, key)).map(key => [key, novel[key]]));
+export const sections = ['chapters', 'nodes', 'edges', 'memoryGroups', 'planning', 'preset', 'plan', 'tavernSources', 'collaboration', 'collaborationProgress'] as const;
+export const libraryRow = (novel: Row) => ({...Object.fromEntries(['id', 'title', 'description', 'revision', 'archived', 'archivedAt', 'createdAt', 'updatedAt'].filter(key => own(novel, key)).map(key => [key, novel[key]])),
+  ...((novel.hasCollaboration||collaborationIndex(novel))?{hasCollaboration:true}:{}),
+  ...((novel.collaboration?.sharedPlan||collaborationIndex(novel)?.sharedPlan||novel.sharedPlan)?{sharedPlan:novel.collaboration?.sharedPlan||collaborationIndex(novel)?.sharedPlan||novel.sharedPlan}:{}),
+  ...((novel.collaboration?.origin||novel.origin)?{origin:Object.fromEntries(['novelId','novelTitle','pageId','pageTitle'].map(key=>[key,(novel.collaboration?.origin||novel.origin)[key]]))}:{})});
 export const projectRecord = (novel: Row): Project => ({ novel: without(novel, [...sections]), sections: sections.filter(key => own(novel, key)), preview: {
   ...(novel.preset ? { preset: without(novel.preset, ['blocks', 'raw', 'warnings']) } : {}),
   ...(novel.plan ? { plan: without(novel.plan, ['content']) } : {}),
+  ...(novel.collaboration?.origin ? {origin: novel.collaboration.origin} : {}),
+  ...(novel.collaboration?.sharedPlan ? {sharedPlan: novel.collaboration.sharedPlan} : {}),
 } });
 
 export function storedChapterFile(index: Row | undefined, id: string, version: StorageVersion) {
-  return version >= 4 && validManagedFileName(index?.file) ? index.file : fileId(id) + '.json';
+  return version >= 4 && (version >= 5 ? validManagedPath(index?.file) : validManagedFileName(index?.file)) ? index!.file : fileId(id) + '.json';
 }
 export function storedSettingFile(index: Row | undefined, id: string, version: StorageVersion) {
-  return version >= 4 && validManagedFileName(index?.file) ? index.file : fileId(id) + '.json';
+  return version >= 4 && (version >= 5 ? validManagedPath(index?.file) : validManagedFileName(index?.file)) ? index!.file : fileId(id) + '.json';
 }
 export function storedPageFile(index: PlanningIndex | null | undefined, pageId: string | null, version: StorageVersion) {
   const value = index?.pageFiles?.[pageKey(pageId)];
-  return version >= 4 && validManagedFileName(value) ? value : pageKey(pageId) + '.json';
+  return version >= 4 && (version >= 5 ? validManagedPath(value) : validManagedFileName(value)) ? value : pageKey(pageId) + '.json';
 }
 export function namedChapterFiles(chapters: Record<string, Row>, previous: Record<string, Row> = {}, occupied: string[] = []) {
   const used = new Set([...occupied, ...Object.values(previous).map(row => row.file).filter(validManagedFileName)].map(managedFileKey));
@@ -120,7 +127,10 @@ export function indexedChapter(index: ChapterIndex): Row {
   Object.defineProperty(chapter, CHAPTER_COUNTS, { value: { charCount: index.charCount, textCount: index.textCount } });
   return chapter;
 }
-export const indexMemory = (node: Row, file?: string) => ({ ...without(node, ['content']), ...(file ? {file} : {}) });
+export function indexMemory(node: Row, file?: string) {
+  const versions = Array.isArray(node.versions) ? node.versions.map((version: Row) => without(version, ['content'])) : undefined;
+  return { ...without(node, ['content', 'versions']), ...(versions?.length ? { versions } : {}), ...(file ? {file} : {}) };
+}
 export const indexPlanningNode = (node: Row) => without(node, ['content']);
 export const indexDecoration = (decoration: Row) => without(decoration, ['content']);
 export function indexTransaction(transaction: Row): Row {
@@ -158,7 +168,7 @@ export function planningPageFiles(board: Row, previous?: PlanningIndex | null, o
   return result;
 }
 
-export function planningIndex(board: Row, pageFiles?: Record<string, string>): PlanningIndex {
+export function planningIndex(board: Row, pageFiles?: Record<string, string>, bodyFiles?: {nodeFiles:Record<string,string>;decorationFiles:Record<string,string>}): PlanningIndex {
   const pageIds = planningPageIds(board);
   return { board: without(board, ['nodes', 'edges', 'decorations', 'transactions', 'legacy', 'pageFiles']),
     nodes: Object.fromEntries(Object.entries(board.nodes).map(([id, node]) => [id, indexPlanningNode(node as Row)])),
@@ -166,7 +176,7 @@ export function planningIndex(board: Row, pageFiles?: Record<string, string>): P
     decorations: Object.fromEntries(Object.entries(board.decorations || {}).map(([id, value]) => [id, indexDecoration(value as Row)])),
     hasDecorations: own(board, 'decorations'), hasLegacy: own(board, 'legacy'),
     ...(own(board, 'legacy') ? {legacyPreview: board.legacy ? without(board.legacy, ['content']) : null} : {}),
-    pageIds, ...(pageFiles ? {pageFiles} : {}), transactions: board.transactions.map(indexTransaction) };
+    pageIds, ...(pageFiles ? {pageFiles} : {}), ...(bodyFiles || {}), transactions: board.transactions.map(indexTransaction) };
 }
 export function planningPage(board: Row, pageId: string | null) {
   const nodes = Object.fromEntries(Object.entries(board.nodes).filter(([, value]) => ((value as Row).pageId ?? null) === pageId));
@@ -181,7 +191,7 @@ export function splitNovel(id: string, novel: Row, directories: ProjectDirectori
   put('project.json', projectRecord(novel));
 
   const chapterIndex: Record<string, ChapterIndex> = {};
-  const chapterNames = readable ? namedChapterFiles(novel.chapters || {}, {}, occupied.chapters) : {};
+  const chapterNames = storageVersion >= 5 ? treeChapterFiles(novel, {}, occupied.chapters) : readable ? namedChapterFiles(novel.chapters || {}, {}, occupied.chapters) : {};
   for (const [key, chapter] of Object.entries(novel.chapters || {}) as [string, Row][]) {
     const file = readable ? chapterNames[key] : fileId(key) + '.json';
     chapterIndex[key] = indexChapter(chapter, readable ? file : undefined);
@@ -191,11 +201,12 @@ export function splitNovel(id: string, novel: Row, directories: ProjectDirectori
   put('chapters/index.json', chapterIndex);
 
   const settingIndex: Record<string, Row> = {};
-  const settingNames = readable ? namedSettingFiles(novel.nodes || {}, {}, occupied.settings) : {};
+  const settingNames = storageVersion >= 5 ? treeSettingFiles(novel, {}, occupied.settings) : readable ? namedSettingFiles(novel.nodes || {}, {}, occupied.settings) : {};
   for (const [key, value] of Object.entries(novel.nodes || {}) as [string, Row][]) {
     const file = readable ? settingNames[key] : fileId(key) + '.json';
     settingIndex[key] = indexMemory(value as Row, readable ? file : undefined);
-    put('settings/entries/' + file, value);
+    put('settings/entries/' + file, without(value, ['versions']));
+    if (Array.isArray(value.versions) && value.versions.length) put('history/settings/' + fileId(key) + '.json', value.versions);
   }
   put('settings/index.json', settingIndex);
   if (own(novel, 'edges')) put('settings/relations.json', novel.edges);
@@ -203,22 +214,29 @@ export function splitNovel(id: string, novel: Row, directories: ProjectDirectori
   if (own(novel, 'planning')) {
     if (!novel.planning) put('planning/index.json', null);
     else {
-      const pageFiles = readable ? planningPageFiles(novel.planning, undefined, occupied.planning) : undefined;
-      const index = planningIndex(novel.planning, pageFiles); put('planning/index.json', index);
+      const tree = storageVersion >= 5 ? treePlanningFiles(novel.planning, undefined, occupied.planning) : undefined;
+      const pageFiles = tree?.pageFiles || (readable ? planningPageFiles(novel.planning, undefined, occupied.planning) : undefined);
+      const index = planningIndex(novel.planning, pageFiles, tree); put('planning/index.json', index);
       if (own(novel.planning, 'legacy')) put('history/planning-legacy.json', novel.planning.legacy);
-      for (const pageId of index.pageIds) put('planning/' + storedPageFile(index, pageId, storageVersion), planningPage(novel.planning, pageId));
+      for (const pageId of index.pageIds) {const page = planningPage(novel.planning, pageId); put('planning/' + storedPageFile(index, pageId, storageVersion), tree ? pageManifest(page) : page);}
+      if (tree) {
+        for (const [id, node] of Object.entries(novel.planning.nodes)) put('planning/' + tree.nodeFiles[id], node);
+        for (const [id, decoration] of Object.entries(novel.planning.decorations || {})) put('planning/' + tree.decorationFiles[id], decoration);
+      }
       for (const transaction of novel.planning.transactions) put('history/planning/' + fileId(transaction.id) + '.json', transaction);
     }
   }
-  for (const [field, path] of [['preset', 'preset.json'], ['plan', 'planning/legacy.json'], ['tavernSources', 'imports/originals.json']]) if (own(novel, field)) put(path, novel[field]);
+  for (const [field, path] of [['preset', 'preset.json'], ['plan', 'planning/legacy.json'], ['tavernSources', 'imports/originals.json'], ['collaboration', 'collaboration.json'], ['collaborationProgress','collaboration-progress.json']]) if (own(novel, field)) put(path, novel[field]);
+  const collaboration=projectCollaboration(novel);if(collaboration)put('collaboration-index.json',collaboration);
   return files;
 }
-export function splitWorkspace(state: Workspace, directories = planProjectDirectories(state.novels).directories, storageVersion: 3 | 4 = STORAGE_VERSION, occupied: Record<string, OccupiedProjectFiles> = {}): Map<string, string> {
+export function splitWorkspace(state: Workspace, directories = planProjectDirectories(state.novels).directories, storageVersion: 3 | 4 | 5 = STORAGE_VERSION, occupied: Record<string, OccupiedProjectFiles> = {}): Map<string, string> {
   const files = new Map<string, string>();
   for (const [id, novel] of Object.entries(state.novels)) for (const [path, text] of splitNovel(id, novel, directories, storageVersion, occupied[id])) files.set(path, text);
   files.set('runtime/bindings.json', JSON.stringify(state.bindings));
   for (const [id, value] of Object.entries(state.requests)) files.set('runtime/requests/' + fileId(id) + '.json', JSON.stringify(value));
+  files.set('activity.json', JSON.stringify(state.activity || { format: 'cuigengji-activity', version: 1, daily: {} }));
   // Publishing the library last marks a fully staged initial migration.
-  files.set('library.json', JSON.stringify({ format: 'cuigengji-library', storageVersion, metadata: without(state, ['novels', 'bindings', 'requests']), novels: Object.fromEntries(Object.entries(state.novels).map(([id, novel]) => [id, libraryRow(novel)])), directories } satisfies Library));
+  files.set('library.json', JSON.stringify({ format: 'cuigengji-library', storageVersion, metadata: without(state, ['novels', 'bindings', 'requests', 'activity']), novels: Object.fromEntries(Object.entries(state.novels).map(([id, novel]) => [id, libraryRow(novel)])), directories } satisfies Library));
   return files;
 }

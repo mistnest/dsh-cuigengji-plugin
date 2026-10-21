@@ -6,6 +6,7 @@ import { catalog, copy, counts, fail, hash, checkIds, own } from "./model.js";
 import { dataPackage, selectProjects } from "./packages.js";
 import { recognize, inspection } from "./recognize.js";
 import { copyInto, copyWork } from "./copy.js";
+import { validateSharedPlans } from "../../domain/collaboration/legacy.js";
 class TransferService {
   store;
   workData;
@@ -33,22 +34,26 @@ class TransferService {
       for (const c of [...Object.values(n.volumes), ...Object.values(n.chapters)]) if (typeof c.title !== "string" || !c.title.trim() || !Number.isFinite(c.order)) fail("\u7AE0\u8282\u6216\u5377\u7684\u540D\u79F0\u4E0E\u6392\u5E8F\u65E0\u6548");
       return validated.novels[n.id];
     });
+    validateSharedPlans({ novels: Object.fromEntries(value.projects.map((n) => [n.id, n])) });
     return value;
   }
   inspect({ file, options = {} }) {
-    return inspection(this.validate(recognize(file, options)));
+    const value = this.validate(recognize(file, options));
+    return inspection(options.intent === "preset" ? { ...value, projects: value.projects.filter((n) => n.preset), restorable: false } : value);
   }
   options(value, input) {
     if (!input || typeof input !== "object" || Array.isArray(input)) fail("\u5BFC\u5165\u9009\u9879\u65E0\u6548");
-    const mode = input.mode ?? (value.restorable ? "restore" : "copy");
+    const presetImport = input.intent === "preset";
+    const mode = input.mode ?? (presetImport ? "copy" : value.restorable ? "restore" : "copy");
     if (!["copy", "restore"].includes(mode) || input.targetId !== void 0 && input.targetId !== null && typeof input.targetId !== "string" || input.title !== void 0 && (typeof input.title !== "string" || !input.title.trim() || input.title.length > 500) || input.presetPolicy !== void 0 && !["append", "replace"].includes(input.presetPolicy)) fail("\u5BFC\u5165\u65B9\u5F0F\u6216\u76EE\u6807\u65E0\u6548");
+    const selection = input.selection ?? { kind: presetImport ? "preset" : value.kind === "workspace" && mode === "copy" ? "works" : value.kind, novelId: (presetImport ? value.projects.find((n) => n.preset) : value.projects[0])?.id, includeDependencies: !presetImport };
+    if (presetImport && (mode !== "copy" || selection.kind !== "preset" || !input.targetId)) fail("\u4ECE\u5199\u4F5C\u9884\u8BBE\u5165\u53E3\u5BFC\u5165\u65F6\uFF0C\u53EA\u80FD\u5C06\u9884\u8BBE\u4FDD\u5B58\u5230\u5DF2\u6709\u7684\u76EE\u6807\u4F5C\u54C1\u3002");
     if (mode === "restore" && !value.restorable) fail("\u8FD9\u4E2A\u6587\u4EF6\u662F\u53EF\u590D\u7528\u5185\u5BB9\uFF0C\u8BF7\u9009\u62E9\u6DFB\u52A0\u5230\u4F5C\u54C1");
-    const selection = input.selection ?? { kind: value.kind === "workspace" && mode === "copy" ? "works" : value.kind, novelId: value.projects[0]?.id, includeDependencies: true };
     if (mode === "restore" && !["works", "workspace"].includes(selection.kind)) fail("\u6062\u590D\u5907\u4EFD\u9700\u8981\u5B8C\u6574\u4F5C\u54C1\uFF1B\u5C40\u90E8\u5185\u5BB9\u8BF7\u9009\u62E9\u6DFB\u52A0\u5230\u4F5C\u54C1");
     if (mode === "copy" && selection.kind === "workspace") fail("\u6DFB\u52A0\u5230\u4F5C\u54C1\u65F6\u8BF7\u9009\u62E9\u5177\u4F53\u5185\u5BB9");
     if (mode === "restore" && input.targetId) fail("\u5907\u4EFD\u6062\u590D\u4F7F\u7528\u539F\u4F5C\u54C1 ID\uFF0C\u8BF7\u4E0D\u8981\u6307\u5B9A\u76EE\u6807\u4F5C\u54C1");
     if (mode === "copy" && selection.kind === "works" && input.targetId) fail("\u5B8C\u6574\u4F5C\u54C1\u4F1A\u65B0\u5EFA\u4E3A\u4F5C\u54C1\uFF1B\u6DFB\u52A0\u5C40\u90E8\u5185\u5BB9\u65F6\u8BF7\u9009\u62E9\u6B63\u6587\u3001\u8BBE\u5B9A\u6216\u89C4\u5212");
-    return { mode, targetId: input.targetId || null, title: input.title?.trim(), selection: copy(selection), presetPolicy: input.presetPolicy || "append", ...value.orderId ? { orderId: value.orderId } : {} };
+    return { mode, targetId: input.targetId || null, title: input.title?.trim(), selection: copy(selection), presetPolicy: input.presetPolicy || "append", ...input.intent ? { intent: input.intent } : {}, ...value.orderId ? { orderId: value.orderId } : {} };
   }
   async plan(state, file, input) {
     const recognized = this.validate(recognize(file, input)), options = this.options(recognized, input);
@@ -138,6 +143,7 @@ class TransferService {
       const attachments = /* @__PURE__ */ new Map();
       if (plan.workspacePlan) {
         const { payload } = plan.workspacePlan;
+        if (payload.state.guidance) draft.guidance = { ...payload.state.guidance, ...draft.guidance };
         for (const [id, n] of Object.entries(payload.state.novels)) {
           novelIds.push(id);
           if (!own(draft.novels, id)) {

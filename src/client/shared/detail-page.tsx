@@ -1,5 +1,6 @@
 import React, {createContext, useContext, useLayoutEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
+import {SelectionCount} from './SelectionCount.tsx';
 
 /** Keep the overview mounted for canvas state, but remove it from layout and focus. */
 export function OverviewPage({active, children}: {active:boolean; children:React.ReactNode}) {
@@ -53,9 +54,10 @@ export function DetailPage({className, backLabel, onBack, children}: {
 }) {
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const back = useRef<HTMLButtonElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {back.current?.focus({preventScroll:true});}, []);
   return <section className={`detail-page ${className}`} aria-label="条目详情">
-    <header className="detail-bar"><button ref={back} className="detail-back" onClick={onBack}>{backLabel}</button><div className="detail-actions" ref={setSlot}/></header>
-    <div className="detail-scroll"><div className="detail-document"><ActionSlot.Provider value={slot}>{children}</ActionSlot.Provider></div></div>
+    <header className="detail-bar"><button ref={back} className="detail-back" onClick={onBack}>{backLabel}</button><div className="detail-actions"><span className="detail-selection-slot"><SelectionCount scope={scroll}/></span><div className="detail-action-buttons" ref={setSlot}/></div></header>
+    <div className="detail-scroll" ref={scroll}><div className="detail-document"><ActionSlot.Provider value={slot}>{children}</ActionSlot.Provider></div></div>
   </section>;
 }

@@ -112,6 +112,11 @@ export const managementStyles = `
 .cuigengji .work-data-library small {color:var(--cg-muted);font-size:11px;margin-left:8px;}
 .cuigengji .work-data-path {display:block;overflow-wrap:anywhere;white-space:normal;font-size:12px;line-height:1.8;user-select:text;margin:8px 0 16px;}
 .cuigengji .work-data-conflicts {margin-top:18px;color:var(--cg-ink);font-size:12px;line-height:1.8;}
+.cuigengji .preset-onboarding {padding:48px 20px 52px;text-align:center;max-width:440px;margin:auto;}
+.cuigengji .preset-onboarding>span {display:grid;place-items:center;margin:auto;width:48px;height:48px;background:var(--cg-wash);color:var(--cg-accent);border-radius:14px;}
+.cuigengji .preset-onboarding h3 {font-size:20px;font-weight:500;margin:20px 0 12px;}
+.cuigengji .preset-onboarding p {font-size:12px;color:var(--cg-muted);line-height:1.9;}
+.cuigengji .preset-onboarding>button {font-size:12px;margin-top:16px;padding-inline:20px;}
 @container(max-width:599px) {
  .cuigengji .management-trash-row {flex-wrap:wrap;gap:12px;}
  .cuigengji .management-trash-copy {flex-basis:100%;}

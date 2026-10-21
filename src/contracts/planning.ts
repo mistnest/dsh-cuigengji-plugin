@@ -9,12 +9,12 @@ export interface PlanningNode {
   actor?: { kind: string; sessionId?: string | null };
 }
 export interface PlanningEdge { id: string; revision: number; from: string; to: string; type: 'next' | 'requires' | 'alternative'; label: string; deleted: boolean }
-export interface PlanningGroup { id: string; revision: number; name: string; summary: string; deleted?: boolean }
+export interface PlanningGroup { id: string; revision: number; name: string; summary: string; parentId?:string|null; pageId?:string|null; position?:Point|null; deleted?: boolean }
 export interface PlanningPage extends PlanningGroup {}
 export interface Decoration {
-  id:string; revision:number; pageId:string|null; kind:'note'|'frame'; title:string; content:string;
+  id:string; revision:number; pageId:string|null; groupId?:string|null; kind:'note'|'frame'; title:string; content:string;
   position:Point; width:number; height:number; color:'neutral'|'sand'|'sage'|'sky'|'rose';
-  fontSize:number; fontFamily:'sans'|'serif'; moveContents?:boolean; deleted:boolean;
+  fontSize:number; fontFamily:'sans'|'serif'; moveContents?:boolean; members?:string[]; layoutPending?:boolean; deleted:boolean;
 }
 export type NodeIndex = Omit<PlanningNode, 'content'>;
 export type PlanningEntity = PlanningNode | PlanningEdge | PlanningGroup | PlanningPage | Decoration;
@@ -29,6 +29,8 @@ export interface Board {
 }
 export interface LegacyPlan { id: string; revision: number; content: string; updatedAt?: string; approved: boolean }
 export interface PlanningNovel {
+  id?:string;
+  directoryOrder?:Record<string,string[]>;
   planning?: Board; plan?: LegacyPlan | null;
   chapters: Record<string, {versions: {revision: number}[]}>; nodes: Record<string, unknown>;
 }
@@ -60,5 +62,5 @@ export interface PlanningArgs {
   requestId?:string; expectedSequence?:number; transactionId?:string; operations?:Operation[]; reason?:string;
   nodeId?:string;groupId?:string|null;pageId?:string|null;name?:string;summary?:string;expectedRevision?:number;confirm?:boolean;
   query?:string;includeDeleted?:boolean;parentId?:string|null;status?:string;thread?:string;
-  after?:number;offset?:number;limit?:number;side?:'in'|'out';
+  after?:number;offset?:number;limit?:number;resourceOffset?:number;side?:'in'|'out';
 }

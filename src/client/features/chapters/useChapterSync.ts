@@ -1,9 +1,22 @@
-import {useContext,useEffect,useMemo,useSyncExternalStore} from 'react';
-import {SessionScope} from '../../shared/state.js';
-import {draftKey} from '../../shared/drafts.js';
+import {useEffect,useMemo,useSyncExternalStore} from 'react';
+import {useDraftScope} from '../../shared/state.js';
+import {draftKey,claimLegacyDraft} from '../../shared/drafts.js';
 import {ChapterSync,type Chapter} from './sync.ts';
 
 const sessions=new Map<string,ChapterSync>();
+/** Flush dormant local drafts too, before searching/replacing the saved whole book. */
+export async function prepareManuscriptSearch({scope,novelId,chapters,read,write,onSaved}: {
+  scope:string;novelId:string;chapters:{id:string}[];read:(id:string)=>Promise<Chapter>;
+  write:(id:string,value:Chapter,base:Chapter,requestId:string)=>Promise<Partial<Chapter>>;onSaved:()=>void;
+}) {
+  for (const chapter of chapters) {
+    const key=draftKey(scope,`${novelId}:chapter:${chapter.id}`);
+    claimLegacyDraft(localStorage,key);
+    if (!sessions.has(key) && !localStorage.getItem(key)) continue;
+    await prepareChapterRemoval({scope,novelId,chapterId:chapter.id,read:()=>read(chapter.id),
+      write:(value,base,requestId)=>write(chapter.id,value,base,requestId),onSaved});
+  }
+}
 /** Also hydrate cached drafts for chapters no longer open in the editor. */
 export async function prepareChapterRemoval({scope,novelId,chapterId,read,write,onSaved}: {
   scope:string;novelId:string;chapterId:string;read:()=>Promise<Chapter>;
@@ -19,7 +32,7 @@ export function useChapterSync({novelId,chapterId,initial,latest,read,write,onSa
   novelId:string;chapterId:string;initial:Chapter;latest?:{revision:number};
   read:()=>Promise<Chapter>;write:(value:Chapter,base:Chapter,requestId:string)=>Promise<Partial<Chapter>>;onSaved:()=>void;
 }){
-  const scope=useContext(SessionScope),key=draftKey(scope,`${novelId}:chapter:${chapterId}`);
+  const scope=useDraftScope(),key=draftKey(scope,`${novelId}:chapter:${chapterId}`);
   const controller=useMemo(()=>{
     let existing=sessions.get(key);
     if(!existing){existing=new ChapterSync({key,initial,storage:localStorage,read,write,onSaved});sessions.set(key,existing);}

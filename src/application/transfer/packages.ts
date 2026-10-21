@@ -2,6 +2,9 @@ import {ensurePlanning} from '../../domain/planning/model.ts';
 import {previewTavern} from '../../infrastructure/migrations/tavern.js';
 import type {Novel, Selection, PackagePayload, DataPackage, MemoryNode, MemoryEdge} from '../../contracts/transfer.ts';
 import {active, copy, fail, hash, checkSelection, own} from './model.ts';
+import {portableNovel} from '../../domain/collaboration/legacy.ts';
+import {directoryKey} from '../../domain/directory/order.ts';
+import {groupDescendants,groupTrail} from '../../domain/directory/groups.ts';
 
 export interface Slice {projects: Novel[]; warnings: string[]; dependencies: {kind: string; title: string}[]}
 const pick = <T>(map: Record<string, T>, ids: Set<string>) => Object.fromEntries([...ids].map(id => [id, copy(map[id])]));
@@ -14,7 +17,8 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
   if (selection.kind === 'works') {
     const ids = selection.novelIds ?? source.map(n => n.id);
     if (!ids.length) fail('请至少选择一部作品');
-    const projects = ids.map(id => copy(source.find(n => n.id === id) ?? fail('所选作品已不存在')));
+    const state = {novels:Object.fromEntries(source.map(n => [n.id,n]))};
+    const projects = ids.map(id => portableNovel(state as any, source.find(n => n.id === id) ?? fail('所选作品已不存在')));
     return {projects, warnings: [], dependencies: []};
   }
   const original = source.find(n => n.id === selection.novelId) ?? fail('请选择一部作品');
@@ -26,9 +30,10 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
     if (selection.volumeIds !== undefined) {required(n.volumes, selection.volumeIds, '卷'); for (const c of active(n.chapters)) if (c.volumeId && selection.volumeIds.includes(c.volumeId)) chapters.add(c.id);}
     if (selection.chapterIds === undefined && selection.volumeIds === undefined) for (const c of active(n.chapters)) chapters.add(c.id);
   } else if (selection.kind === 'memory') {
+    if(selection.pageIds!==undefined){required(n.memoryPages||{},selection.pageIds,'设定画布');for(const m of active(n.nodes))if(selection.pageIds.includes(m.pageId??null))nodes.add(m.id);}
     if (selection.nodeIds !== undefined) {required(n.nodes, selection.nodeIds, '设定'); for (const id of selection.nodeIds) if (!n.nodes[id].deleted) nodes.add(id);}
-    if (selection.groupIds !== undefined) {required(n.memoryGroups || {}, selection.groupIds, '设定分组'); for (const m of active(n.nodes)) if (selection.groupIds.includes(m.groupId ?? null)) nodes.add(m.id);}
-    if (selection.nodeIds === undefined && selection.groupIds === undefined) for (const m of active(n.nodes)) nodes.add(m.id);
+    if (selection.groupIds !== undefined) {required(n.memoryGroups || {}, selection.groupIds, '设定分组');const ids=new Set<string|null>(selection.groupIds.flatMap(id=>id?[...groupDescendants(Object.values(n.memoryGroups||{}),id)]:[null])); for (const m of active(n.nodes)) if (ids.has(m.groupId ?? null)) nodes.add(m.id);}
+    if (selection.nodeIds === undefined && selection.groupIds === undefined&&selection.pageIds===undefined) for (const m of active(n.nodes)) nodes.add(m.id);
     if (selection.memoryType) for (const id of nodes) if (selection.memoryType === 'world_entry' ? n.nodes[id].type === 'character_card' : n.nodes[id].type !== 'character_card') nodes.delete(id);
   } else if (selection.kind === 'planning') {
     const ids = selection.pageIds ?? [...(n.transferScope?.mainPage === false ? [] : [null]), ...active(board.pages).map(p => p.id)];
@@ -38,7 +43,7 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
     for (const b of active(board.nodes)) if (pages.has(b.pageId ?? null)) beats.add(b.id);
     for (const d of active(board.decorations)) if (pages.has(d.pageId ?? null)) decorations.add(d.id);
   } else if (!n.preset) fail('这部作品还没有写作预设');
-  if (selection.kind === 'chapters' && !chapters.size || selection.kind === 'memory' && !nodes.size || selection.kind === 'planning' && !pages.size) fail('请至少选择一项内容');
+  if (selection.kind === 'chapters' && !chapters.size || selection.kind === 'memory' && !nodes.size && !selection.pageIds?.length && !selection.groupIds?.length || selection.kind === 'planning' && !pages.size) fail('请至少选择一项内容');
   const initialChapters = new Set(chapters), initialNodes = new Set(nodes);
   if (selection.includeDependencies) {
     for (const id of beats) {for (const ref of board.nodes[id].chapterRefs) chapters.add(ref.chapterId); for (const ref of board.nodes[id].memoryRefs) nodes.add(ref);}
@@ -58,8 +63,8 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
   const warnings: string[] = [], dependencies: Slice['dependencies'] = [];
   for (const id of chapters) if (!initialChapters.has(id)) dependencies.push({kind: '正文', title: n.chapters[id].title});
   for (const id of nodes) if (!initialNodes.has(id)) dependencies.push({kind: '设定', title: n.nodes[id].name});
-  const result: Novel = {...copy(n), volumes: {}, chapters: pick(n.chapters, chapters), nodes: pick(n.nodes, nodes), edges: {}, memoryGroups: {}, plan: null};
-  delete result.planning; delete result.preset; delete result.tavernSources;
+  const result: Novel = {...copy(n), volumes: {}, chapters: pick(n.chapters, chapters), nodes: pick(n.nodes, nodes), edges: {}, memoryGroups: {},memoryPages:{},plan: null};
+  delete result.planning; delete result.preset; delete result.tavernSources; delete result.collaboration; delete result.collaborationProgress;
   const volumes = new Set<string>();
   for (const ch of Object.values(result.chapters)) {
     if (ch.volumeId) volumes.add(ch.volumeId);
@@ -76,6 +81,18 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
     if (missing) {detached += missing; m.status = 'unconfirmed'; m.factType = 'unconfirmed';}
     if ('groupId' in m && m.groupId && n.memoryGroups?.[m.groupId]) result.memoryGroups![m.groupId] = copy(n.memoryGroups[m.groupId]);
   }
+  // A selected setting includes its own history, but never references to
+  // evidence/settings outside the chosen package. Keep surviving group names
+  // so old snapshots remain readable after a copy remaps all IDs.
+  for (const m of Object.values(result.nodes)) for (const v of m.versions || []) {
+    const missing = v.sources.some(ref => !chapters.has(ref.chapterId)) || v.dependsOn.some(id => !nodes.has(id)) || v.knownBy.some(id => own(n.nodes, id) && !nodes.has(id));
+    v.sources = v.sources.filter(ref => chapters.has(ref.chapterId));
+    v.dependsOn = v.dependsOn.filter(id => nodes.has(id));
+    v.knownBy = v.knownBy.filter(id => !own(n.nodes, id) || nodes.has(id));
+    if (v.groupId && n.memoryGroups?.[v.groupId]) result.memoryGroups![v.groupId] = copy(n.memoryGroups[v.groupId]);
+    else v.groupId = null;
+    if (missing) {v.status = 'unconfirmed'; v.factType = 'unconfirmed';}
+  }
   // Keep an original Tavern source only when every entry in that original is included.
   // Imported fragments cannot secretly carry unselected characters or world entries.
   const retainedSources = new Set<string>();
@@ -87,11 +104,18 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
     if (complete) {result.tavernSources ??= {}; result.tavernSources[fingerprint] = copy(original); retainedSources.add(fingerprint);}
   }
   for (const m of Object.values(result.nodes)) if (m.tavern && !retainedSources.has(m.tavern.fingerprint)) delete m.tavern;
-  if (selection.kind === 'memory') for (const id of selection.groupIds || []) if (id && n.memoryGroups?.[id]) result.memoryGroups![id] = copy(n.memoryGroups[id]);
+  if (selection.kind === 'memory') for (const id of selection.groupIds || []) if (id) for(const child of groupDescendants(Object.values(n.memoryGroups||{}),id)) if(n.memoryGroups?.[child])result.memoryGroups![child]=copy(n.memoryGroups[child]);
+  if(selection.kind==='memory'&&selection.nodeIds===undefined&&selection.groupIds===undefined&&selection.pageIds===undefined)result.memoryGroups=copy(n.memoryGroups||{});
+  if(selection.kind==='memory'&&selection.pageIds)for(const id of selection.pageIds)if(id&&n.memoryPages?.[id])result.memoryPages![id]=copy(n.memoryPages[id]);
+  if(selection.kind==='memory'&&selection.pageIds)for(const group of Object.values(n.memoryGroups||{}))if(selection.pageIds.includes(group.pageId??null))result.memoryGroups![group.id]=copy(group);
+  // A partial package carries the complete parent path of each retained group.
+  for(const group of Object.values(result.memoryGroups||{}))for(const ancestor of groupTrail(Object.values(n.memoryGroups||{}),group.id))result.memoryGroups![ancestor.id]=copy(ancestor);
+  for(const item of [...Object.values(result.nodes),...Object.values(result.memoryGroups||{}),...Object.values(result.nodes).flatMap(m=>m.versions||[])])if(item.pageId&&n.memoryPages?.[item.pageId as string])result.memoryPages![item.pageId as string]=copy(n.memoryPages[item.pageId as string]);
+  if(result.memoryPageFolders)result.memoryPageFolders=Object.fromEntries(Object.entries(result.memoryPageFolders).filter(([,groupId])=>own(result.memoryGroups!,groupId)));
   if (selection.kind === 'planning') {
     result.transferScope = {mainPage: pages.has(null)};
     result.planning = {formatVersion: 2, sequence: 0, transactions: [], nodes: pick(board.nodes, beats), edges: {},
-      pages: pick(board.pages || {}, new Set([...pages].filter((id): id is string => id !== null))), groups: {}, decorations: pick(board.decorations || {}, decorations)};
+      pages: pick(board.pages || {}, new Set([...pages].filter((id): id is string => id !== null))), groups: Object.fromEntries(Object.values(board.groups).filter(g=>!g.deleted&&pages.has(g.pageId??null)).map(g=>[g.id,copy(g)])), decorations: pick(board.decorations || {}, decorations)};
     for (const e of active(board.edges)) if (beats.has(e.from) && beats.has(e.to)) result.planning.edges[e.id] = copy(e);
     for (const b of Object.values(result.planning.nodes)) {
       const before = b.chapterRefs.length + b.memoryRefs.length;
@@ -102,8 +126,17 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
       if (b.groupId && board.groups[b.groupId]) result.planning.groups[b.groupId] = copy(board.groups[b.groupId]);
       delete b.lastSequence;
     }
+    for(const group of Object.values(result.planning.groups))for(const ancestor of groupTrail(Object.values(board.groups),group.id))result.planning.groups[ancestor.id]=copy(ancestor);
   }
   if (selection.kind === 'preset') result.preset = copy(n.preset!);
+  if(result.directoryOrder){
+    result.directoryOrder=Object.fromEntries(Object.entries(result.directoryOrder).flatMap(([key,order])=>{
+      if(key==='graph'||key.startsWith('graph:'))return [[key,order.filter(id=>own(result.nodes,id))]];
+      const pageId=key.slice('planning:'.length)||null;
+      if(!result.planning||(pageId&&!own(result.planning.pages,pageId))||(!pageId&&result.transferScope?.mainPage===false))return [];
+      return [[directoryKey('planning',pageId),order.filter(id=>own(result.planning!.nodes,id))]];
+    }));
+  }
   if (detached) warnings.push(`未携带的 ${detached} 项正文或设定引用会移除；相关设定需重新确认。`);
   return {projects: [result], warnings, dependencies};
 }

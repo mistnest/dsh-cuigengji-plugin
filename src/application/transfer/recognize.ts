@@ -12,16 +12,32 @@ const labels: Record<ExportKind, string> = {works: '催更姬作品备份', chap
 const fileTitle = (name: string) => name.replace(/^.*[\\/]/, '').replace(/\.(json|png|md|txt)$/i, '').slice(0, 200) || '导入内容';
 
 export function recognize(file: TransferFile, options: ImportOptions = {}): Recognized {
+  if (!object(options) || options.intent !== undefined && options.intent !== 'preset') fail('导入意图无效');
+  const value = recognizeFile(file, options);
+  if (options.intent === 'preset') {
+    if (!['preset', 'works', 'workspace'].includes(value.kind)) fail('这个文件不是写作预设；角色卡和世界书请从设定页面导入，正文请从正文入口导入。');
+    if (!value.projects.some(n => n.preset)) fail('文件中没有写作预设，请选择提示词文件或含预设的作品备份。');
+  }
+  return value;
+}
+
+function recognizeFile(file: TransferFile, options: ImportOptions): Recognized {
   if (!file || typeof file.name !== 'string' || file.name.length > 512) fail('请选择有效的文件');
   let raw: unknown;
   if (file.pngBase64 !== undefined) {
+    if (options.intent === 'preset') fail('角色卡图片不能作为写作预设，请从设定页面导入。');
     const result = previewTavern({pngBase64: file.pngBase64, fileName: file.name});
     return tavern(result);
   }
   if (file.json !== undefined) raw = file.json;
   else if (typeof file.text === 'string') {
     if (Buffer.byteLength(file.text) > MAX_TRANSFER_BYTES) fail('文件超过 64 MB，请拆分后导入');
-    if (/\.(txt|md)$/i.test(file.name)) return manuscript(file);
+    if (/\.(txt|md)$/i.test(file.name)) {
+      if (options.intent !== 'preset') return manuscript(file);
+      const content = file.text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+      if (!content.trim()) fail('预设文件为空');
+      return promptPreset({name: fileTitle(file.name), content}, options);
+    }
     try {raw = JSON.parse(file.text.replace(/^\uFEFF/, ''));} catch {fail('文件不是有效 JSON；正文请选择 TXT 或 Markdown 文件');}
   } else fail('文件没有可读取的内容');
   if (!object(raw) || Buffer.byteLength(JSON.stringify(raw)) > MAX_TRANSFER_BYTES) fail('请选择有效 JSON 文件，最大 64 MB');
@@ -40,21 +56,27 @@ export function recognize(file: TransferFile, options: ImportOptions = {}): Reco
     if (![1, 2].includes(Number(raw.schemaVersion)) || !object(raw.novel)) fail('不支持的作品备份版本');
     return {...base, label: labels.works, kind: 'works', projects: [raw.novel as unknown as Novel], restorable: true};
   }
-  if (raw.spec || raw.entries || raw.character_book || typeof raw.description === 'string' && typeof raw.name === 'string') return tavern(previewTavern({json: raw, fileName: file.name}));
+  if (raw.spec || raw.entries || raw.character_book) return tavern(previewTavern({json: raw, fileName: file.name}));
   if (raw.prompts || object(raw.data) && raw.data.prompts || typeof raw.content === 'string' || typeof raw.system_prompt === 'string' || Array.isArray(raw.blocks)) {
-    const orders = (Array.isArray(raw.blocks) ? [] : presetImportOrders(raw)) as {character_id: string | number}[];
-    const selected = options.orderId ?? String((orders.find(o => String(o.character_id) === '100001') || orders[0])?.character_id ?? '');
-    const value = Array.isArray(raw.blocks) ? {...validatePreset(raw), enabled: false} : importPreset(raw, selected || undefined);
-    const n = newNovel(fileTitle(file.name), `import-${fingerprint}`);
-    n.preset = {...value, revision: 1};
-    return {...base, label: '提示词预设', kind: 'preset', projects: [n], warnings: value.warnings || [],
-      orderId: selected, orders: orders.map(o => ({id: String(o.character_id), name: String(o.character_id) === '100001' ? '酒馆通用排列' : `排列方案 ${o.character_id}`}))};
+    return promptPreset(raw, options, fileTitle(file.name));
   }
+  if (typeof raw.description === 'string' && typeof raw.name === 'string') return tavern(previewTavern({json: raw, fileName: file.name}));
   if (raw.project || raw.workspace || raw.chapters) {
     const {backup, report} = convertLegacyExport(raw);
     return {...base, label: '旧版小说项目', kind: 'works', projects: [backup.novel as Novel], warnings: report.warnings, restorable: true};
   }
   fail('未识别到小说内容。支持催更姬数据包、酒馆角色卡／世界书／预设，以及 TXT、Markdown 正文。');
+}
+
+function promptPreset(raw: Record<string, unknown>, options: ImportOptions, title?: string): Recognized {
+  const fingerprint = hash(JSON.stringify(raw));
+  const orders = (Array.isArray(raw.blocks) ? [] : presetImportOrders(raw)) as {character_id: string | number}[];
+  const selected = options.orderId ?? String((orders.find(o => String(o.character_id) === '100001') || orders[0])?.character_id ?? '');
+  const value = Array.isArray(raw.blocks) ? {...validatePreset(raw), enabled: false} : importPreset(raw, selected || undefined);
+  const n = newNovel(title || String(raw.name), `import-${fingerprint}`);
+  n.preset = {...value, revision: 1};
+  return {fingerprint, label: '提示词预设', kind: 'preset', restorable: false, projects: [n], warnings: value.warnings || [],
+    orderId: selected, orders: orders.map(o => ({id: String(o.character_id), name: String(o.character_id) === '100001' ? '酒馆通用排列' : `排列方案 ${o.character_id}`}))};
 }
 
 function tavern(preview: ReturnType<typeof previewTavern>): Recognized {

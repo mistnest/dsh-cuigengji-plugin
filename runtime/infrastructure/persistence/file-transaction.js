@@ -145,7 +145,7 @@ class FileTransaction {
     const paths = /* @__PURE__ */ new Set();
     const contents = [];
     for (const entry of journal.entries) {
-      if (!entry || typeof entry.path !== "string" || paths.has(entry.path) || !/^(library\.json|runtime\/(bindings\.json|requests\/[^/]+\.json)|novels\/[^/]+\/.+\.json|audit\/[a-f0-9]{64}\.jsonl|before-planning-[a-f0-9]{64}\.json)$/.test(entry.path)) corrupt("\u4E8B\u52A1\u76EE\u6807\u6587\u4EF6\u65E0\u6548");
+      if (!entry || typeof entry.path !== "string" || paths.has(entry.path) || !/^(library\.json|activity\.json|activity\/(index|[0-9]{4})\.json|backups\/before-content-tree-[0-9]+-[a-f0-9-]{36}\/(store|library|migration)\.json|backups\/before-writing-records-[a-f0-9]{16}\/activity\.json|backups\/before-session-focus-[a-f0-9]{16}\/bindings\.json|runtime\/(bindings\.json|requests\/[^/]+\.json)|novels\/[^/]+\/.+\.json|audit\/[a-f0-9]{64}\.jsonl|before-planning-[a-f0-9]{64}\.json)$/.test(entry.path)) corrupt("\u4E8B\u52A1\u76EE\u6807\u6587\u4EF6\u65E0\u6548");
       this.path(entry.path);
       paths.add(entry.path);
       if (entry.stage === null && entry.sha256 === null) {
@@ -165,12 +165,12 @@ class FileTransaction {
     if (moves.length) {
       const libraryIndex = journal.entries.findIndex((entry) => entry.path === "library.json");
       const library = libraryIndex >= 0 && contents[libraryIndex] ? JSON.parse(contents[libraryIndex]) : null;
-      if (!([3, 4].includes(library?.storageVersion) && moves.every((move) => library.directories?.[move.novelId] === move.to.slice(7)))) corrupt("\u76EE\u5F55\u8FC1\u79FB\u4E0E\u6682\u5B58\u7684\u4F5C\u54C1\u7D22\u5F15\u4E0D\u4E00\u81F4");
+      if (!([3, 4, 5].includes(library?.storageVersion) && moves.every((move) => library.directories?.[move.novelId] === move.to.slice(7)))) corrupt("\u76EE\u5F55\u8FC1\u79FB\u4E0E\u6682\u5B58\u7684\u4F5C\u54C1\u7D22\u5F15\u4E0D\u4E00\u81F4");
     }
     if (removals.length) {
       const libraryIndex = journal.entries.findIndex((entry) => entry.path === "library.json");
       const library = libraryIndex >= 0 && contents[libraryIndex] ? JSON.parse(contents[libraryIndex]) : null;
-      if (!(library?.storageVersion === 4 && removals.every((removal) => !Object.hasOwn(library.novels || {}, removal.novelId) && !Object.hasOwn(library.directories || {}, removal.novelId)))) corrupt("\u4F5C\u54C1\u5220\u9664\u4E0E\u6682\u5B58\u7D22\u5F15\u4E0D\u4E00\u81F4");
+      if (!([4, 5].includes(library?.storageVersion) && removals.every((removal) => !Object.hasOwn(library.novels || {}, removal.novelId) && !Object.hasOwn(library.directories || {}, removal.novelId)))) corrupt("\u4F5C\u54C1\u5220\u9664\u4E0E\u6682\u5B58\u7D22\u5F15\u4E0D\u4E00\u81F4");
     }
     for (const move of moves) await this.applyMove(move);
     for (const [index, removal] of removals.entries()) await this.applyRemoval(removal, journal.id, index);

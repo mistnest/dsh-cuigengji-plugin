@@ -3,6 +3,7 @@ import {spawn} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {chromium,expect} from '@playwright/test';
+import {clickWire} from './helpers/graph.mjs';
 const root=resolve(import.meta.dirname,'..'),shots=join(root,'test-results','graph');
 await mkdir(shots,{recursive:true});
 const preview=spawn(process.execPath,['scripts/preview-workbench.mjs'],{cwd:root,stdio:['ignore','pipe','pipe']});
@@ -17,36 +18,49 @@ try {
   const call=async(action,args={})=>{const r=await fetch(new URL('/dispatch',url),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,args})});const result=await r.json();if(!r.ok)throw new Error(result.error);return result;};
   const novelId=(await call('novel.list'))[0].id;
   const group=await call('graph.group.create',{novelId,name:'雨城'});
-  const names=['雨夜来客','城南书铺','直到最后一封信到来才揭开的旧城真相'],memory=[];
+  const names=['雨夜来客','城南书铺','直到最后一封信到来才揭开的旧城真相'.repeat(4)],memory=[];
+  const summary='追寻雨夜来信中的线索，重新调查人物动机与城中的旧事。'.repeat(4);
   const positions=[{x:60,y:80},{x:500,y:80},{x:940,y:350}];
-  for(let i=0;i<3;i++)memory.push(await call('graph.create',{novelId,name:names[i],type:i?'world_entry':'character_card',summary:'追寻雨夜来信中的线索',content:'不可被拖拽修改的全文',groupId:group.id,position:positions[i]}));
-  await call('planning.apply',{novelId,requestId:crypto.randomUUID(),reason:'图交互验收',operations:names.map((title,i)=>({op:'node.create',value:{title,summary:'追寻雨夜来信中的线索',content:'不可被拖拽修改的正文',position:positions[i]}}))});
+  for(let i=0;i<3;i++)memory.push(await call('graph.create',{novelId,name:names[i],type:i?'world_entry':'character_card',summary,content:'不可被拖拽修改的全文',groupId:group.id,position:positions[i]}));
+  await call('planning.apply',{novelId,requestId:crypto.randomUUID(),reason:'图交互验收',operations:names.map((title,i)=>({op:'node.create',value:{title,summary,content:'不可被拖拽修改的正文',position:positions[i]}}))});
   const plans=(await call('planning.list',{novelId})).items;
   browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE||undefined});
   page=await browser.newPage({viewport:{width:1400,height:1000},reducedMotion:'reduce'});
   const errors=[],writes=[];page.on('pageerror',e=>errors.push(e.message));
   page.on('request',r=>{if(r.url().endsWith('/dispatch')&&r.method()==='POST'){const data=r.postDataJSON();if(['graph.update','graph.layout','edge.create','edge.disconnect','planning.apply'].includes(data.action))writes.push(data);}});
   await page.goto(url);
-  const port=(name,side)=>page.getByRole('button',{name:`${name}：${side==='out'?'输出':'输入'}连接点`,exact:true});
+  let relation=false;
+  const port=(name,side)=>page.getByRole('button',{name:`${name}：${relation?(side==='out'?'右侧':'左侧'):(side==='out'?'输出':'输入')}连接点`,exact:true});
   const card=name=>page.locator('.planning-card').filter({has:page.getByRole('button',{name,exact:true})});
   const at=(name,point)=>expect.poll(()=>card(name).evaluate((el,p)=>{const style=getComputedStyle(el);return Math.abs(parseFloat(style.left)-p.x)<.01&&Math.abs(parseFloat(style.top)-p.y)<.01;},point)).toBe(true);
   const center=async locator=>{const b=await locator.boundingBox();if(!b)throw new Error('No geometry');return{x:b.x+b.width/2,y:b.y+b.height/2};};
   const drag=async(locator,dx,dy,end=true)=>{const p=await center(locator);await page.mouse.move(p.x,p.y);await page.mouse.down();await page.mouse.move(p.x+dx,p.y+dy,{steps:8});if(end)await page.mouse.up();};
   const connect=async(from,to)=>{const a=await center(port(from,'out')),b=await center(port(to,'in'));await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move((a.x+b.x)/2,(a.y+b.y)/2,{steps:5});await expect(page.locator('.graph-preview')).toHaveCount(1);await page.mouse.move(b.x,b.y,{steps:5});await expect(port(to,'in')).toHaveClass(/port-target/);await page.mouse.up();};
   const camera=()=>page.locator('.planning-canvas').evaluate(el=>{const m=new DOMMatrixReadOnly(getComputedStyle(el).transform);return{zoom:m.a,x:m.e,y:m.f};});
+  const readableCard=async()=>{
+    const title=card(names[2]).locator('.planning-title');
+    await expect(title).toHaveAttribute('title',names[2]);await expect(title).toHaveText(names[2]);
+    await expect(title).toHaveCSS('text-overflow','ellipsis');await expect(title).toHaveCSS('white-space','nowrap');
+    expect(await title.evaluate(el=>el.scrollWidth>el.clientWidth)).toBe(true);
+    expect(await card(names[2]).evaluate(el=>{
+      const card=el.getBoundingClientRect(),rows=['.graph-card-kind','.planning-title','p','.story-card-footer'].map(selector=>el.querySelector(selector).getBoundingClientRect());
+      return rows.every((row,i)=>row.top>=card.top&&row.bottom<=card.bottom+1&&row.left>=card.left&&row.right<=card.right+1&&(!i||row.top>=rows[i-1].bottom));
+    }), 'kind/title/summary/footer must occupy separate rows inside the card').toBe(true);
+  };
   const waitIdle=async()=>{await expect(page.getByText('正在保存…',{exact:true})).toHaveCount(0);await expect(port(names[0],'out')).toBeEnabled();};
   for(const kind of ['规划','设定']){
-    const planning=kind==='规划',items=planning?plans:memory;
+    const planning=kind==='规划',items=planning?plans:memory;relation=!planning;
     const read=async name=>{const item=items.find(n=>(n.title||n.name)===name);const r=await call(planning?'planning.get':'graph.get',{novelId,nodeId:item.id});return planning?r.node:r;};
     const edges=()=>call(planning?'planning.list':'edge.list',{novelId}).then(r=>planning?r.edges:r);
     await page.getByRole('button',{name:kind,exact:true}).click();
-    await page.getByRole('button',{name:'画布',exact:true}).click();
     await expect(page.locator('.planning-card')).toHaveCount(3);
+    await readableCard();
     // Unmodified wheel down zooms out; the existing view buttons remain usable.
     const wheelCanvas=page.locator('.planning-canvas-scroll'),wheelBox=await wheelCanvas.boundingBox();
     await page.mouse.move(wheelBox.x+wheelBox.width-40,wheelBox.y+wheelBox.height-50);
     await page.mouse.wheel(0,120);
     await expect.poll(async()=>(await camera()).zoom).toBeLessThan(1);
+    await readableCard();
     await page.getByRole('button',{name:'恢复百分之百缩放',exact:true}).click();
     await expect.poll(async()=>(await camera()).zoom).toBe(1);
     // A card's body and its title can both be dragged without opening a detail.
@@ -85,12 +99,13 @@ try {
     // Pointer zoom and a translated viewport still use world coordinates.
     await page.mouse.move(wheelBox.x+wheelBox.width-40,wheelBox.y+wheelBox.height-50);await page.mouse.wheel(0,-120);
     await expect.poll(async()=>(await camera()).zoom).toBeGreaterThan(1);const zoomedScale=(await camera()).zoom;
+    await readableCard();
     const zoomed=await read(names[1]);await drag(card(names[1]).locator('p'),50*zoomedScale,30*zoomedScale);
     await expect.poll(async()=>Math.round((await read(names[1])).position.x)).toBe(zoomed.position.x+50);
     expect(Math.round((await read(names[1])).position.y)).toBe(zoomed.position.y+30);await waitIdle();
     // Click still opens detail; returning keeps layout, zoom, and viewport.
     const detailCamera=await page.locator('.planning-canvas').evaluate(el=>getComputedStyle(el).transform);await card(names[1]).locator('.planning-title').dblclick();await expect(page.getByRole('heading',{name:names[1],exact:true})).toBeVisible();
-    await page.getByRole('button',{name:planning?'关闭详情':`‹ 返回${kind}`,exact:true}).click();await expect(page.locator('.planning-canvas')).toHaveCSS('transform',detailCamera);
+    await page.getByRole('button',{name:planning?'‹ 返回规划':`‹ 返回${kind}`,exact:true}).click();await expect(page.locator('.planning-canvas')).toHaveCSS('transform',detailCamera);
     // Inject a failed layout save: keep visual position, allow retry, never lose text.
     let reject=true;
     const intercept=async route=>{const data=route.request().postDataJSON();if(reject&&(planning?data.action==='planning.apply'&&data.args.reason==='调整画布布局':data.action==='graph.layout')){reject=false;await route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'测试版本冲突，请重试布局'})});}else await route.continue();};
@@ -120,7 +135,7 @@ try {
     expect((await read(names[0])).summary).toBe('Agent 刚刚修改的摘要');
     expect((await read(names[0])).position).toEqual(concurrent.position);
     await page.getByRole('button',{name:'还原布局',exact:true}).click();await waitIdle();
-    const persisted=await read(names[0]);await page.reload();await page.getByRole('button',{name:kind,exact:true}).click();await page.getByRole('button',{name:'画布',exact:true}).click();
+    const persisted=await read(names[0]);await page.reload();await page.getByRole('button',{name:kind,exact:true}).click();
     await at(names[0],persisted.position);
     // Right-drag translates the pseudo-infinite world and never edits story data.
     await page.setViewportSize({width:900,height:850});
@@ -132,7 +147,7 @@ try {
     await expect(page.getByRole('menu')).toHaveCount(0);
     await page.setViewportSize({width:1400,height:1000});await page.getByRole('button',{name:'适应视图',exact:true}).click();
     if(!planning){
-      await page.locator('.edge-hit').click({button:'right'});await page.getByRole('menuitem',{name:'编辑关系',exact:true}).click();
+      await clickWire(page,page.locator('.edge-hit'),'right');await page.getByRole('menuitem',{name:'编辑关系',exact:true}).click();
       await page.getByLabel('关系名称（可选）').fill('常去');await page.getByRole('dialog').getByLabel('说明',{exact:true}).fill('每天晚上在这里查阅旧书，追寻故乡旧友留下的线索，书页里或许藏着答案。');await page.getByRole('button',{name:'保存关系',exact:true}).click();
       await expect(page.locator('.relation-label')).toContainText('常去');
     }
@@ -141,18 +156,18 @@ try {
     await page.evaluate(()=>{document.documentElement.style.cssText='--dsw-alias-bg-base:#20251f;--dsw-alias-label-primary:#e4e8de;--dsw-alias-label-secondary:#a8b0a0;--dsw-alias-border-l1:#404a3b;--dsw-alias-state-success-primary:#a4c195';});
     await page.screenshot({path:join(shots,planning?'planning-dark.png':'settings-dark.png')});
     await page.evaluate(()=>document.documentElement.removeAttribute('style'));await page.setViewportSize({width:1400,height:1000});
-    // Overview cards stay legible and interactive; their ports still meet the world-space curves.
+    // Cards keep the same internal proportions at every scale; ports still meet world-space curves.
     await page.getByRole('button',{name:'适应视图',exact:true}).click();await page.getByRole('button',{name:'恢复百分之百缩放',exact:true}).click();
     const overviewBox=await canvas.boundingBox();await page.mouse.move(overviewBox.x+overviewBox.width/2,overviewBox.y+overviewBox.height/2);await page.mouse.wheel(0,400);
-    await expect(page.locator('.graph-overview')).toBeVisible();
+    await expect.poll(async()=>Math.round((await camera()).zoom*100)).toBe(55);await expect(page.locator('.graph-overview,.graph-distant')).toHaveCount(0);
     for(const low of [false,true]){
       if(low){await page.mouse.move(overviewBox.x+overviewBox.width/2,overviewBox.y+overviewBox.height/2);await page.mouse.wheel(0,800);await expect.poll(async()=>(await camera()).zoom).toBe(.35);}
-      await expect(card(names[0]).locator('p')).toBeHidden();await expect(card(names[0]).locator(planning?'.planning-state':'.graph-card-kind')).toBeVisible();
-      const bounds=await card(names[2]).evaluate(el=>{const box=el.getBoundingClientRect(),title=el.querySelector('.planning-title').getBoundingClientRect(),label=el.querySelector('.planning-state,.graph-card-kind').getBoundingClientRect();return {titleFits:title.left>=box.left&&title.right<=box.right&&title.bottom<=box.bottom-1,labelBeforeTitle:label.bottom<=title.top+.5};});
-      expect(bounds.titleFits).toBe(true);expect(bounds.labelBeforeTitle).toBe(true);
+      await expect(card(names[0]).locator('p')).toBeVisible();await expect(card(names[0]).locator(planning?'.planning-state':'.graph-card-kind')).toBeVisible();
+       const bounds=await card(names[2]).evaluate(el=>{const box=el.getBoundingClientRect(),title=el.querySelector('.planning-title').getBoundingClientRect(),label=el.querySelector('.planning-state,.graph-card-kind').getBoundingClientRect();return {titleFits:title.left>=box.left&&title.right<=box.right&&title.bottom<=box.bottom-1,labelBeforeTitle:label.top>=title.bottom-.5||label.bottom<=title.top+.5,box:{x:box.x,y:box.y,w:box.width,h:box.height},title:{x:title.x,y:title.y,w:title.width,h:title.height,bottom:title.bottom,right:title.right},label:{x:label.x,y:label.y,w:label.width,h:label.height,bottom:label.bottom}};});
+       expect(bounds.titleFits).toBe(true);expect(bounds.labelBeforeTitle).toBe(true);
       const scale=(await camera()).zoom,node=await read(names[0]),box=await card(names[0]).boundingBox(),input=await center(port(names[0],'in')),output=await center(port(names[0],'out'));
-      expect(Math.abs(input.x-box.x)).toBeLessThan(.6);expect(Math.abs(output.x-box.x-box.width)).toBeLessThan(.6);expect(Math.abs(input.y-box.y-36*scale)).toBeLessThan(.6);
-      await card(names[0]).locator('.planning-title').click();await expect(card(names[0])).toHaveClass(/selected/);
+      expect(Math.abs(input.x-box.x)).toBeLessThan(.6);expect(Math.abs(output.x-box.x-box.width)).toBeLessThan(.6);expect(Math.abs(input.y-box.y-(planning?36:168/2)*scale)).toBeLessThan(.6);
+      await card(names[0]).click({position:{x:18,y:110*(await camera()).zoom}});await expect(card(names[0])).toHaveClass(/selected/);
       await page.screenshot({path:join(shots,`${planning?'planning':'settings'}-overview-${low?'35':'55'}.png`),animations:'disabled'});
       if(low){await drag(card(names[0]).locator('.planning-title'),40*scale,20*scale);await waitIdle();await expect.poll(async()=>Math.abs((await read(names[0])).position.x-node.position.x-40)).toBeLessThan(.01);expect((await read(names[0])).content).toBe(node.content);}
     }

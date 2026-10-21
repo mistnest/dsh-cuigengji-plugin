@@ -9,8 +9,9 @@
 | 安装插件、创建第一本作品 | [安装与开始使用](getting-started.md) |
 | 让 Agent 帮忙安装或更新 | [Windows Agent 安装指南](agent-installation.md) |
 | 更新旧版并保留作品 | [更新与数据迁移](upgrade.md) |
+| 正文查找替换、桌宠、写作记录与设置 | [工作台常用功能](workbench.md) |
 | 从旧包名迁移 | [包名迁移](package-name-migration.md) |
-| 一起整理大纲、推演剧情 | [规划画布](planning-board.md) |
+| 一起整理大纲、推演剧情和资源 | [规划与设定工作台](planning-board.md) |
 | 设置文风和写作要求 | [写作预设](presets.md) |
 | 导入已有酒馆资料 | [角色卡、世界书与预设导入](tavern-import.md) |
 | 导出作品或备份整个工作库 | [导入与导出](import-export.md) |

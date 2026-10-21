@@ -15,6 +15,7 @@ const desktopExe = arg('--desktop-exe'), archiveSpec = arg('--package'), npmSpec
 const oldPackage = args.includes('--old-package') ? arg('--old-package') : undefined;
 const oldDesktopExe = arg('--old-desktop-exe') || desktopExe;
 const withGit = args.includes('--with-git');
+const registry = arg('--registry');
 if (!desktopExe || !packageSpec || (archiveSpec && npmSpec) || process.platform !== 'win32') throw new Error('Windows: --desktop-exe <exe> (--package <local.tgz, URL or github: spec> | --npm-package <dsh-cuigengji-plugin[@version]>) [--old-package <tgz>] [--report <json>]');
 if (npmSpec) assert.match(npmSpec,/^dsh-cuigengji-plugin(?:@[a-zA-Z0-9][a-zA-Z0-9.+~-]*)?$/,'--npm-package must name the published plugin package');
 const currentManifest = JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
@@ -48,7 +49,7 @@ try {
   await writeFile(join(profile,'package.json'),JSON.stringify({name:'isolated-release-test',private:true,customField:{keep:true},dsh:{profile:{bundles:[]}}},null,2));
   await writeFile(join(profile,'cordis.patch.yml'),'# unrelated host config remains untouched\n');
   const install = async (spec, legacy = false) => {
-    const result = packageOperation(legacy?oldDesktopExe:desktopExe,['add',spec],{activateNewBundles:legacy || !oldPackage});
+    const result = packageOperation(legacy?oldDesktopExe:desktopExe,['add',spec,...(registry?['--registry='+registry]:[])],{activateNewBundles:legacy || !oldPackage});
     assert.equal(result.exitCode,0,result.output); assert.notEqual(result.timedOut,true);
     const manifest = JSON.parse(await readFile(join(profile,'package.json'),'utf8'));
     assert.equal(manifest.customField.keep,true);
@@ -57,8 +58,8 @@ try {
     if (legacy || !oldPackage) assert.ok(manifest.dsh.profile.bundles.includes(name));
     return JSON.parse(await readFile(join(profile,'node_modules',name,'package.json'),'utf8')).version;
   };
-  const smoke=(exe,version)=>{
-    const result=spawnSync(resolve(exe),['--expose-internals',fileURLToPath(new URL('./installed-release-smoke.mjs',import.meta.url)),join(profile,'node_modules',currentManifest.name),data,version],
+  const smoke=()=>{
+    const result=spawnSync(resolve(desktopExe),['--expose-internals',fileURLToPath(new URL('./installed-release-smoke.mjs',import.meta.url)),join(profile,'node_modules',currentManifest.name),data,...(oldPackage?[join(workspace,'before-upgrade.json')]:[])],
       {env,encoding:'utf8',windowsHide:true,timeout:120000});
     assert.equal(result.status,0,result.stderr || result.stdout || result.error?.message);
     return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
@@ -68,10 +69,10 @@ try {
     const oldProfile = JSON.parse(await readFile(join(profile,'package.json'),'utf8'));
     oldPackageName = Object.keys(oldProfile.dependencies).find(name=>name==='dsh-cuigengji'||name===currentManifest.name);
     assert.ok(oldPackageName);
-    await copyFile(new URL('../tests/fixtures/public-0.3.13/store.json',import.meta.url),join(data,'store.json'));
+    const seeded=spawnSync(resolve(oldDesktopExe),['--expose-internals',fileURLToPath(new URL('./seed-installed-upgrade.mjs',import.meta.url)),join(profile,'node_modules',oldPackageName),data,join(workspace,'before-upgrade.json')],{env,encoding:'utf8',windowsHide:true,timeout:30000});
+    assert.equal(seeded.status,0,seeded.stderr||seeded.stdout);report.oldData=JSON.parse(seeded.stdout.trim());
     await writeFile(join(profile,'cordis.patch.yml'),`# unrelated host config remains untouched\n- id: cuigengji\n  name: ${oldPackageName}\n  config:\n    dataRoot: ${JSON.stringify(data)}\n`);
     report.steps.push({operation:'install-old',packageName:oldPackageName,version:oldVersion});
-    if(oldPackageName===currentManifest.name)report.beforeUpgrade=smoke(oldDesktopExe,oldVersion);
   }
   const target = npmSpec || (/^(?:https?:|github:|git\+https?:)/.test(packageSpec) ? packageSpec : resolve(packageSpec));
   assert.equal(await install(target),currentManifest.version);
@@ -101,11 +102,8 @@ try {
   report.steps.push({operation:oldPackage?'update':'fresh-install',version:currentManifest.version});
   const policy = await readFile(join(profile,'pnpm-workspace.yaml'),'utf8').catch(error=>{if(error.code==='ENOENT') return ''; throw error;});
   assert.ok(!/dsh-cuigengji[^\r\n]*:\s*(?:true|set this to true or false)/.test(policy),'install must not grant or request plugin build-script permissions');
-  report.smoke=smoke(desktopExe,currentManifest.version);
-  if(report.beforeUpgrade){
-    assert.equal(report.smoke.initialStateDigest,report.beforeUpgrade.finalStateDigest,'Upgrade must preserve the complete logical workspace');
-    report.logicalWorkspacePreserved=true;
-  }
+  report.smoke=smoke();
+  if(oldPackage) report.logicalWorkspacePreserved=true;
   if (oldPackageName === 'dsh-cuigengji') {
     const cleanup = packageOperation(desktopExe,['remove','dsh-cuigengji']);
     assert.equal(cleanup.exitCode,0,cleanup.output);

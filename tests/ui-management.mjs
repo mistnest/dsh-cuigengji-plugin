@@ -30,7 +30,11 @@ try {
   const fits = async () => expect(await page.locator('.cuigengji').first().evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.getByRole('button', {name: '规划', exact: true}).click();
   await open('写作预设');
-  await expect(page.getByRole('button', {name: '‹ 返回规划', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: '‹ 返回设置', exact: true}).click();
+  await expect(page.getByRole('dialog', {name:'设置',exact:true})).toBeVisible();
+  await page.getByRole('button', {name:'关闭设置',exact:true}).click();
+  await expect(page.locator('.planning-canvas-scroll')).toBeVisible();
+  await open('写作预设');
   const content = page.getByLabel('提示词内容', {exact: true});
   const edited = blocks[0].content + '\n\n保留作者新增的要求。';
   await content.fill(edited);
@@ -38,7 +42,7 @@ try {
   await page.getByRole('button', {name: '‹ 返回作品首页', exact: true}).click();
   await page.locator('.welcome-book').first().click();
   await page.getByRole('button', {name: '规划', exact: true}).click();
-  await expect(page.getByRole('combobox', {name: '规划页面', exact: true})).toBeVisible();
+  await expect(page.getByLabel('规划画布',{exact:true})).toBeVisible();
   await open('写作预设');
   await expect(content).toHaveValue(edited);
   await page.getByRole('button', {name: '保存预设', exact: true}).click();

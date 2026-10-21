@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { digest, errorCode } from "../../infrastructure/persistence/file-transaction.js";
 import { backupParent, createUpgradeBackup, durableJson, exists, optionalJson, validBackupPath, verifyUpgradeBackup } from "../../infrastructure/persistence/upgrade-backup.js";
+import { STORAGE_VERSION } from "../../infrastructure/persistence/project-layout.js";
+import { ordinaryBindings } from "../bindings/state.js";
 const packageVersion = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")).version;
 const stamp = () => (/* @__PURE__ */ new Date()).toISOString();
 const failure = (code, message) => {
@@ -61,7 +63,7 @@ class UpgradeCoordinator {
   async detectVersion() {
     if (await exists(join(this.root, "library.json"))) {
       const library = await optionalJson(join(this.root, "library.json"));
-      if (library?.format !== "cuigengji-library" || ![2, 3, 4].includes(library.storageVersion)) return failure("CORRUPT_STORE", "\u4E0D\u652F\u6301\u7684\u5C0F\u8BF4\u5B58\u50A8\u683C\u5F0F");
+      if (library?.format !== "cuigengji-library" || ![2, 3, 4, 5].includes(library.storageVersion)) return failure("CORRUPT_STORE", "\u4E0D\u652F\u6301\u7684\u5C0F\u8BF4\u5B58\u50A8\u683C\u5F0F");
       return library.storageVersion;
     }
     return await exists(join(this.root, "store.json")) || await exists(join(this.root, "store.pending.json")) ? 1 : 0;
@@ -77,7 +79,7 @@ class UpgradeCoordinator {
       stage: "prepare",
       startedAt: stamp(),
       fromStorageVersion: null,
-      toStorageVersion: 4,
+      toStorageVersion: STORAGE_VERSION,
       migrated: false,
       backupPath: null,
       backupComplete: false,
@@ -100,11 +102,12 @@ class UpgradeCoordinator {
         migrated: saved.migrated,
         backupPath: saved.backupPath,
         backupComplete: saved.backupComplete,
-        beforeStateDigest: saved.beforeStateDigest
+        beforeStateDigest: saved.beforeStateDigest,
+        ...(saved.stage === "auxiliary" || saved.failedStage === "auxiliary") && saved.auxiliaryStateDigest ? { auxiliaryStateDigest: saved.auxiliaryStateDigest } : {}
       };
       const hasSource = (await Promise.all(["library.json", "store.json", "store.pending.json", "transaction.pending.json", "novels"].map((path) => exists(join(this.root, path))))).some(Boolean);
       const sameCompleted = !resume && saved?.status === "ready" && saved.pluginVersion === this.pluginVersion;
-      if (hasSource && (!sameCompleted || await this.detectVersion() !== 4)) {
+      if (hasSource && (!sameCompleted || await this.detectVersion() !== STORAGE_VERSION)) {
         report.stage = "backup";
         if (resume && report.backupComplete) {
           if (!validBackupPath(this.root, report.backupPath)) return failure("UPGRADE_BACKUP_INVALID", "\u5347\u7EA7\u8BB0\u5F55\u4E2D\u7684\u5907\u4EFD\u8DEF\u5F84\u65E0\u6548");
@@ -127,7 +130,7 @@ class UpgradeCoordinator {
       const currentVersion = await this.detectVersion();
       if (currentVersion === 0 && saved?.summary && saved.summary.counts.novels > 0) return failure("UPGRADE_SOURCE_MISSING", "\u5DF2\u6709\u5DE5\u4F5C\u5E93\u7684\u7D22\u5F15\u5168\u90E8\u7F3A\u5931\uFF0C\u672A\u521B\u5EFA\u7A7A\u5E93");
       report.fromStorageVersion ??= currentVersion;
-      report.migrated = report.fromStorageVersion > 0 && report.fromStorageVersion < 4;
+      report.migrated = report.fromStorageVersion > 0 && report.fromStorageVersion < STORAGE_VERSION;
       const before = await this.store.readStoredWorkspace();
       report.beforeStateDigest ??= workspaceDigest(before);
       report.stage = "migrate";
@@ -135,9 +138,14 @@ class UpgradeCoordinator {
       const state = await this.store.load(), after = workspaceDigest(state);
       report.stage = "verify";
       await this.persist(report);
-      if (after !== report.beforeStateDigest) return failure("UPGRADE_CONTENT_MISMATCH", "\u8FC1\u79FB\u524D\u540E\u7684\u4F5C\u54C1\u3001\u6B63\u6587\u5386\u53F2\u6216\u5F15\u7528\u4E0D\u4E00\u81F4\uFF1B\u6570\u636E\u4E0E\u5907\u4EFD\u5DF2\u4FDD\u7559");
-      if (await this.detectVersion() !== 4) return failure("UPGRADE_INCOMPLETE", "\u7269\u7406\u5B58\u50A8\u8FC1\u79FB\u672A\u5B8C\u6210");
-      report = { ...report, status: "ready", stage: "complete", completedAt: stamp(), afterStateDigest: after, summary: workspaceSummary(state) };
+      if (after !== report.beforeStateDigest && after !== report.auxiliaryStateDigest) return failure("UPGRADE_CONTENT_MISMATCH", "\u8FC1\u79FB\u524D\u540E\u7684\u4F5C\u54C1\u3001\u6B63\u6587\u5386\u53F2\u6216\u5F15\u7528\u4E0D\u4E00\u81F4\uFF1B\u6570\u636E\u4E0E\u5907\u4EFD\u5DF2\u4FDD\u7559");
+      if (await this.detectVersion() !== STORAGE_VERSION) return failure("UPGRADE_INCOMPLETE", "\u7269\u7406\u5B58\u50A8\u8FC1\u79FB\u672A\u5B8C\u6210");
+      report.auxiliaryStateDigest = workspaceDigest({ ...state, bindings: ordinaryBindings(state.bindings) });
+      report.stage = "auxiliary";
+      await this.persist(report);
+      const auxiliaryMigration = await this.store.upgradeAuxiliary(state);
+      if (workspaceDigest(state) !== report.auxiliaryStateDigest) return failure("UPGRADE_CONTENT_MISMATCH", "\u4F1A\u8BDD\u9009\u62E9\u8FC1\u79FB\u53D1\u751F\u4E86\u8BA1\u5212\u5916\u7684\u6570\u636E\u53D8\u5316");
+      report = { ...report, status: "ready", stage: "complete", completedAt: stamp(), afterStateDigest: workspaceDigest(state), auxiliaryMigration, summary: workspaceSummary(state) };
       await this.persist(report);
       return structuredClone(report);
     } catch (error) {
@@ -177,7 +185,7 @@ class UpgradeCoordinator {
     const release = await this.store.acquire();
     try {
       await this.store.transaction.recover();
-      if (await this.detectVersion() !== 4) return failure("UPGRADE_REQUIRED", "\u5F53\u524D\u5B58\u50A8\u683C\u5F0F\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u52A0\u8F7D\u63D2\u4EF6");
+      if (await this.detectVersion() !== STORAGE_VERSION) return failure("UPGRADE_REQUIRED", "\u5F53\u524D\u5B58\u50A8\u683C\u5F0F\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u52A0\u8F7D\u63D2\u4EF6");
       const state = await this.store.readStoredWorkspace(), summary = workspaceSummary(state);
       if (options.expectedNovelIds) checks.push({ name: "novelIds", ok: options.expectedNovelIds.every((id) => Object.hasOwn(state.novels, id)), expected: options.expectedNovelIds, actual: Object.keys(state.novels) });
       checks.push({ name: "fullWorkspace", ok: true });

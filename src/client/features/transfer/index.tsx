@@ -14,6 +14,8 @@ export function TransferPage({call, run, busy, novelId, initial, onOpen, onBack,
   const {revision: refreshRevision} = useWorkbenchRefresh();
   const initialized = useRef(false);
   const [mode, setMode] = useState(initial?.mode || 'import');
+  const presetShortcut = initial?.mode === 'import' && initial.selection?.kind === 'preset';
+  const presetTargetId = initial?.selection?.novelId || novelId;
   const [library, setLibrary] = useState<Catalog | null>(null), [loadError, setLoadError] = useState('');
   const [selection, setSelection] = useState<Selection>(initial?.selection || {kind: 'chapters', novelId}), [format, setFormat] = useState<ExportFormat>('package');
   const [exportReport, setExportReport] = useState<Report | null>(null), [exportError, setExportError] = useState('');
@@ -39,15 +41,17 @@ export function TransferPage({call, run, busy, novelId, initial, onOpen, onBack,
     const timer = setTimeout(() => {call<TransferPreview>('transfer.preview', {file, options}).then(value => {if (live) setPreview(value);}).catch(e => {if (live) setPreviewError(errorMessage(e));}).finally(() => {if (live) setPreviewPending(false);});}, 250);
     return () => {live = false; clearTimeout(timer);};
   }, [call, file, identified, importKey, result, previewVersion, refreshRevision]);
-  const editOptions = (value: ImportOptions) => {setOptions(value); setPreview(null); setResult(null); setNotice(''); requestId.current = crypto.randomUUID();};
+  const editOptions = (value: ImportOptions) => {if (JSON.stringify(value) === importKey) return; setOptions(value); setPreview(null); setResult(null); setNotice(''); requestId.current = crypto.randomUUID();};
   const editExport = (value: Selection) => {setSelection(value); setExportReport(null); setNotice(''); if (value.kind !== 'chapters') setFormat('package');};
   const selectFile = (chosen: File) => {
+    requestId.current = crypto.randomUUID();
     setFile(null); setIdentified(null); setPreview(null); setPreviewError(''); setResult(null); setNotice('');
     void run(async () => {
-      const value = await readTransferFile(chosen), info = await call<Inspection>('transfer.inspect', {file: value});
+      const value = await readTransferFile(chosen), info = await call<Inspection>('transfer.inspect', {file: value, options: presetShortcut ? {intent: 'preset'} : {}});
       setIdentified(info); setFile(value);
-      editOptions({mode: info.restorable ? 'restore' : 'copy', selection: defaultSelection(info.kind, info.catalog, info.catalog.books[0]?.id, true),
-        targetId: info.restorable ? null : novelId || null, title: info.catalog.books[0]?.title, presetPolicy: 'append', ...(info.orderId ? {orderId: info.orderId} : {})});
+      editOptions({mode: presetShortcut ? 'copy' : info.restorable ? 'restore' : 'copy', selection: defaultSelection(presetShortcut ? 'preset' : info.kind, info.catalog, info.catalog.books[0]?.id, !presetShortcut),
+        targetId: presetShortcut ? presetTargetId : info.restorable || initial?.selection?.kind === 'works' ? null : novelId || null, title: info.catalog.books[0]?.title, presetPolicy: 'append',
+        ...(presetShortcut ? {intent: 'preset' as const} : {}), ...(info.orderId ? {orderId: info.orderId} : {})});
     });
   };
   const choose = (event: React.ChangeEvent<HTMLInputElement>) => {const chosen = event.target.files?.[0]; event.target.value = ''; if (chosen) selectFile(chosen);};
@@ -59,13 +63,13 @@ export function TransferPage({call, run, busy, novelId, initial, onOpen, onBack,
   const exportFile = () => run(async () => {downloadFile(await call('transfer.export', {selection, format})); setNotice('已开始下载，请在下载列表确认文件已保存。');});
   const importSelection = options.selection;
   const canExtract = identified?.kind === 'works' || identified?.kind === 'workspace';
-  const allowedKinds: ExportKind[] = options.mode === 'restore' ? identified?.kind === 'workspace' ? ['works', 'workspace'] : ['works'] : canExtract ? ['chapters', 'memory', 'planning', 'preset', 'works'] : identified ? [identified.kind] : [];
+  const allowedKinds: ExportKind[] = presetShortcut ? ['preset'] : options.mode === 'restore' ? identified?.kind === 'workspace' ? ['works', 'workspace'] : ['works'] : canExtract ? ['chapters', 'memory', 'planning', 'preset', 'works'] : identified ? [identified.kind] : [];
   const importTarget = library?.books.find(b => b.id === options.targetId);
   const changeImportKind = (kind: ExportKind) => editOptions({...options, selection: defaultSelection(kind, identified!.catalog, importSelection?.novelId, true), ...(kind === 'works' || kind === 'workspace' ? {targetId: null} : {})});
   const footer = mode === 'export' ? <div className="transfer-footer"><span>{exportReport ? countLabel(exportReport.counts, selection.kind) : exportError || '选择要导出的内容'}<small>{format === 'package' ? '催更姬数据包 · JSON' : format === 'md' ? 'Markdown · UTF-8' : 'TXT · UTF-8'}</small></span><button className="primary" disabled={busy || !exportReport} onClick={exportFile}>下载文件</button></div>
     : identified && !result ? <div className="transfer-footer"><span>{preview ? countLabel(preview.counts, importSelection?.kind || 'works') : previewPending ? '正在核对内容…' : '选择范围与目标'}<small>{preview ? preview.target : '导入前自动备份当前工作库'}</small></span><button className="primary" disabled={busy || !preview?.valid || previewPending} onClick={confirmImport}>确认导入</button></div> : null;
-  return <ManagementPage title="导入 / 导出" description="带走作品，也把需要的写作内容带进来。" {...{onBack, backLabel}} documentClass="transfer-document" footer={footer}
-    actions={<div className="transfer-mode" role="group" aria-label="导入导出切换"><button disabled={busy} aria-pressed={mode === 'import'} onClick={() => {setMode('import'); setNotice('');}}>导入</button><button disabled={busy} aria-pressed={mode === 'export'} onClick={() => {setMode('export'); setNotice('');}}>导出</button></div>}>
+  return <ManagementPage title={presetShortcut ? '导入写作预设' : '导入 / 导出'} description={presetShortcut ? `保存到《${library?.books.find(b => b.id === presetTargetId)?.title || '当前作品'}》的写作预设。` : '带走作品，也把需要的写作内容带进来。'} {...{onBack, backLabel}} documentClass="transfer-document" footer={footer}
+    actions={presetShortcut ? undefined : <div className="transfer-mode" role="group" aria-label="导入导出切换"><button disabled={busy} aria-pressed={mode === 'import'} onClick={() => {setMode('import'); setNotice('');}}>导入</button><button disabled={busy} aria-pressed={mode === 'export'} onClick={() => {setMode('export'); setNotice('');}}>导出</button></div>}>
     {loadError && <p role="alert">{loadError}</p>}
     {!library && !loadError && <p role="status">正在读取作品库…</p>}
     {mode === 'export' && library && <>
@@ -81,17 +85,17 @@ export function TransferPage({call, run, busy, novelId, initial, onOpen, onBack,
       <ImportSteps preview={!!identified} done={!!result}/>
       {!result && <div className={'transfer-upload ' + (dragging ? 'is-dragging' : '')} onDragOver={e => {e.preventDefault(); if (!busy) setDragging(true);}} onDragLeave={e => {if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);}} onDrop={e => {e.preventDefault(); setDragging(false); if (!busy && e.dataTransfer.files[0]) selectFile(e.dataTransfer.files[0]);}}>
         <div className="transfer-upload-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M8 26H5V17M27 17v9h-3M16 23V5M9 12l7-7 7 7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
-        <div><h3>{file ? file.name : '选择文件，或拖到这里'}</h3><p>{identified ? identified.label : '催更姬数据包、酒馆角色卡／世界书／预设、TXT、Markdown'}</p></div>
-        <FilePicker label={file ? '更换文件' : '选择文件'} name="导入文件" hint="" accept=".json,.png,.txt,.md" disabled={busy} onChange={choose}/>
+        <div><h3>{file ? file.name : '选择文件，或拖到这里'}</h3><p>{identified ? identified.label : presetShortcut ? '预设 JSON、TXT、Markdown，或从催更姬备份中提取预设' : '催更姬数据包、酒馆角色卡／世界书／预设、TXT、Markdown'}</p></div>
+        <FilePicker label={file ? '更换文件' : '选择文件'} name="导入文件" hint="" accept={presetShortcut ? '.json,.txt,.md' : '.json,.png,.txt,.md'} disabled={busy} onChange={choose}/>
       </div>}
       {identified && importSelection && !result && <>
-        <div className="transfer-import-options">{identified.restorable && <label className="management-field">导入方式<select aria-label="导入方式" disabled={busy} value={options.mode} onChange={e => {const value = e.target.value as 'copy' | 'restore'; editOptions({...options, mode: value, targetId: null,
+        <div className="transfer-import-options">{!presetShortcut && identified.restorable && <label className="management-field">导入方式<select aria-label="导入方式" disabled={busy} value={options.mode} onChange={e => {const value = e.target.value as 'copy' | 'restore'; editOptions({...options, mode: value, targetId: null,
           selection: defaultSelection(identified.kind === 'workspace' && value === 'restore' ? 'workspace' : 'works', identified.catalog, identified.catalog.books[0]?.id, true)});}}><option value="restore">恢复备份 · 保留原作品和版本</option><option value="copy">复用内容 · 使用新的 ID</option></select></label>}
           {identified.orders.length > 1 && <label className="management-field">提示词排列<select aria-label="提示词排列" disabled={busy} value={options.orderId} onChange={e => editOptions({...options, orderId: e.target.value})}>{identified.orders.map(order => <option key={order.id} value={order.id}>{order.name}</option>)}</select></label>}</div>
         {allowedKinds.length > 1 && <KindPicker kinds={allowedKinds} value={importSelection.kind} change={changeImportKind} disabled={busy}/>}
         <div className="transfer-grid"><section className="transfer-form" aria-label="导入范围"><ScopePicker key={`${identified.fingerprint}:${importSelection.kind}:${importSelection.novelId}`} catalog={identified.catalog} selection={importSelection} change={selection => editOptions({...options, selection})} disabled={busy}/>
-          {options.mode === 'copy' && <div className="transfer-destination"><h3>放到哪里</h3>{importSelection.kind !== 'works' && <label className="management-field">目标作品<select aria-label="目标作品" disabled={busy} value={options.targetId || ''} onChange={e => editOptions({...options, targetId: e.target.value || null})}><option value="">新建一部作品</option>{library?.books.filter(b=>!b.archived).map(b => <option key={b.id} value={b.id}>{b.title}</option>)}</select></label>}
-            {!options.targetId && (importSelection.kind !== 'works' || (importSelection.novelIds || []).length === 1) && <label className="management-field">新作品名称<input aria-label="新作品名称" disabled={busy} value={options.title || ''} onChange={e => editOptions({...options, title: e.target.value})}/></label>}
+          {options.mode === 'copy' && <div className="transfer-destination"><h3>放到哪里</h3>{presetShortcut ? <p className="management-hint">《{importTarget?.title || '当前作品'}》的写作预设</p> : importSelection.kind !== 'works' && <label className="management-field">目标作品<select aria-label="目标作品" disabled={busy} value={options.targetId || ''} onChange={e => editOptions({...options, targetId: e.target.value || null})}><option value="">新建一部作品</option>{library?.books.filter(b=>!b.archived).map(b => <option key={b.id} value={b.id}>{b.title}</option>)}</select></label>}
+            {!presetShortcut && !options.targetId && (importSelection.kind !== 'works' || (importSelection.novelIds || []).length === 1) && <label className="management-field">新作品名称<input aria-label="新作品名称" disabled={busy} value={options.title || ''} onChange={e => editOptions({...options, title: e.target.value})}/></label>}
             {importSelection.kind === 'preset' && importTarget?.preset && <label className="management-field">现有预设<select aria-label="现有预设" disabled={busy} value={options.presetPolicy} onChange={e => editOptions({...options, presetPolicy: e.target.value as 'append' | 'replace'})}><option value="append">追加提示词，保留现有条目</option><option value="replace">替换当前预设</option></select></label>}
           </div>}
           {['memory', 'planning'].includes(importSelection.kind) && <label className="transfer-checkbox transfer-dependency-choice"><input type="checkbox" aria-label="携带文件内的关联正文与设定" disabled={busy} checked={!!importSelection.includeDependencies} onChange={e => editOptions({...options, selection: {...importSelection, includeDependencies: e.target.checked}})}/><span>携带文件内的关联正文与设定<small>只使用文件中已有的关联内容</small></span></label>}

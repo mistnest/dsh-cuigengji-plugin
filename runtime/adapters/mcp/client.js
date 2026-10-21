@@ -19,6 +19,7 @@ class MemoryBridge {
     this.store = store;
     this.dispatch = options.dispatch ?? ((action, args, actor) => store.dispatch(action, args, actor));
     this.resolveNovel = options.resolveNovel;
+    this.resolveBinding = options.resolveBinding;
     this.timeoutMs = options.timeoutMs ?? 3e4;
     const runtime = memoryRuntime(options);
     this.nodeCommand = runtime.command;
@@ -65,20 +66,31 @@ class MemoryBridge {
       assertMemoryAction(action);
       if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("\u53C2\u6570\u5FC5\u987B\u662F\u5BF9\u8C61");
       const actor = { kind: "agent", sessionId };
-      const novelId = await this.boundNovel(sessionId);
-      if (!novelId) throw new Error("\u5F53\u524D\u4F1A\u8BDD\u5C1A\u672A\u7ED1\u5B9A\u5C0F\u8BF4");
-      if (args.novelId && args.novelId !== novelId) throw new Error("\u4E0D\u80FD\u8BBF\u95EE\u5176\u4ED6\u5C0F\u8BF4");
+      const onDemandGuidance = action === "guidance.read";
+      const novelId = onDemandGuidance ? await this.boundNovelOptional(sessionId, args.novelId) : await this.boundNovel(sessionId, args.novelId);
+      if (!onDemandGuidance && !novelId) throw new Error("\u5F53\u524D\u4F1A\u8BDD\u5C1A\u672A\u7ED1\u5B9A\u5C0F\u8BF4");
+      if (args.novelId && novelId && args.novelId !== novelId) throw new Error("\u4E0D\u80FD\u8BBF\u95EE\u5176\u4ED6\u5C0F\u8BF4");
       const { sessionId: _session, actor: _actor, ...safeArgs } = args;
-      const result = await this.dispatch(action, { ...safeArgs, novelId }, actor);
+      const result = await this.dispatch(action, { ...safeArgs, ...novelId ? { novelId } : {} }, actor);
       reply(200, { result });
     } catch (error) {
       reply(400, { error: error.message });
     }
   }
-  async boundNovel(sessionId) {
-    if (this.resolveNovel) return this.resolveNovel(sessionId);
+  async boundNovel(sessionId, requested) {
+    if (this.resolveNovel) return this.resolveNovel(sessionId, requested);
     const binding = await this.store.dispatch("binding.get", {}, { kind: "agent", sessionId });
+    if (requested && binding?.novelId !== requested) throw new Error("\u4E0D\u80FD\u8BBF\u95EE\u5176\u4ED6\u5C0F\u8BF4");
     return binding?.novelId;
+  }
+  async boundNovelOptional(sessionId, requested) {
+    if (requested) return this.boundNovel(sessionId, requested);
+    if (this.resolveBinding) {
+      const binding2 = await this.resolveBinding(sessionId);
+      return binding2?.activeNovelId || binding2?.novelId || null;
+    }
+    const binding = await this.store.dispatch("binding.get", {}, { kind: "agent", sessionId });
+    return binding?.activeNovelId || binding?.novelId || null;
   }
   async connection(sessionId) {
     if (!sessionId || typeof sessionId !== "string") throw new Error("\u7F3A\u5C11\u4F1A\u8BDD ID");

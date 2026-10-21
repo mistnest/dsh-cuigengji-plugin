@@ -1,3 +1,5 @@
+import {selectSettingsCategory} from './helpers/navigation.mjs';
+import {selectPlanningPage,selectedPlanningPage,showOrganization} from './helpers/navigation.mjs';
 import {spawn} from 'node:child_process';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {resolve, join} from 'node:path';
@@ -70,14 +72,15 @@ try {
   }
   await page.setViewportSize({width:1200,height:900});
   await page.getByRole('button',{name:'设置',exact:true}).click();
+  await selectSettingsCategory(page,'AI与写作');
   await expect(page.getByRole('button',{name:'写作预设',exact:true})).toBeVisible();await shot('settings-1200');
   await expect(page.getByRole('dialog',{name:'设置',exact:true}).getByRole('button',{name:'关于催更姬',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'写作预设',exact:true}).click();await expect(page.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();await page.getByRole('button',{name:'‹ 返回正文',exact:true}).click();
+  await selectSettingsCategory(page,'AI与写作');await page.getByRole('button',{name:'写作预设',exact:true}).click();await expect(page.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();await page.getByRole('button',{name:'‹ 返回设置',exact:true}).click();await page.getByRole('button',{name:'关闭设置',exact:true}).click();
   for(const width of [1200,560,360]){await page.setViewportSize({width,height:900});const about=page.getByRole('button',{name:'关于催更姬',exact:true});await expect(about).toBeInViewport();await about.click();await expect(page.getByRole('dialog',{name:'关于催更姬',exact:true})).toBeVisible();await shot('about-'+width);await page.getByLabel('关闭关于催更姬',{exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(about).toBeFocused();}
   await page.setViewportSize({width:1200,height:900});
   await page.getByRole('button',{name:'规划',exact:true}).click();await expect(page.locator('.planning-card')).toHaveCount(3);
-  await page.getByRole('button',{name:'新建规划页面',exact:true}).click();await page.getByLabel('页面名称',{exact:true}).fill('码头决战 · 沙盘');await page.getByRole('button',{name:'保存页面',exact:true}).click();await expect(page.getByLabel('规划页面',{exact:true}).locator('option:checked')).toHaveText('码头决战 · 沙盘');await page.getByLabel('规划页面',{exact:true}).selectOption('');
-  await page.getByLabel('筛选规划',{exact:true}).click();await page.getByLabel('故事线',{exact:true}).selectOption('主角行动');await page.keyboard.press('Escape');await expect(page.locator('.planning-card')).toHaveCount(1);await page.getByLabel('移除故事线筛选',{exact:true}).click();await expect(page.locator('.planning-card')).toHaveCount(3);
+  await page.getByRole('button',{name:'新建画布',exact:true}).click();await page.getByLabel('画布名称',{exact:true}).fill('码头决战 · 沙盘');await page.getByRole('button',{name:'保存画布',exact:true}).click();await expect(selectedPlanningPage(page)).toContainText('码头决战 · 沙盘');await selectPlanningPage(page,'');
+  await page.getByRole('textbox',{name:'搜索规划',exact:true}).fill('潜入仓库');await expect(page.locator('.directory-entry')).toHaveCount(1);await expect(page.locator('.planning-card')).toHaveCount(3);await page.getByRole('textbox',{name:'搜索规划',exact:true}).fill('');await expect(page.locator('.directory-entry')).toHaveCount(3);
   await page.getByLabel('添加画布内容',{exact:true}).click();await page.getByRole('button',{name:'文字批注',exact:true}).click();await expect(page.locator('.canvas-draft')).toBeVisible();await page.locator('.canvas-draft').getByRole('button',{name:'取消',exact:true}).click();
   const canvas=page.locator('.planning-canvas-scroll'),world=page.locator('.planning-canvas').first();
   await canvas.hover({position:{x:700,y:400}});await page.mouse.wheel(0,160);
@@ -85,12 +88,12 @@ try {
   await call('planning.apply',{novelId,requestId:crypto.randomUUID(),operations:[{op:'node.update',id:plan.mapping.a,expectedRevision:1,value:{title:'潜入仓库 · 新讨论'}}]});
   await refresh();await expect(page.getByRole('button',{name:'潜入仓库 · 新讨论',exact:true})).toBeVisible();expect(await world.getAttribute('style')).toBe(camera);
   await page.getByRole('button',{name:'适应视图',exact:true}).click();
-  await page.locator(`[data-node-id="${plan.mapping.a}"] .planning-title`).click();
+  await page.locator(`[data-node-id="${plan.mapping.a}"] p`).click();
   const tools=page.getByRole('toolbar',{name:'画布选中操作',exact:true});await expect(tools).toBeVisible();await tools.getByLabel('移动选中卡片',{exact:true}).click();await expect(tools.locator('details')).toHaveJSProperty('open',true);await page.keyboard.press('Escape');await expect(tools.locator('details')).toHaveJSProperty('open',false);
   await tools.getByLabel('取消画布选择',{exact:true}).click();await expect(tools).toHaveCount(0);
   for(const width of [1200,560,360]){await page.setViewportSize({width,height:900});await shot('planning-'+width);await expect(page.getByRole('button',{name:'＋ 情节',exact:true})).toBeInViewport();}
   await page.setViewportSize({width:1200,height:900});
-  await page.getByRole('button',{name:'设定',exact:true}).click();await page.getByRole('button',{name:'画布',exact:true}).click();await page.getByRole('button',{name:'适应视图',exact:true}).click();await page.locator(`[data-node-id="${person.id}"] .planning-title`).click();
+  await page.getByRole('button',{name:'设定',exact:true}).click();await page.getByRole('button',{name:'适应视图',exact:true}).click();await page.locator(`[data-node-id="${person.id}"] p`).click();
   await expect(tools).toBeVisible();await tools.getByLabel('移动选中卡片',{exact:true}).click();await tools.getByRole('button',{name:group.name,exact:true}).click();await expect.poll(async()=>(await call('graph.get',{novelId,nodeId:person.id})).groupId).toBe(group.id);
   await page.locator(`[data-node-id="${person.id}"] .planning-title`).dblclick();await page.getByRole('button',{name:'编辑',exact:true}).click();await page.getByLabel('全文',{exact:true}).fill('这份人物草稿应在刷新后保留。');
   await refresh();await expect(page.getByLabel('全文',{exact:true})).toHaveValue('这份人物草稿应在刷新后保留。');
@@ -98,8 +101,9 @@ try {
   const remote=await call('graph.get',{novelId,nodeId:person.id});await call('graph.update',{novelId,nodeId:person.id,expectedRevision:remote.revision,content:'AI 刚刚补充了她的过去。'});await refresh();await expect(page.locator('.document-body')).toHaveText('AI 刚刚补充了她的过去。');await page.getByRole('button',{name:'‹ 返回设定',exact:true}).click();
   for(const width of [1200,560,360]){await page.setViewportSize({width,height:900});await shot('settings-canvas-'+width);}
   await page.getByRole('button',{name:'作品首页',exact:true}).click();expect((await call('binding.get')).novelId).toBe(novelId);
-  await page.locator('.welcome-book').filter({hasText:second.title}).click();await expect.poll(async()=> (await call('binding.get')).novelId).toBe(second.id);
-  await page.getByRole('button',{name:'作品首页',exact:true}).click();await page.locator('.welcome-book').filter({hasText:'雾港来信'}).click();await expect.poll(async()=> (await call('binding.get')).novelId).toBe(novelId);
+  await page.locator('.welcome-book').filter({hasText:second.title}).click();await expect(page.locator('.navigation-book')).toHaveText(second.title);expect((await call('binding.get')).novelId).toBe(novelId);
+  if(await page.getByRole('dialog',{name:'章节目录抽屉',exact:true}).count())await page.getByRole('button',{name:'关闭章节目录',exact:true}).click();
+  await page.getByRole('button',{name:'作品首页',exact:true}).click();await page.locator('.welcome-book').filter({hasText:'雾港来信'}).click();await expect(page.locator('.navigation-book')).toHaveText('雾港来信');expect((await call('binding.get')).novelId).toBe(novelId);
   await page.getByRole('button',{name:'规划',exact:true}).click();await page.setViewportSize({width:1200,height:900});
   await page.evaluate(()=>{document.documentElement.style.cssText='--dsw-alias-bg-base:#181a20;--dsw-alias-label-primary:#e9edf5;--dsw-alias-label-secondary:#99a0ad;--dsw-alias-border-l1:#353a46;--dsw-alias-state-business-primary:#6c8aff;';});await shot('planning-dark-1200');await page.getByRole('button',{name:'设置',exact:true}).click();await shot('settings-dark-1200');await page.getByLabel('关闭设置',{exact:true}).click();
   await openAuthorPage(page,'导入 / 导出');await page.getByRole('group',{name:'导入导出切换'}).getByRole('button',{name:'导出',exact:true}).click();await page.getByRole('button',{name:'设定',exact:true}).last().click();

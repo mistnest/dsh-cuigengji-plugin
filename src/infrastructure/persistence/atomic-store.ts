@@ -18,13 +18,30 @@ export class AtomicStore<T> {
   async acquire() {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     const lock = join(this.root, '.lock'); const started = Date.now();
+    let deniedSince:number|undefined;
     for (;;) {
+      let created=false;
       try {
         await mkdir(lock);
+        created=true;
         try { await writeFile(join(lock, 'owner'), String(process.pid), { flag: 'wx', mode: 0o600 }); }
         catch (error) { await rmdir(lock).catch(() => {}); throw error; }
         return async () => { await unlink(join(lock, 'owner')); await rmdir(lock); };
       } catch (error) {
+        // On Windows, a removed lock can briefly remain delete-pending while
+        // another request has its owner file open. mkdir reports EPERM during
+        // that interval. Wait without reclaiming anyone's live lock. Real
+        // access failures still surface after a bounded grace period.
+        if(!created&&process.platform==='win32'&&['EPERM','EACCES'].includes(errorCode(error))){
+          deniedSince??=Date.now();
+          if(Date.now()-started>=this.lockTimeoutMs)fail('STORE_BUSY','小说数据正在被另一操作使用，请稍后重试');
+          // Normal EEXIST contention may already have lasted seconds. Measure
+          // this grace from the actual denial, never from the initial wait.
+          if(Date.now()-deniedSince<Math.min(this.lockTimeoutMs,2000)){
+            await new Promise(r=>setTimeout(r,20));continue;
+          }
+        }
+        else deniedSince=undefined;
         if (errorCode(error) !== 'EEXIST') throw error;
         // Never reclaim by age: a slow live writer must retain exclusive ownership.
         try {

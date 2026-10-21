@@ -149,10 +149,16 @@ test('graph CRUD, source validation and stale memory after historical edits', as
   assert.equal((await run('edge.list', { includeDeleted: true }))[0].id, edge.id);
 });
 
-test('bound sessions cannot accidentally write a different novel and agent can write without a planning approval', async t => {
-  const { run, agent } = await fixture(t);
+test('all agents can explicitly select cross-book targets without planning approval', async t => {
+  const { run, agent, novel } = await fixture(t);
   const other = await run('novel.create', { title: '另一部' });
-  await assert.rejects(run('chapter.create', { novelId: other.id, title: '串库' }, agent), { code: 'NOVEL_MISMATCH' });
+  const created=await run('chapter.create', {novelId:other.id,title:'指定作品的新章'},agent);
+  assert.equal((await run('chapter.list',{novelId:other.id}))[0].id,created.id);
+  assert.equal((await run('binding.get',{},agent)).novelId,novel.id,'explicit targets do not switch focus');
+  const child={kind:'agent',sessionId:'child-writer'};
+  await run('novel.focus',{novelId:novel.id},child);
+  assert.ok((await run('chapter.create',{novelId:other.id,title:'子会话的明确目标'},child)).id);
+  assert.equal((await run('binding.get',{},child)).novelId,novel.id);
   await assert.rejects(run('plan.approve', {}, agent), {code:'MIGRATED_ACTION'});
   assert.ok((await run('chapter.create', {title:'无需规划批准',content:'开始写作'}, agent)).id);
 });

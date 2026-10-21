@@ -1,4 +1,6 @@
 import type { Board, PlanningNovel } from '../../contracts/planning.ts';
+import {assertGroupHierarchy} from '../directory/groups.ts';
+import {scopePlanningFolders} from './workspaces.ts';
 const fail=(code:string,message:string):never=>{throw Object.assign(new Error(message),{code});};
 const copy=<T>(v:T):T=>structuredClone(v);
 const record=(v:unknown):v is Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -6,6 +8,7 @@ const own=(map:object,id:string)=>Object.prototype.hasOwnProperty.call(map,id);
 export function ensurePlanning(novel:PlanningNovel):Board {
   if(novel.planning){
     novel.planning.groups ??= {};
+    scopePlanningFolders(novel.planning);
     return novel.planning;
   }
   const board:Board={formatVersion:2,nodes:{},edges:{},groups:{},pages:{},decorations:{},sequence:0,transactions:[]};
@@ -21,22 +24,35 @@ function cycle(nodes:{id:string}[],edges:[string,string][]) {
 export function validatePlanning(board:Board,novel:PlanningNovel):void {
   if(!board||![1,2].includes(board.formatVersion)||!record(board.nodes)||!record(board.edges)||!Array.isArray(board.transactions)||(!Number.isSafeInteger(board.sequence)||board.sequence<0))fail('INVALID_PLANNING','规划数据格式无效');
   board.groups ??= {};
+  scopePlanningFolders(board);
   const pages=board.pages??{},decorations=board.decorations??{};
   if(!record(pages)||!record(decorations))fail('INVALID_PLANNING','页面或批注格式无效');
   const validPage=(id:unknown)=>id===undefined||id===null||(typeof id==='string'&&own(pages,id)&&!pages[id].deleted);
   for(const [id,p] of Object.entries(pages))if(!record(p)||id!==p.id||typeof p.name!=='string'||!p.name.trim()||typeof p.summary!=='string'||typeof p.deleted!=='boolean'||!Number.isSafeInteger(p.revision)||p.revision<1)fail('INVALID_PLANNING','规划页面无效');
   for(const [id,d] of Object.entries(decorations)){
     if(!record(d)||id!==d.id||!Number.isSafeInteger(d.revision)||d.revision<1||typeof d.deleted!=='boolean'||!['note','frame'].includes(d.kind)||typeof d.title!=='string'||typeof d.content!=='string'||(!d.deleted&&!validPage(d.pageId)))fail('INVALID_PLANNING','画布批注无效');
-    if(!record(d.position)||!Number.isFinite(d.position.x)||!Number.isFinite(d.position.y)||!Number.isFinite(d.width)||d.width<160||d.width>6000||!Number.isFinite(d.height)||d.height<80||d.height>6000||![14,18,24,32].includes(d.fontSize)||!['sans','serif'].includes(d.fontFamily)||!['neutral','sand','sage','sky','rose'].includes(d.color)||(d.moveContents!==undefined&&typeof d.moveContents!=='boolean'))fail('INVALID_PLANNING','批注样式或位置无效');
+    if(!record(d.position)||!Number.isFinite(d.position.x)||!Number.isFinite(d.position.y)||!Number.isFinite(d.width)||d.width<160||d.width>100000||!Number.isFinite(d.height)||d.height<80||d.height>100000||![14,18,24,32].includes(d.fontSize)||!['sans','serif'].includes(d.fontFamily)||!['neutral','sand','sage','sky','rose'].includes(d.color)||(d.moveContents!==undefined&&typeof d.moveContents!=='boolean'))fail('INVALID_PLANNING','批注样式或位置无效');
+    if(d.members!==undefined){
+      if(d.kind!=='frame'||!Array.isArray(d.members)||new Set(d.members).size!==d.members.length||d.members.some(id=>typeof id!=='string'))fail('INVALID_PLANNING','只有讨论框可指定不重复的成员 ID');
+      if(!d.deleted)for(const memberId of d.members){const member=own(board.nodes,memberId)?board.nodes[memberId]:own(decorations,memberId)?decorations[memberId]:null;if(!member||member.deleted||('kind' in member&&member.kind==='frame')||(member.pageId??null)!==(d.pageId??null))fail('INVALID_PLANNING','讨论框成员须为同一页的有效情节或便签');}
+    }
+    if(d.layoutPending!==undefined&&typeof d.layoutPending!=='boolean')fail('INVALID_PLANNING','批注布局状态无效');
   }
   if(!record(board.groups))fail('INVALID_PLANNING','规划分组无效');
   for(const [id,g] of Object.entries(board.groups)) if(!record(g)||id!==g.id||typeof g.name!=='string'||!g.name.trim()||typeof g.summary!=='string'||!Number.isSafeInteger(g.revision)||g.revision<1) fail('INVALID_PLANNING','规划分组无效');
+  assertGroupHierarchy(Object.values(board.groups),'INVALID_PLANNING');
+  for(const d of Object.values(decorations).filter(d=>!d.deleted))if(d.groupId&&(!board.groups[d.groupId]||board.groups[d.groupId].deleted||(board.groups[d.groupId].pageId??null)!==(d.pageId??null)))fail('INVALID_PLANNING','批注与文件夹须在同一画布');
+  for(const group of Object.values(board.groups).filter(g=>!g.deleted)){
+    if(!validPage(group.pageId)||(group.parentId&&(board.groups[group.parentId]?.pageId??null)!==(group.pageId??null)))fail('INVALID_PLANNING','文件夹与父文件夹须在同一画布');
+    if(group.position!=null&&(!record(group.position)||!Number.isFinite(group.position.x)||!Number.isFinite(group.position.y)))fail('INVALID_PLANNING','文件夹位置无效');
+  }
   if([...Object.values(board.nodes),...Object.values(board.edges)].some(v=>!record(v)))fail('INVALID_PLANNING','规划对象无效');
   const nodes=Object.values(board.nodes).filter(n=>!n.deleted),edges=Object.values(board.edges).filter(e=>!e.deleted);
   for(const [id,n] of Object.entries(board.nodes)){
     if(!n.deleted&&!validPage(n.pageId))fail('INVALID_PLANNING','所属页面不存在或已删除');
     if(n.position!==undefined&&n.position!==null&&(!record(n.position)||!Number.isFinite(n.position.x)||!Number.isFinite(n.position.y)))fail('INVALID_PLANNING','画布位置无效');
     if(!n.deleted&&n.groupId&&board.groups[n.groupId]?.deleted)fail('INVALID_PLANNING','所属分组已删除');
+    if(!n.deleted&&n.groupId&&(board.groups[n.groupId]?.pageId??null)!==(n.pageId??null))fail('INVALID_PLANNING','情节与所属文件夹须在同一画布');
     if(typeof n.deleted!=='boolean'||(n.parentId!==null&&typeof n.parentId!=='string')||id!==n.id||!Number.isSafeInteger(n.revision)||n.revision<1||typeof n.title!=='string'||!n.title.trim()||typeof n.content!=='string'||typeof n.summary!=='string'||(n.groupId!==null&&n.groupId!==undefined&&!Object.hasOwn(board.groups,n.groupId)))fail('INVALID_PLANNING','规划标题、内容或版本无效');
     if(!['long','phase','near','unspecified'].includes(n.scope)||!['idea','selected','written','dropped'].includes(n.status))fail('INVALID_PLANNING','规划范围或状态无效');
     if(!Array.isArray(n.threads)||n.threads.some(t=>typeof t!=='string')||!Array.isArray(n.chapterRefs)||!Array.isArray(n.memoryRefs))fail('INVALID_PLANNING','关联字段无效');

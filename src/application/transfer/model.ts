@@ -27,8 +27,9 @@ export function catalogBook(novel: Novel): CatalogBook {
       beats: active(board.nodes).length, decorations: active(board.decorations).length, presets: n.preset ? 1 : 0},
     volumes: volumes.map(({id, title}) => ({id, title})),
     chapters: chapters.map(ch => ({id: ch.id, title: ch.title, volumeId: ch.volumeId, words: chapterCounts(ch).textCount})),
-    groups: Object.values(n.memoryGroups || {}).map(({id, name}) => ({id, name})),
-    memory: active(n.nodes).map(({id, name, type, groupId, summary}) => ({id, name, type, groupId: groupId ?? null, summary})),
+    groups: Object.values(n.memoryGroups || {}).map(({id, name, parentId,pageId}) => ({id, name, parentId:parentId??null,pageId:pageId??null})),
+    memory: active(n.nodes).map(({id, name, type, groupId, pageId,summary}) => ({id, name, type, groupId: groupId ?? null,pageId:pageId??null, summary})),
+    memoryPages:[{id:null,name:'设定总览'},...Object.values(n.memoryPages||{}).map(({id,name})=>({id,name}))],
     pages, preset: n.preset ? {name: n.preset.name, blocks: n.preset.blocks.length} : null};
 }
 export const catalog = (projects: Novel[]): Catalog => ({books: projects.map(catalogBook)});
@@ -55,6 +56,6 @@ export function checkSelection(value: Selection) {
 export function checkIds(novel: Novel) {
   const safe = (id: string) => typeof id === 'string' && !!id.trim() && !['__proto__', 'constructor', 'prototype'].includes(id);
   if (!safe(novel.id)) fail('作品 ID 无效');
-  for (const map of [novel.volumes, novel.chapters, novel.nodes, novel.edges, novel.memoryGroups, novel.planning?.nodes, novel.planning?.edges, novel.planning?.groups, novel.planning?.pages, novel.planning?.decorations])
+  for (const map of [novel.volumes, novel.chapters, novel.nodes, novel.edges, novel.memoryGroups, novel.memoryPages, novel.planning?.nodes, novel.planning?.edges, novel.planning?.groups, novel.planning?.pages, novel.planning?.decorations])
     for (const id of Object.keys(map || {})) if (!safe(id)) fail('内容 ID 无效');
 }

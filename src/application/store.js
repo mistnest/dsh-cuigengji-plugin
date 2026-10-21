@@ -1,4 +1,7 @@
 import { memoryGroupAction, groupId, validateMemoryGroups } from '../domain/memory/groups.ts';
+import {memoryPageAction,memoryPageId} from '../domain/memory/pages.ts';
+import {organizeMemoryWorkspace} from '../domain/memory/workspace.ts';
+import {groupMatches} from '../domain/directory/groups.ts';
 import { ensurePlanning, planningAction, validatePlanning } from '../domain/planning/index.ts';
 import { selectReference } from './queries/context.js';
 import { createHandoff } from './queries/handoff.js';
@@ -9,9 +12,18 @@ import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { previewTavern } from '../infrastructure/migrations/tavern.js';
-import { checkDirectorySnapshot, directorySnapshot, planChapterMove } from '../domain/chapters/order.ts';
+import { checkDirectorySnapshot as checkChapterDirectorySnapshot, directorySnapshot as chapterDirectorySnapshot, planChapterMove } from '../domain/chapters/order.ts';
 import { compilePreset, importPreset, validatePreset } from '../domain/preset/index.js';
 import {applyNovelLifecycle, novelLifecycleActions} from './novels/lifecycle.ts';
+// Legacy collaboration metadata is retained only for lossless import/export.
+import {validateCollaboration, validateSharedPlans, portableNovel, retainSharedPlans, withoutSharedCache, validateProgress} from '../domain/collaboration/legacy.ts';
+import {isReadAction} from '../contracts/actions.js';
+import {layoutPlanning,layoutSettings} from './canvas/layout.ts';
+import {normalizeActivity, recordConversationInput, recordActivity, todayActivity, rangeActivity, tracksActivity} from './activity.ts';
+import {memoryVersionFields,memoryHistory} from '../domain/memory/history.ts';
+import {staleMemoryEntities} from '../domain/memory/invalidation.ts';
+import {directoryKey,orderedDirectory,directorySnapshot,checkDirectorySnapshot,planDirectoryMove,validateDirectoryOrder} from '../domain/directory/order.ts';
+import {findProse,replaceLiteral} from '../domain/chapters/find.ts';
 
 export class StoreError extends Error {
   constructor(code, message) { super(message); this.name = 'StoreError'; this.code = code; }
@@ -43,17 +55,27 @@ function version(chapter, actor, reason) {
     title: chapter.title, volumeId: chapter.volumeId, order: chapter.order, deleted: chapter.deleted,
     timestamp: now(), actor: source(actor), reason: reason || '' });
 }
-function stale(novel, chapterId) {
-  const entities = [...Object.values(novel.nodes), ...Object.values(novel.edges)];
-  const staleIds = new Set(entities.filter(e => e.status === 'stale').map(e => e.id));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const entity of entities) {
-      if ((entity.sources?.some(s => s.chapterId === chapterId) || entity.dependsOn?.some(id => staleIds.has(id))) && entity.status !== 'stale') {
-        entity.status = 'stale'; touch(entity); staleIds.add(entity.id); changed = true;
-      }
-    }
+function memoryVersion(node, actor, reason) {
+  const snapshot = Object.fromEntries(memoryVersionFields.filter(field => node[field] !== undefined).map(field => [field, clone(node[field])]));
+  return { revision: node.revision, ...snapshot, contentHash: hash(node.content || ''), timestamp: now(), actor: source(actor), reason: reason || '' };
+}
+function ensureMemoryVersions(node, actor, reason = '启用设定历史') {
+  if (!Array.isArray(node.versions) || !node.versions.length || typeof node.versions.at(-1)?.content !== 'string') node.versions = [memoryVersion(node, actor, reason)];
+}
+function appendMemoryVersion(node, actor, reason) {
+  ensureMemoryVersions(node, actor, reason);
+  if (node.versions.at(-1)?.revision !== node.revision) node.versions.push(memoryVersion(node, actor, reason));
+}
+function memoryResult(node) {
+  const { versions, ...result } = node;
+  return result;
+}
+function stale(novel, chapterId, actor) {
+  for (const entity of staleMemoryEntities(novel, chapterId)) {
+    const setting = own(novel.nodes, entity.id);
+    if (setting) ensureMemoryVersions(entity, actor);
+    entity.status = 'stale'; touch(entity);
+    if (setting) appendMemoryVersion(entity, actor, '来源正文或依赖已变化，设定待核对');
   }
 }
 function sources(novel, values = []) {
@@ -110,13 +132,19 @@ export class Store extends ProjectStore {
   }
 
   validateMigration(state) {
+    if (state?.guidance !== undefined && (!state.guidance || typeof state.guidance !== 'object' || Array.isArray(state.guidance) || Object.entries(state.guidance).some(([key,value])=>! /^[a-f0-9]{64}$/.test(key) || typeof value !== 'boolean'))) fail('CORRUPT_STORE','会话指引设置无效');
     if (!state || state.schemaVersion !== 1 || !['novels', 'bindings', 'requests'].every(key => state[key] && typeof state[key] === 'object' && !Array.isArray(state[key]))) fail('CORRUPT_STORE', '不支持的数据格式');
+    Object.defineProperty(state, 'activity', { value: normalizeActivity(state.activity), enumerable: false, writable: true, configurable: true });
     const validated = {novels: {}};
     for (const [id, novel] of Object.entries(state.novels)) {
       if (id !== novel.id || ['__proto__', 'constructor', 'prototype'].includes(id)) fail('CORRUPT_STORE', '作品 ID 无效');
       this.importNovel(validated, {backup: {format: 'cuigengji', schemaVersion: 2, novel}});
     }
-    for (const [key, binding] of Object.entries(state.bindings)) if (typeof binding?.sessionId !== 'string' || hash(binding.sessionId) !== key || !own(state.novels, binding.novelId) || !['discuss', 'plan', 'write', 'revise', 'memory'].includes(binding.stage) || (binding.chapterId && !own(state.novels[binding.novelId].chapters, binding.chapterId))) fail('CORRUPT_STORE', '会话绑定无效');
+    validateSharedPlans(validated);
+    for (const [key, binding] of Object.entries(state.bindings)) {
+      const targetId = binding?.activeNovelId || binding?.novelId;
+      if (typeof binding?.sessionId !== 'string' || hash(binding.sessionId) !== key || !targetId || !own(state.novels, targetId) || !['discuss', 'plan', 'write', 'revise', 'memory'].includes(binding.stage) || (binding.chapterId && !own(state.novels[targetId].chapters, binding.chapterId))) fail('CORRUPT_STORE', '会话绑定无效');
+    }
     for (const [key, request] of Object.entries(state.requests)) if (!/^[a-f0-9]{64}$/.test(key) || typeof request?.signature !== 'string') fail('CORRUPT_STORE', '请求记录无效');
   }
 
@@ -126,7 +154,9 @@ export class Store extends ProjectStore {
 
   async dispatch(action, args = {}, actor = {}, beforeExecute) {
     if (!args || typeof args !== 'object' || Array.isArray(args)) fail('INVALID_INPUT', '参数必须是对象');
+    if (action === 'chapter.replace' && actor.kind !== 'human') fail('HUMAN_REQUIRED', '批量替换由作者在查找面板确认');
     if (novelLifecycleActions.includes(action) && actor.kind !== 'human') fail('HUMAN_REQUIRED', '整部作品的回收、恢复与永久删除需要作者操作');
+    if (action.startsWith('collaboration.') || action === 'binding.inherit') fail('FEATURE_RETIRED','实验性多agent协作已撤出；请使用 DSH 原生子 Agent 和普通作品工具');
     const release = await this.acquire();
     try {
       const state = await this.loadForAction(action, args, actor);
@@ -140,31 +170,83 @@ export class Store extends ProjectStore {
         if (previous.signature !== signature) fail('REQUEST_ID_REUSED', 'requestId 已用于其他请求');
         return clone(previous.result);
       }
-      const migrationNovelId=args.novelId||state.bindings[hash(actor.sessionId||'')]?.novelId;
+      const currentBinding = state.bindings[hash(actor.sessionId||'')];
+      const migrationNovelId=args.novelId||currentBinding?.activeNovelId||currentBinding?.novelId;
       const migrationNovel=migrationNovelId&&state.novels[migrationNovelId];
       if ((action.startsWith('planning.')||action==='novel.export') && migrationNovel?.plan && !migrationNovel.planning) {
         await this.hydrateNovel(state, migrationNovelId);
         await writeFile(join(this.root, `before-planning-${hash(migrationNovelId)}.json`), JSON.stringify({format:'cuigengji',schemaVersion:1,novel:migrationNovel}), {flag:'wx',mode:0o600}).catch(error=>{if(error.code!=='EEXIST')throw error;});
       }
+      const beforeNovel = tracksActivity(action) && migrationNovelId && state.novels[migrationNovelId] ? clone(state.novels[migrationNovelId]) : null;
       const before = JSON.stringify(state);
-      const result = this.execute(state, action, args, actor);
+      // Activity is deliberately non-enumerable on the in-memory workspace so
+      // existing callers that compare a Workspace snapshot do not suddenly
+      // see a new top-level field. Keep a separate fingerprint for the
+      // persisted activity ledger, otherwise a successful writing operation
+      // would update only memory and disappear on restart.
+      const activityBefore = JSON.stringify(state.activity || {});
+      const result = await this.execute(state, action, args, actor);
+      recordActivity(state, action, {...args, novelId: migrationNovelId || args.novelId}, actor, beforeNovel, result);
       if (requestKey) state.requests[requestKey] = { signature, result: clone(result), timestamp: now(),
         ...((migrationNovelId || ['novel.create','novel.import'].includes(action)) ? {novelId: ['novel.create','novel.import'].includes(action) ? result.id : migrationNovelId} : {}) };
-      if (JSON.stringify(state) !== before) await this.save(state);
+      const activityChanged = JSON.stringify(state.activity || {}) !== activityBefore;
+      if (JSON.stringify(state) !== before || activityChanged || this.hasGeneratedSettingHistory(state)) {
+        await this.save(state);
+        this.clearGeneratedSettingHistory(state);
+      }
       return clone(result);
     } finally { await release(); }
   }
 
   execute(state, action, a, actor) {
-    if (action === 'novel.list') return Object.values(state.novels).filter(n => a.includeArchived || !n.archived).map(n => ({ id: n.id, title: n.title, revision: n.revision, archived: n.archived, ...(n.archivedAt ? {archivedAt:n.archivedAt} : {}), updatedAt: n.updatedAt }));
+    if (action === 'guidance.get' || action === 'guidance.set') {
+      const key = hash(text(actor.sessionId, 'sessionId'));
+      if (action === 'guidance.set') {
+        if (actor.kind !== 'human') fail('HUMAN_REQUIRED', '写作指引开关由用户设置');
+        if (typeof a.enabled !== 'boolean') fail('INVALID_INPUT', 'enabled 必须是布尔值');
+        state.guidance ??= {};
+        state.guidance[key] = a.enabled;
+      }
+      const binding = state.bindings[key];
+      const target = binding?.activeNovelId || binding?.novelId;
+      return {enabled: state.guidance?.[key] ?? Boolean(target && state.novels[target] && !state.novels[target].archived)};
+    }
+    if (action === 'activity.input') return recordConversationInput(state,a,actor);
+    if (action === 'activity.today') return todayActivity(state, a.novelId);
+    if (action === 'activity.stats') {
+      if (actor.kind !== 'human') fail('HUMAN_REQUIRED','写作记录供作者查看');
+      return rangeActivity(state,a);
+    }
+    if (action === 'novel.list') return Object.values(state.novels).filter(n => a.includeArchived || !n.archived).map(n => ({id:n.id,title:n.title,revision:n.revision,archived:n.archived,...(n.archivedAt?{archivedAt:n.archivedAt}:{}),updatedAt:n.updatedAt}));
     if (action === 'novel.create') {
-      const n = record({ title: text(a.title, 'title'), description: a.description ?? '', archived: false, volumes: {}, chapters: {}, nodes: {}, edges: {}, plan: null });
+      const n = record({ title: text(a.title, 'title'), description: text(a.description ?? '', 'description', true), archived: false, volumes: {}, chapters: {}, nodes: {}, edges: {}, plan: null });
       state.novels[n.id] = n; return { id: n.id, title: n.title, revision: n.revision };
     }
-    if (action === 'novel.import') return this.importNovel(state, a);
+    if (action === 'novel.import') {
+      // Whole-book files must remain usable without the source library.
+      validateSharedPlans({novels:{[a.backup?.novel?.id]:a.backup?.novel || {}}});
+      return this.importNovel(state, a);
+    }
     if (action === 'binding.get') {
       const binding = state.bindings[hash(text(actor.sessionId || a.sessionId, 'sessionId'))];
-      return binding && own(state.novels, binding.novelId) && !state.novels[binding.novelId].archived ? binding : null;
+      const targetId = binding?.activeNovelId || binding?.novelId;
+      if (!binding || !targetId || !own(state.novels,targetId) || state.novels[targetId].archived) return null;
+      const {parentSessionId,taskId,...ordinary} = binding;
+      return {...ordinary,scope:'library',activeNovelId:targetId,novelId:targetId};
+    }
+    if (action === 'novel.focus') {
+      if (actor.kind !== 'agent') fail('AGENT_REQUIRED', '当前作品焦点由当前 Agent 选择');
+      const sessionId = text(actor.sessionId || a.sessionId, 'sessionId');
+      const previous = state.bindings[hash(sessionId)];
+      if (!previous) {state.guidance ??= {}; state.guidance[hash(sessionId)] ??= true;}
+      const n = get(state.novels, a.novelId, '小说');
+      if (n.archived) fail('NOVEL_RECYCLED', '作品已在回收站，请先恢复作品');
+      const currentId = previous?.activeNovelId || previous?.novelId;
+      const same = currentId === n.id;
+      const binding = {sessionId, scope:'library', activeNovelId:n.id, novelId:n.id,
+        chapterId: same ? previous?.chapterId || null : null,
+        stage: same ? previous?.stage || 'discuss' : 'discuss', goal: same ? previous?.goal || '' : '', updatedAt: now()};
+      state.bindings[hash(sessionId)] = binding; return binding;
     }
     if (action === 'binding.set') {
       const sessionId = text(actor.sessionId || a.sessionId, 'sessionId');
@@ -172,21 +254,22 @@ export class Store extends ProjectStore {
       if (n.archived) fail('NOVEL_RECYCLED', '作品已在回收站，请先恢复作品');
       if (a.chapterId) { const ch = get(n.chapters, a.chapterId, '章节'); if (ch.deleted) fail('DELETED', '章节已删除'); }
       const previous = state.bindings[hash(sessionId)];
+      if (!previous) {state.guidance ??= {}; state.guidance[hash(sessionId)] ??= true;}
       const sameNovel = previous?.novelId === n.id;
       const stage = a.stage ?? (sameNovel ? previous.stage : null) ?? 'discuss';
       if (!['discuss', 'plan', 'write', 'revise', 'memory'].includes(stage)) fail('INVALID_INPUT', 'stage 必须是 discuss、plan、write、revise 或 memory');
-      const binding = { sessionId, novelId: n.id, chapterId: a.chapterId === undefined && sameNovel ? previous.chapterId : a.chapterId || null,
+      const binding = { sessionId, scope:'library', activeNovelId:n.id, novelId: n.id, chapterId: a.chapterId === undefined && sameNovel ? previous.chapterId : a.chapterId || null,
         stage, goal: a.goal === undefined ? (sameNovel ? previous.goal || '' : '') : text(a.goal, 'goal', true), updatedAt: now() };
       state.bindings[hash(sessionId)] = binding; return binding;
     }
     const binding = actor.sessionId && state.bindings[hash(actor.sessionId)];
-    const novelId = a.novelId || binding?.novelId;
-    if (!novelId) fail('NOVEL_REQUIRED', '请先绑定小说或提供 novelId');
-    if (actor.kind !== 'human' && binding && binding.novelId !== novelId) fail('NOVEL_MISMATCH', '当前会话已绑定另一本小说');
+    const novelId = a.novelId || binding?.activeNovelId || binding?.novelId;
+    if (!novelId) fail('NOVEL_REQUIRED', '此操作需要目标作品；请提供 novelId 或用 novel.focus 选择当前作品');
     const n = get(state.novels, novelId, '小说');
     if (n.archived && !(actor.kind === 'human' && ['novel.get','novel.export',...novelLifecycleActions].includes(action))) fail('NOVEL_RECYCLED', '作品已在回收站，请先恢复作品');
     if (novelLifecycleActions.includes(action)) {
       cas(n, a);
+      if (action === 'novel.purge' && n.archived && a.confirm === true) retainSharedPlans(state,n);
       applyNovelLifecycle(state, n, action, a);
       if (action === 'novel.purge') return {id: n.id, purged: true};
       touch(n); return {id: n.id, title: n.title, revision: n.revision, archived: n.archived, ...(n.archivedAt ? {archivedAt:n.archivedAt} : {})};
@@ -209,6 +292,7 @@ export class Store extends ProjectStore {
         if (own(n.nodes, id)) { skipped.push(id); continue; }
         n.nodes[id] = record({ ...preview.nodes[index], id, deleted:false,
           tavern: { fingerprint:preview.fingerprint, format:preview.format, index:sourceIndex } });
+        n.nodes[id].versions = [memoryVersion(n.nodes[id], actor, '酒馆导入设定')];
         imported.push(id);
       }
       if (imported.length) {
@@ -218,11 +302,33 @@ export class Store extends ProjectStore {
       }
       return { imported:imported.length, skipped:skipped.length, nodeIds:imported };
     }
+    if (action === 'graph.directory.move' || action === 'planning.directory.move') {
+      if (actor.kind !== 'human') fail('HUMAN_REQUIRED', '目录拖动需要作者操作');
+      const planning=action.startsWith('planning.'), board=planning?ensurePlanning(n):null, pageId=a.pageId??null;
+      if (planning&&pageId&&(!board.pages?.[pageId]||board.pages[pageId].deleted)) fail('NOT_FOUND','规划页面不存在');
+      const key=directoryKey(planning?'planning':'graph',pageId);
+      if(!planning)memoryPageId(n,pageId);
+      const items=orderedDirectory(Object.values(planning?board.nodes:n.nodes).filter(item=>!item.deleted&&(item.pageId??null)===pageId),n.directoryOrder?.[key]);
+      const groups=Object.values(planning?board.groups:n.memoryGroups||{}).filter(group=>!group.deleted&&(group.pageId??null)===pageId);
+      checkDirectorySnapshot(items,groups,a.expectedDirectory);
+      const plan=planDirectoryMove(items,groups,a.nodeId,{groupId:a.groupId,beforeId:a.beforeId,...(planning&&a.parentId!==undefined?{parentId:a.parentId}:{})});
+      if(plan.changed){
+        const current=items.find(item=>item.id===a.nodeId);
+        if((current.groupId??null)!==a.groupId||planning&&a.parentId!==undefined&&(current.parentId??null)!==a.parentId){
+          if(planning)planningAction(n,'planning.apply',{requestId:a.requestId,reason:'从目录调整情节归属',operations:[{op:'node.update',id:current.id,expectedRevision:current.revision,value:{groupId:a.groupId,...(a.parentId!==undefined?{parentId:a.parentId}:{})}}]},actor);
+          else this.execute(state,'graph.move',{novelId:n.id,groupId:a.groupId,members:[{id:current.id,expectedRevision:current.revision}]},actor);
+        }
+        n.directoryOrder={...n.directoryOrder,[key]:plan.items.map(item=>item.id)};touch(n);
+      }
+      return {changed:plan.changed,directory:directorySnapshot(plan.items,groups)};
+    }
+    if (action === 'planning.layout.get')return layoutPlanning(n,a,actor,true);
+    if (action === 'planning.layout') {const previous=n.planning?.sequence;return layoutPlanning(n,a,actor).then(result=>{if(previous!==n.planning.sequence)touch(n);return result;});}
     if (action.startsWith('planning.')) { const previous=n.planning?.sequence; const result=planningAction(n,action,a,actor); if(previous!==n.planning.sequence)touch(n); return result; }
     if (action.startsWith('plan.')) fail('MIGRATED_ACTION', '旧规划接口已迁移，请使用 cuigengji_plan 的 planning.list/get/apply');
-    if (action === 'novel.get') return { ...n, tavernSources: undefined, planning: undefined, plan: undefined, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
+    if (action === 'novel.get') return { ...n, tavernSources: undefined, planning: undefined, plan: undefined, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, versions, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
     if (action === 'novel.handoff') return createHandoff(n, binding, a);
-    if (action === 'novel.export') { ensurePlanning(n); return { format: 'cuigengji', schemaVersion: 2, exportedAt: now(), novel: clone(n) }; }
+    if (action === 'novel.export') { ensurePlanning(n); return { format: 'cuigengji', schemaVersion: 2, exportedAt: now(), novel: portableNovel(state,n) }; }
     if (action === 'novel.update') {
       cas(n, a);
       if (a.title !== undefined) n.title = text(a.title, 'title');
@@ -241,7 +347,7 @@ export class Store extends ProjectStore {
         const chapters = Object.values(n.chapters).filter(c => c.volumeId === v.id && !c.deleted);
         if (chapters.length && !['detach', 'delete'].includes(a.chapterPolicy)) fail('CHAPTER_POLICY_REQUIRED', '非空卷必须指定 chapterPolicy: detach 或 delete');
         for (const c of chapters) {
-          if (a.chapterPolicy === 'delete') { c.deleted = true; stale(n, c.id); } else c.volumeId = null;
+          if (a.chapterPolicy === 'delete') { c.deleted = true; stale(n, c.id, actor); } else c.volumeId = null;
           touch(c); version(c, actor, '卷删除');
         }
         v.deleted = true;
@@ -252,6 +358,33 @@ export class Store extends ProjectStore {
       touch(v); touch(n); return v;
     }
     if (action === 'chapter.list') return Object.values(n.chapters).filter(c => (a.includeDeleted || !c.deleted) && (a.volumeId === undefined || c.volumeId === a.volumeId)).sort((x, y) => x.order - y.order).map(meta);
+    if (action === 'chapter.find' || action === 'chapter.replace') {
+      const query = text(a.query, 'query', true);
+      if (!query || query.length > 2000) fail('INVALID_INPUT', '查找文字需在 1 到 2000 个字符之间');
+      if (a.matchCase !== undefined && typeof a.matchCase !== 'boolean') fail('INVALID_INPUT', 'matchCase 必须是布尔值');
+      if (a.chapterId !== undefined) get(n.chapters, a.chapterId, '章节');
+      const chapters = Object.values(n.chapters).filter(c => !c.deleted && (a.chapterId === undefined || c.id === a.chapterId));
+      const offset = a.offset ?? 0, limit = a.limit ?? 60;
+      if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) fail('INVALID_INPUT', '查找分页参数无效');
+      const preview = findProse(chapters, query, a.matchCase, offset, limit);
+      if (action === 'chapter.find') return preview;
+      if (a.confirm !== true) fail('CONFIRM_REQUIRED', '请先预览并确认全部替换');
+      const replacement = text(a.replacement, 'replacement', true);
+      // Check the entire search scope, including previously unmatched chapters.
+      // New/deleted chapters and new matches must never escape the preview.
+      if (!isDeepStrictEqual(a.expectedSnapshot, preview.snapshot)) fail('CONFLICT', '正文已变化，尚未执行替换。请重新预览后再替换。');
+      let count = 0;
+      const changed = [];
+      for (const chapter of chapters) {
+        const next = replaceLiteral(chapter.content, query, replacement, a.matchCase);
+        if (!next.count) continue;
+        chapter.content = next.content; touch(chapter);
+        version(chapter, actor, '作者批量替换正文'); stale(n, chapter.id, actor);
+        count += next.count; changed.push(meta(chapter));
+      }
+      if (changed.length) touch(n);
+      return {count, chapters: changed};
+    }
     if (action === 'chapter.search') {
       const query = text(a.query, 'query');
       const limit = a.limit ?? 30;
@@ -275,7 +408,7 @@ export class Store extends ProjectStore {
     }
     if (action === 'chapter.move') {
       if (actor.kind !== 'human') fail('HUMAN_REQUIRED', '目录拖拽排序由作者操作');
-      checkDirectorySnapshot(a.expectedDirectory, directorySnapshot(Object.values(n.chapters), Object.values(n.volumes)));
+      checkChapterDirectorySnapshot(a.expectedDirectory, chapterDirectorySnapshot(Object.values(n.chapters), Object.values(n.volumes)));
       const move = planChapterMove(Object.values(n.chapters), Object.values(n.volumes), a.chapterId, {volumeId: a.volumeId ?? null, beforeChapterId: a.beforeChapterId ?? null});
       if (move.changed) {
         for (const placement of move.chapters) {
@@ -319,16 +452,44 @@ export class Store extends ProjectStore {
         if (a.order !== undefined) c.order = ordering(a.order);
         if (a.volumeId !== undefined) { if (a.volumeId && get(n.volumes, a.volumeId, '卷').deleted) fail('DELETED', '卷已删除'); c.volumeId = a.volumeId || null; }
       }
-      touch(c); version(c, actor, a.reason); stale(n, c.id); touch(n); return meta(c);
+      touch(c); version(c, actor, a.reason); stale(n, c.id, actor); touch(n); return meta(c);
     }
+    if(action==='graph.workspace.ensure') {
+      const revisions=new Map(Object.values(n.nodes).map(node=>[node.id,node.revision]));
+      const result=organizeMemoryWorkspace(n);
+      for(const node of Object.values(n.nodes))if(node.revision!==revisions.get(node.id))appendMemoryVersion(node,actor,'将旧设定画布收进文件夹，正文与关系保持不变');
+      return result;
+    }
+    if(action==='graph.pages'||action.startsWith('graph.page.'))return memoryPageAction(n,action,a);
     if (action === 'graph.list') {
       const q = (a.query || '').toLocaleLowerCase();
-      return Object.values(n.nodes).filter(v => (a.includeDeleted || !v.deleted) && (!a.type || v.type === a.type) && (a.groupId === undefined || (v.groupId ?? null) === a.groupId) && (!q || [v.name, v.summary, v.content, ...v.aliases].join(' ').toLocaleLowerCase().includes(q))).map(({ content, ...v }) => v);
+      if(a.pageId!==undefined)memoryPageId(n,a.pageId);
+      const inGroup=groupMatches(Object.values(n.memoryGroups||{}),a.groupId);
+      return orderedDirectory(Object.values(n.nodes),n.directoryOrder?.[directoryKey('graph',a.pageId)]).filter(v => (a.includeDeleted || !v.deleted) && (a.pageId===undefined||(v.pageId??null)===a.pageId) && (!a.type || v.type === a.type) && inGroup(v) && (!q || [v.name, v.summary, v.content, ...v.aliases].join(' ').toLocaleLowerCase().includes(q))).map(({ content, versions, ...v }) => v);
     }
-    if (action === 'graph.groups' || action.startsWith('graph.group.') || action === 'graph.move') return memoryGroupAction(n, action, a);
-    if (action === 'graph.get') return get(n.nodes, a.nodeId, '节点');
+    if (action === 'graph.groups' || action.startsWith('graph.group.') || action === 'graph.move') {
+      const before = new Map(Object.values(n.nodes).map(node => [node.id, node.revision]));
+      const result = memoryGroupAction(n, action, a);
+      if (['graph.move','graph.group.create','graph.group.delete'].includes(action)) for (const node of Object.values(n.nodes)) if (node.revision !== before.get(node.id)) appendMemoryVersion(node, actor, action === 'graph.move' ? '调整设定归属' : action==='graph.group.create'?'收纳到文件夹':'删除设定分组');
+      return result;
+    }
+    if (action === 'graph.get') return memoryResult(get(n.nodes, a.nodeId, '节点'));
+    if (action === 'graph.history') {
+      if (a.revision !== undefined && (!Number.isSafeInteger(a.revision) || a.revision < 1)) fail('INVALID_INPUT', 'revision 必须是有效的历史版本号');
+      if (a.includeContent === true && a.revision === undefined) fail('INVALID_INPUT', '读取历史正文需指定 revision；先用 graph.history 查看版本摘要');
+      const node = get(n.nodes, a.nodeId, '节点');
+      ensureMemoryVersions(node, actor);
+      if (a.revision !== undefined && !node.versions.some(v => v.revision === a.revision)) fail('NOT_FOUND', '历史设定版本不存在');
+      return memoryHistory(node.versions, a);
+    }
+    if (action === 'graph.layout.get')return layoutSettings(n.nodes,Object.values(n.edges).filter(e=>!e.deleted),a,Object.values(n.memoryGroups||{}).filter(g=>a.pageId===undefined||(g.pageId??null)===a.pageId)).then(positions=>({positions}));
+    if (action === 'graph.arrange') {
+      text(a.requestId,'requestId');
+      return layoutSettings(n.nodes,Object.values(n.edges).filter(e=>!e.deleted),a,Object.values(n.memoryGroups||{}).filter(g=>a.pageId===undefined||(g.pageId??null)===a.pageId)).then(positions=>Object.keys(positions).length?this.execute(state,'graph.layout',{novelId:n.id,positions:Object.entries(positions).filter(([id])=>own(n.nodes,id)).map(([nodeId,position])=>({nodeId,position,expectedRevision:n.nodes[nodeId].revision})),folders:Object.entries(positions).filter(([id])=>own(n.memoryGroups||{},id)).map(([groupId,position])=>({groupId,position,expectedRevision:n.memoryGroups[groupId].revision}))},actor):[]);
+    }
     if (action === 'graph.layout') {
-      if (!Array.isArray(a.positions) || !a.positions.length || a.positions.length > 200) fail('INVALID_INPUT', '一次布局需要 1–200 个坐标');
+      const folders=a.folders??[];
+      if (!Array.isArray(a.positions) || !Array.isArray(folders)||!a.positions.length&&!folders.length||a.positions.length+folders.length>200) fail('INVALID_INPUT', '一次布局需要 1–200 个坐标');
       const ids = new Set();
       const changes = a.positions.map(item => {
         if (!item || typeof item !== 'object' || ids.has(item.nodeId)) fail('INVALID_INPUT', '布局节点不能重复');
@@ -338,37 +499,60 @@ export class Store extends ProjectStore {
         if (item.position === undefined || item.position === null) fail('INVALID_INPUT', '布局需要有限坐标');
         return {node, ...nodePosition(item)};
       });
-      for (const change of changes) { change.node.position = change.position; touch(change.node); }
-      touch(n); return changes.map(({node}) => ({id:node.id, revision:node.revision, position:node.position}));
+      const folderChanges=folders.map(item=>{if(!item||typeof item.groupId!=='string'||ids.has(item.groupId))fail('INVALID_INPUT','文件夹不能重复');ids.add(item.groupId);const folder=get(n.memoryGroups||{},item.groupId,'文件夹');cas(folder,item);if(item.position==null)fail('INVALID_INPUT','文件夹布局需要有限坐标');return {folder,...nodePosition(item)};});
+      for (const change of changes) { ensureMemoryVersions(change.node, actor); change.node.position = change.position; touch(change.node); appendMemoryVersion(change.node, actor, '调整设定位置'); }
+      for(const change of folderChanges){change.folder.position=change.position;touch(change.folder);}
+      touch(n); return [...changes.map(({node}) => ({id:node.id, revision:node.revision, position:node.position})),...folderChanges.map(({folder})=>({id:folder.id,revision:folder.revision,position:folder.position}))];
     }
     if (action === 'graph.continue') {
       const source = get(n.nodes, a.nodeId, '节点'); cas(source, a);
       if (source.deleted) fail('DELETED', '起点已删除');
       if (!['in','out'].includes(a.side ?? 'out')) fail('INVALID_INPUT', '连接方向无效');
-      const node = this.execute(state, 'graph.create', {...a.value,novelId:n.id,groupId:a.value?.groupId===undefined?source.groupId ?? null:a.value.groupId}, actor);
+      const node = this.execute(state, 'graph.create', {...a.value,novelId:n.id,pageId:source.pageId??null,groupId:a.value?.groupId===undefined?source.groupId ?? null:a.value.groupId}, actor);
       const edge = this.execute(state, 'edge.create', {novelId:n.id,from:a.side==='in'?node.id:source.id,to:a.side==='in'?source.id:node.id,name:'',content:''}, actor);
       return {node,edge};
     }
     if (action === 'graph.create') {
       if (!kinds.has(a.type)) fail('INVALID_INPUT', '节点类型无效');
-      const v = record({ type: a.type, groupId: groupId(n, a.groupId), ...memoryFields(a, n, true), ...nodePosition(a), deleted: false });
+      const folder=groupId(n,a.groupId),pageId=a.pageId===undefined?(folder?n.memoryGroups[folder].pageId??null:null):memoryPageId(n,a.pageId);
+      if(folder&&(n.memoryGroups[folder].pageId??null)!==pageId)fail('INVALID_INPUT','设定与文件夹须在同一画布');
+      const v = record({ type: a.type, pageId, groupId: folder, ...memoryFields(a, n, true), ...nodePosition(a), deleted: false });
       this.checkMemorySources(n, v);
-      n.nodes[v.id] = v; touch(n); return v;
+      v.versions = [memoryVersion(v, actor, a.reason || '创建设定')];
+      n.nodes[v.id] = v; touch(n); return memoryResult(v);
     }
-    if (action === 'graph.update' || action === 'graph.delete') {
+    if (action === 'graph.update' || action === 'graph.delete' || action === 'graph.restore') {
       const v = get(n.nodes, a.nodeId, '节点'); cas(v, a);
+      // A legacy entry's first edit must retain the pre-edit content as its baseline.
+      ensureMemoryVersions(v, actor);
       if (action === 'graph.delete') {
         if (a.confirm !== true) fail('CONFIRM_REQUIRED', '删除需要 confirm:true');
         v.deleted = true;
         for (const e of Object.values(n.edges)) if (!e.deleted && (e.from === v.id || e.to === v.id)) { e.deleted = true; touch(e); }
+      } else if (action === 'graph.restore') {
+        const target = v.versions?.find(item => item.revision === a.targetRevision);
+        if (!target) fail('NOT_FOUND', '历史设定版本不存在');
+        for (const field of memoryVersionFields) if (target[field] !== undefined) v[field] = clone(target[field]);
+        v.deleted = false;
+        // Group removal is permanent; restoring a snapshot must not resurrect
+        // a dangling group ID. Old evidence stays old and requires review.
+        if (v.groupId && !own(n.memoryGroups || {}, v.groupId)) v.groupId = null;
+        if(v.pageId&&n.memoryPageFolders?.[v.pageId]){v.groupId=v.groupId&&own(n.memoryGroups||{},v.groupId)?v.groupId:(own(n.memoryGroups||{},n.memoryPageFolders[v.pageId])?n.memoryPageFolders[v.pageId]:null);v.pageId=null;}
+        if(v.pageId&&!own(n.memoryPages||{},v.pageId)){v.pageId=null;v.groupId=null;}
+        if(v.groupId&&(n.memoryGroups[v.groupId].pageId??null)!==(v.pageId??null))v.groupId=null;
+        if (v.status === 'active' && this.memorySourcesStale(n, v)) v.status = 'stale';
+        this.checkMemorySources(n, v);
       } else {
         if (v.deleted) fail('DELETED', '节点已删除');
         if (a.type !== undefined) { if (!kinds.has(a.type)) fail('INVALID_INPUT', '节点类型无效'); v.type = a.type; }
-        if (a.groupId !== undefined) v.groupId = groupId(n, a.groupId);
+        const targetGroup=a.groupId===undefined?v.groupId??null:groupId(n,a.groupId);
+        const pageId=a.pageId===undefined?(a.groupId!==undefined&&targetGroup?n.memoryGroups[targetGroup].pageId??null:v.pageId??null):memoryPageId(n,a.pageId);
+        if(targetGroup&&(n.memoryGroups[targetGroup].pageId??null)!==pageId){if(a.groupId!==undefined)fail('INVALID_INPUT','设定与文件夹须在同一画布');v.groupId=null;}else v.groupId=targetGroup;
+        if(a.pageId!==undefined||a.groupId!==undefined)v.pageId=pageId;
         Object.assign(v, memoryFields(a, n), nodePosition(a));
         this.checkMemorySources(n, v);
       }
-      touch(v); touch(n); return v;
+      touch(v); v.versions.push(memoryVersion(v, actor, a.reason || (action === 'graph.restore' ? `恢复设定 v${a.targetRevision}` : action === 'graph.delete' ? '删除设定' : '更新设定'))); touch(n); return memoryResult(v);
     }
     if (action === 'graph.duplicate') {
       if (!Array.isArray(a.members) || !a.members.length || a.members.length > 200 || new Set(a.members.map(v=>v.id)).size!==a.members.length) fail('INVALID_INPUT', '请选择 1–200 个不同的节点');
@@ -390,7 +574,7 @@ export class Store extends ProjectStore {
       return a.edges.map(item=>this.execute(state,'edge.delete',{novelId:n.id,edgeId:item.id,expectedRevision:item.expectedRevision,confirm:true},actor));
     }
     if (action === 'edge.get') return get(n.edges, a.edgeId, '关系');
-    if (action === 'edge.list') return Object.values(n.edges).filter(e => (a.includeDeleted || !e.deleted) && (!a.nodeId || e.from === a.nodeId || e.to === a.nodeId));
+    if (action === 'edge.list') {if(a.pageId!==undefined)memoryPageId(n,a.pageId);return Object.values(n.edges).filter(e => (a.includeDeleted || !e.deleted) && (a.pageId===undefined||[(n.nodes[e.from]?.pageId??null),(n.nodes[e.to]?.pageId??null)].every(id=>id===a.pageId)) && (!a.nodeId || e.from === a.nodeId || e.to === a.nodeId));}
     if (action === 'edge.create' || action === 'edge.update' || action === 'edge.delete') {
       let e;
       if (action === 'edge.create') {
@@ -461,10 +645,14 @@ export class Store extends ProjectStore {
 
   checkMemorySources(novel, entity) {
     if (entity.status !== 'active') return;
-    if (entity.sources.some(s => novel.chapters[s.chapterId]?.deleted || novel.chapters[s.chapterId]?.revision !== s.revision)
-      || entity.dependsOn.some(id => novel.nodes[id]?.status === 'stale' || novel.nodes[id]?.deleted)) {
+    if (this.memorySourcesStale(novel, entity)) {
       fail('STALE_SOURCE', '来源正文或依赖记忆已变化；请核对后更新来源版本再标记为有效');
     }
+  }
+
+  memorySourcesStale(novel, entity) {
+    return entity.sources.some(s => novel.chapters[s.chapterId]?.deleted || novel.chapters[s.chapterId]?.revision !== s.revision)
+      || entity.dependsOn.some(id => !own(novel.nodes, id) || novel.nodes[id].status === 'stale' || novel.nodes[id].deleted);
   }
 
   importNovel(state, a) {
@@ -488,14 +676,40 @@ export class Store extends ProjectStore {
       const latest = c.versions.at(-1);
       if (latest.revision !== c.revision || latest.contentHash !== c.contentHash) fail('INVALID_BACKUP', '最新历史版本与正文不一致');
     }
-    for (const node of Object.values(n.nodes)) { if (!kinds.has(node.type)) fail('INVALID_BACKUP', '节点类型无效'); Object.assign(node, memoryFields(node, n, true), nodePosition(node)); }
+    for (const node of Object.values(n.nodes)) {
+      if (!kinds.has(node.type)) fail('INVALID_BACKUP', '节点类型无效');
+      Object.assign(node, memoryFields(node, n, true), nodePosition(node));
+      if (node.versions === undefined) node.versions = [memoryVersion(node, {kind: 'human'}, '导入时初始化设定历史')];
+      if (!Array.isArray(node.versions) || !node.versions.length) fail('INVALID_BACKUP', '设定历史无效');
+      let previousRevision = 0;
+      for (const v of node.versions) {
+        if (!Number.isSafeInteger(v.revision) || v.revision <= previousRevision || typeof v.content !== 'string' || v.contentHash !== hash(v.content)) fail('INVALID_BACKUP', '设定历史版本或哈希不匹配');
+        previousRevision = v.revision;
+      }
+      const latest = node.versions.at(-1);
+      // Earlier development builds omitted automatic stale-status revisions.
+      // Keep metadata-only gaps, but never accept a different latest body.
+      if (latest.revision > node.revision || latest.contentHash !== hash(node.content || '')) fail('INVALID_BACKUP', '最新历史版本与设定正文不一致');
+    }
     for (const edge of Object.values(n.edges)) { if (!own(n.nodes, edge.from) || !own(n.nodes, edge.to)) fail('INVALID_BACKUP', '关系端点不存在'); Object.assign(edge, memoryFields(edge, n, true, true)); }
     if (n.plan && (typeof n.plan.content !== 'string' || !Number.isSafeInteger(n.plan.revision) || n.plan.revision < 1 || typeof n.plan.approved !== 'boolean')) fail('INVALID_BACKUP', '规划格式无效');
+    validateDirectoryOrder(n.directoryOrder);
     validateMemoryGroups(n);
     if (n.planning) validatePlanning(n.planning,n);
     if (n.preset) { validatePreset(n.preset); if (!Number.isSafeInteger(n.preset.revision) || n.preset.revision < 1) fail('INVALID_BACKUP','预设版本无效'); }
+    validateCollaboration(n);
+    validateProgress(n);
     if (own(state.novels, n.id)) {
-      if (isDeepStrictEqual(state.novels[n.id], n)) return { id: n.id, imported: false, reason: 'identical' };
+      const comparable = value => {
+        const copy = clone(withoutSharedCache(value));
+        // Split-workspace reads intentionally keep setting history out of the
+        // normal state. A restore comparison must therefore compare the
+        // current setting, while preserving each side's existing audit trail;
+        // history is never overwritten by an identical import.
+        for (const node of Object.values(copy.nodes || {})) delete node.versions;
+        return copy;
+      };
+      if (isDeepStrictEqual(comparable(state.novels[n.id]), comparable(n))) return { id: n.id, imported: false, reason: 'identical' };
       fail('IMPORT_CONFLICT', '同 ID 小说已存在且内容不同；不会覆盖现有小说');
     }
     state.novels[n.id] = n; return { id: n.id, imported: true };

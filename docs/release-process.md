@@ -35,7 +35,7 @@ npm run release -- status
 
 仓库、npm 包和市场显示名统一为 `dsh-cuigengji-plugin`，中文名“催更姬”；旧 `dsh-cuigengji` 仅用于[历史安装迁移](package-name-migration.md)。不维护 `2BingLing/dsh-market` 安装渠道。
 
-普通用户安装指南给出已验收的精确版本，例如 `dsh-cuigengji-plugin@0.4.5`，同时保留 Release `.tgz` 备用入口。宿主可能为不带版本的包名选择旧版，不能仅凭 npm `latest` 判断实际安装版本。GitHub 仓库地址继续兼容；源码 ZIP 不作为用户成品包。
+普通用户安装指南给出已验收的精确版本，例如 `dsh-cuigengji-plugin@0.5.0`，同时保留 Release `.tgz` 备用入口。宿主可能为不带版本的包名选择旧版，不能仅凭 npm `latest` 判断实际安装版本。GitHub 仓库地址继续兼容；源码 ZIP 不作为用户成品包。
 
 `src/` 对应的 `runtime/` 与 `lib/client.js` 必须提交。显式构建并验收一份 `.tgz`，GitHub 和 npm 复用它；不从另一工作区重打同版本包，不覆盖公开资产、版本或标签。公开安装包内容变化必须递增版本。
 

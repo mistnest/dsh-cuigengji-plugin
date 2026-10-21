@@ -35,14 +35,14 @@
 3. 安装后按提示重启，从左侧「催更姬」进入，创建或选择作品。
 
 ```text
-dsh-cuigengji-plugin@0.4.5
+dsh-cuigengji-plugin@0.5.0
 ```
 
 请保留版本号，避免宿主将不带版本的包名解析到旧版。「安装源」用于下载依赖，保持为包源即可。
 
-[详细安装步骤](docs/getting-started.md) · [备用成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.4.5/dsh-cuigengji-plugin-0.4.5.tgz) · [更新与数据迁移](docs/upgrade.md)
+[详细安装步骤](docs/getting-started.md) · [备用成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.5.0/dsh-cuigengji-plugin-0.5.0.tgz) · [更新与数据迁移](docs/upgrade.md)
 
-也可以把[安装与更新指南](docs/agent-installation.md)交给 Agent，由它处理安装、备份和升级检查。当前已实际验收 DSH **0.2.1-rc.2** 和 **0.2.0-rc.2**；更新插件会自动备份、迁移并校验原有作品。
+也可以把[安装与更新指南](docs/agent-installation.md)交给 Agent，由它处理安装、备份和升级检查。0.5.0 已实际验收 DSH **0.2.1-rc.2**；更新插件会自动备份、迁移并校验原有作品。
 
 ## 视频与教程
 
@@ -103,6 +103,6 @@ dsh-cuigengji-plugin@0.4.5
 
 [使用文档](docs/README.md) · [更新记录](docs/CHANGELOG.md) · [源码与贡献](docs/development.md) · [架构说明](docs/architecture.md)
 
-作品保存在独立的数据目录里，插件升级与源码更换不会把小说混进代码。实际位置可在「导入 / 导出」中查看，备份范围见[数据管理说明](docs/import-export.md)。
+作品保存在独立的数据目录里，插件升级与源码更换不会把小说混进代码。实际位置可在「设置 → 数据与备份」中查看或切换，备份范围见[数据管理说明](docs/import-export.md)。
 
 本仓库提供正式版源码、构建产物、使用文档与合成测试样例。源码采用 [MIT 许可证](LICENSE)；小说内容和自行导入的资料属于各自作者。

@@ -8,6 +8,7 @@ import {catalog, copy, counts, fail, hash, checkIds, own} from './model.ts';
 import {dataPackage, selectProjects, type Slice} from './packages.ts';
 import {recognize, inspection, type Recognized} from './recognize.ts';
 import {copyInto, copyWork} from './copy.ts';
+import {validateSharedPlans} from '../../domain/collaboration/legacy.ts';
 
 interface Plan {recognized: Recognized; options: ImportOptions; slice: Slice; preview: TransferPreview; workspacePlan?: Awaited<ReturnType<WorkData['plan']>>}
 export class TransferService {
@@ -28,20 +29,26 @@ export class TransferService {
       for (const c of [...Object.values(n.volumes), ...Object.values(n.chapters)]) if (typeof c.title !== 'string' || !c.title.trim() || !Number.isFinite(c.order)) fail('章节或卷的名称与排序无效');
       return validated.novels[n.id];
     });
+    validateSharedPlans({novels:Object.fromEntries(value.projects.map(n => [n.id,n]))});
     return value;
   }
-  inspect({file, options = {}}: {file: TransferFile; options?: ImportOptions}) {return inspection(this.validate(recognize(file, options)));}
+  inspect({file, options = {}}: {file: TransferFile; options?: ImportOptions}) {
+    const value = this.validate(recognize(file, options));
+    return inspection(options.intent === 'preset' ? {...value, projects: value.projects.filter(n => n.preset), restorable: false} : value);
+  }
   private options(value: Recognized, input: ImportOptions): ImportOptions {
     if (!input || typeof input !== 'object' || Array.isArray(input)) fail('导入选项无效');
-    const mode = input.mode ?? (value.restorable ? 'restore' : 'copy');
+    const presetImport = input.intent === 'preset';
+    const mode = input.mode ?? (presetImport ? 'copy' : value.restorable ? 'restore' : 'copy');
     if (!['copy', 'restore'].includes(mode) || input.targetId !== undefined && input.targetId !== null && typeof input.targetId !== 'string' || input.title !== undefined && (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 500) || input.presetPolicy !== undefined && !['append', 'replace'].includes(input.presetPolicy)) fail('导入方式或目标无效');
+    const selection = input.selection ?? {kind: presetImport ? 'preset' : value.kind === 'workspace' && mode === 'copy' ? 'works' : value.kind, novelId: (presetImport ? value.projects.find(n => n.preset) : value.projects[0])?.id, includeDependencies: !presetImport};
+    if (presetImport && (mode !== 'copy' || selection.kind !== 'preset' || !input.targetId)) fail('从写作预设入口导入时，只能将预设保存到已有的目标作品。');
     if (mode === 'restore' && !value.restorable) fail('这个文件是可复用内容，请选择添加到作品');
-    const selection = input.selection ?? {kind: value.kind === 'workspace' && mode === 'copy' ? 'works' : value.kind, novelId: value.projects[0]?.id, includeDependencies: true};
     if (mode === 'restore' && !['works', 'workspace'].includes(selection.kind)) fail('恢复备份需要完整作品；局部内容请选择添加到作品');
     if (mode === 'copy' && selection.kind === 'workspace') fail('添加到作品时请选择具体内容');
     if (mode === 'restore' && input.targetId) fail('备份恢复使用原作品 ID，请不要指定目标作品');
     if (mode === 'copy' && selection.kind === 'works' && input.targetId) fail('完整作品会新建为作品；添加局部内容时请选择正文、设定或规划');
-    return {mode, targetId: input.targetId || null, title: input.title?.trim(), selection: copy(selection), presetPolicy: input.presetPolicy || 'append', ...(value.orderId ? {orderId: value.orderId} : {})};
+    return {mode, targetId: input.targetId || null, title: input.title?.trim(), selection: copy(selection), presetPolicy: input.presetPolicy || 'append', ...(input.intent ? {intent: input.intent} : {}), ...(value.orderId ? {orderId: value.orderId} : {})};
   }
   private async plan(state: Workspace, file: TransferFile, input: ImportOptions): Promise<Plan> {
     const recognized = this.validate(recognize(file, input)), options = this.options(recognized, input);
@@ -108,6 +115,7 @@ export class TransferService {
       const attachments = new Map<string, string | null>();
       if (plan.workspacePlan) {
         const {payload} = plan.workspacePlan;
+        if(payload.state.guidance)draft.guidance={...payload.state.guidance,...draft.guidance};
         for (const [id, n] of Object.entries(payload.state.novels) as [string, Novel][]) {novelIds.push(id); if (!own(draft.novels, id)) {draft.novels[id] = copy(n); imported.push(n);}}
         for (const field of ['bindings', 'requests'] as const) for (const [id, v] of Object.entries(payload.state[field])) if (!own(draft[field], id)) Object.defineProperty(draft[field], id, {value: copy(v), enumerable: true, writable: true, configurable: true});
         const current = new Map((await this.workData.files()).map(f => [f.path, f.content]));

@@ -38,10 +38,20 @@ export const welcomeStyles = `
 .cuigengji .welcome-start p {color:var(--cg-muted);font-size:12px;line-height:2;margin:0;}
 .cuigengji .welcome-start strong {font-weight:400;color:var(--cg-ink);}
 .cuigengji .welcome-footer {display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:24px 0 0;}
-.cuigengji .welcome-footer button {display:inline-flex;align-items:center;gap:6px;padding:6px 8px;font-size:11px;min-height:36px;border:0;border-radius:8px;background:transparent;color:var(--cg-muted);transition:color 140ms,background 140ms;}
-.cuigengji .welcome-footer button:hover,.cuigengji .welcome-footer button:focus-visible {color:var(--cg-accent);background:var(--cg-wash);}
+.cuigengji .welcome-footer button,.cuigengji .welcome-star {display:inline-flex;align-items:center;gap:6px;box-sizing:border-box;padding:6px 8px;font-size:11px;min-height:36px;border:0;border-radius:8px;background:transparent;color:var(--cg-muted);transition:color 140ms,background 140ms;}
+.cuigengji .welcome-footer button:hover,.cuigengji .welcome-footer button:focus-visible,.cuigengji .welcome-star:hover,.cuigengji .welcome-star:focus-visible {color:var(--cg-accent);background:var(--cg-wash);}
+.cuigengji .welcome-star {text-decoration:none;white-space:nowrap;}
+.cuigengji .welcome-star:focus-visible {outline:2px solid var(--cg-accent);outline-offset:2px;}
+.cuigengji .welcome-star svg {width:15px;height:15px;flex:none;border:0;border-radius:0;color:var(--cg-accent);}
+.cuigengji .welcome-star-arrow {font-size:12px;}
 .cuigengji .welcome-manage {margin-right:auto;}
 .cuigengji .welcome-trash {margin-left:auto;}
+.cuigengji .welcome-hero.is-returning {flex-direction:row;align-items:center;gap:20px;padding:0 0 28px;}
+.cuigengji .is-returning .welcome-avatar {width:64px;border-radius:16px;box-shadow:none;}
+.cuigengji .is-returning .welcome-intro {flex:1;}
+.cuigengji .is-returning .welcome-brand {font-size:11px;}
+.cuigengji .is-returning .welcome-intro h1 {font-size:22px;margin:5px 0 0;}
+.cuigengji .is-returning .welcome-actions {margin-top:16px;}
 @container (max-width:640px) {
  .cuigengji .welcome-hero {flex-direction:column;align-items:flex-start;gap:24px;padding-top:0;}
  .cuigengji .welcome-avatar {width:128px;border-radius:26px;}

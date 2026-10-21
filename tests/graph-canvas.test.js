@@ -5,7 +5,18 @@ import {tmpdir} from 'node:os';
 import {join,resolve,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {Store} from '../src/core/store.js';
-import {toScreen,toWorld,zoomAt,fitCamera,contains,intersects} from '../src/client/shared/graph-geometry.ts';
+import {toScreen,toWorld,zoomAt,fitCamera,contains,intersects,vacantCardPoint,CARD_WIDTH,CARD_HEIGHT} from '../src/client/shared/graph-geometry.ts';
+
+test('toolbar card creation finds room among cards and resized notes without covering ports',()=>{
+  const center={x:400,y:300},occupied=[{x:276,y:216,width:CARD_WIDTH,height:CARD_HEIGHT},{x:564,y:100,width:400,height:600}];
+  for(let i=0;i<80;i++){
+    const p=vacantCardPoint(center,occupied),box={...p,width:CARD_WIDTH,height:CARD_HEIGHT};
+    assert.ok(occupied.every(r=>!intersects(box,r)));
+    assert.ok(occupied.every(r=>p.x>=r.x+r.width+39||p.x+CARD_WIDTH+39<=r.x||p.y>=r.y+r.height+39||p.y+CARD_HEIGHT+39<=r.y));
+    occupied.push(box);
+  }
+  assert.deepEqual(vacantCardPoint(center,[]),{x:276,y:216});
+});
 async function fixture(t){
  const root=await mkdtemp(join(tmpdir(),'cuigengji-canvas-'));
  t.after(()=>{if(!resolve(root).startsWith(resolve(tmpdir())+sep))throw new Error('Unexpected fixture path');return rm(root,{recursive:true,force:true});});

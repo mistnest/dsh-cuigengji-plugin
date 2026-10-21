@@ -5,4 +5,6 @@ export interface BookSummary {
   archived: boolean;
   archivedAt?: string;
   updatedAt?: string;
+  hasCollaboration?: boolean;
+  origin?: Pick<import('./collaboration.ts').CollaborationOrigin,'novelId'|'novelTitle'|'pageId'|'pageTitle'>;
 }

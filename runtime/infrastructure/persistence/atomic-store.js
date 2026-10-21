@@ -24,9 +24,12 @@ class AtomicStore {
     await mkdir(this.root, { recursive: true, mode: 448 });
     const lock = join(this.root, ".lock");
     const started = Date.now();
+    let deniedSince;
     for (; ; ) {
+      let created = false;
       try {
         await mkdir(lock);
+        created = true;
         try {
           await writeFile(join(lock, "owner"), String(process.pid), { flag: "wx", mode: 384 });
         } catch (error) {
@@ -39,6 +42,14 @@ class AtomicStore {
           await rmdir(lock);
         };
       } catch (error) {
+        if (!created && process.platform === "win32" && ["EPERM", "EACCES"].includes(errorCode(error))) {
+          deniedSince ??= Date.now();
+          if (Date.now() - started >= this.lockTimeoutMs) fail("STORE_BUSY", "\u5C0F\u8BF4\u6570\u636E\u6B63\u5728\u88AB\u53E6\u4E00\u64CD\u4F5C\u4F7F\u7528\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+          if (Date.now() - deniedSince < Math.min(this.lockTimeoutMs, 2e3)) {
+            await new Promise((r) => setTimeout(r, 20));
+            continue;
+          }
+        } else deniedSince = void 0;
         if (errorCode(error) !== "EEXIST") throw error;
         try {
           const pid = Number(await readFile(join(lock, "owner"), "utf8"));

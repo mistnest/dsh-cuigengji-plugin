@@ -3,18 +3,23 @@ import { persona } from './skills.js';
 const PERSONA_NAME = 'cuigengji:writing';
 const OWN_NAMES = new Set([PERSONA_NAME, 'cuigengji:handoff', 'cuigengji:preset', 'cuigengji:novel']);
 
-export function registerPrompt(ctx, { store, resolveBinding } = {}) {
+export function registerPrompt(ctx, { store, resolveBinding, use = fn=>fn() } = {}) {
   // Only author-enabled writing requirements join the stable persona. Story
   // content stays on demand; omit changing metadata to keep this text stable.
   ctx.on('system-prompt/assemble', async (assembly, context, next) => {
     const result = await next();
+    return use(async()=>{
     if (!context.agent?.id) return result;
     context.signal?.throwIfAborted();
     const actor = { kind: 'agent', sessionId: String(context.agent.id) };
     let binding;
-    try {binding = store && await (resolveBinding
+    try {
+      binding = store && await (resolveBinding
       ? resolveBinding(actor.sessionId)
-      : store.dispatch('binding.get', {}, actor));}
+      : store.dispatch('binding.get', {}, actor));
+      const guidance = store && await store.dispatch('guidance.get', {}, actor);
+      if (!guidance?.enabled) return {...result,sections:result.sections.filter(entry => !OWN_NAMES.has(entry.name)),contexts:result.contexts.filter(entry => !OWN_NAMES.has(entry.name))};
+    }
     catch (error) {
       if (error.code !== 'UPGRADE_REQUIRED') throw error;
       // A broken project must not prevent the host agent from calling the
@@ -32,5 +37,6 @@ export function registerPrompt(ctx, { store, resolveBinding } = {}) {
       ],
       contexts: result.contexts.filter(entry => !OWN_NAMES.has(entry.name)),
     };
+    });
   });
 }

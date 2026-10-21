@@ -1,3 +1,4 @@
+import {selectPlanningPage,selectedPlanningPage,showOrganization} from './helpers/navigation.mjs';
 import {spawn} from 'node:child_process';
 import {mkdir, readFile} from 'node:fs/promises';
 import {resolve, join} from 'node:path';
@@ -39,6 +40,7 @@ try {
 
   await open('导入 / 导出'); await capture('import-empty-1200');
   await page.getByRole('group', {name: '导入导出切换'}).getByRole('button', {name: '导出', exact: true}).click();
+  await switchKind('正文');
   await page.getByRole('combobox', {name: '章节范围', exact: true}).selectOption(volume.id);
   const prose = await download(); expect(Object.keys(JSON.parse(prose.content).payload.projects[0].chapters)).toEqual([chapter.id]);
   await capture('export-chapters-1200');
@@ -107,10 +109,10 @@ try {
   }
   await page.evaluate(() => {document.documentElement.style.cssText = '--dsw-alias-bg-base:#17191f;--dsw-alias-label-primary:#e8eaf0;--dsw-alias-label-secondary:#a1a6b3;--dsw-alias-border-l1:#343946;--dsw-alias-state-business-primary:#6c8aff;';});
   await capture('export-dark-1200');
-  await page.getByRole('navigation', {name: '小说功能'}).getByRole('button', {name: '规划', exact: true}).click(); await page.getByRole('combobox', {name: '规划页面', exact: true}).selectOption(graphPage.id);
+  await page.getByRole('button',{name:'作品首页',exact:true}).click();await page.locator('.welcome-book-open').first().click();await page.getByRole('button',{name:'规划',exact:true}).click(); await selectPlanningPage(page,graphPage.id);
   await page.getByLabel('规划更多操作', {exact: true}).click(); await page.getByRole('button', {name: '导出当前画布', exact: true}).click();
   await expect(page.getByLabel('选择 码头决战', {exact: true})).toBeChecked(); await expect(page.getByLabel('选择 主线规划', {exact: true})).not.toBeChecked();
-  await page.getByRole('button', {name: '‹ 返回规划', exact: true}).click(); await expect(page.getByRole('combobox', {name: '规划页面', exact: true})).toHaveValue(graphPage.id);
+  await page.getByRole('button', {name: '‹ 返回规划', exact: true}).click(); await expect(selectedPlanningPage(page)).toHaveAttribute('data-page-id',graphPage.id);
   expect(errors).toEqual([]);
   console.log(JSON.stringify({ok: true, checks: ['all export scopes and formats', 'file recognition, subset selection, samples and targets', 'restore deduplication, copy receipts and concurrent edit rejection', 'Tavern presets and worldbook, TXT indentation', '360/560/1200px fixed header/footer, dark theme', 'current canvas shortcut preserves page on return']}));
 } catch (error) {const page = browser?.contexts()[0]?.pages()[0]; if (page) await page.screenshot({path: join(shots, 'failure.png')}); throw error;}

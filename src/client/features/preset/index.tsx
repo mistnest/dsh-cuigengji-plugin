@@ -4,6 +4,7 @@ import {ResourceState, SaveBar} from '../../shared/ui.jsx';
 import {compilePreset, presetBlockReason, presetBlockNotice} from '../../../domain/preset/index.js';
 import {useDialog} from '../../dialog.tsx';
 import {ManagementPage, downloadJSON, type Call, type Run, type BackProps} from '../../shared/management-page.tsx';
+import {Icon} from '../../shared/icons.tsx';
 
 type Block = {identifier: string; name: string; content: string; enabled: boolean; role?: string; marker?: boolean; [key: string]: unknown};
 type PresetDocument = {name: string; enabled: boolean; blocks: Block[]; revision: number; raw?: unknown; importFormat?: string; warnings?: string[]; [key: string]: unknown};
@@ -43,11 +44,11 @@ function PresetEditor({call, novelId, run, busy, initial, onTransfer, onBack, ba
   };
   return <ManagementPage title="写作预设" description={value.name + ' · ' + (value.enabled ? '已启用，保存后从下一次回复生效' : '整套停用，条目仍保留')} {...{onBack, backLabel}}
     documentClass="preset-management"
-    actions={<><label className="switch-control"><input type="checkbox" aria-label="启用" disabled={busy} checked={value.enabled} onChange={event => change({...value, enabled: event.target.checked})}/>启用预设</label><button disabled={busy} onClick={() => onTransfer({mode: 'import', selection: {kind: 'preset', novelId}})}>导入预设</button><button disabled={busy || dirty || !value.blocks.length} title={dirty ? '先保存当前预设后导出' : undefined} onClick={() => onTransfer({mode: 'export', selection: {kind: 'preset', novelId}})}>导出预设</button></>}
-    footer={<SaveBar {...{dirty, busy}} error={cacheError} invalid={invalid || (!value.name.trim() ? '请填写预设名称' : '')} onSave={save} label="保存预设" children={null}/>}
+    actions={<>{!!value.blocks.length&&<label className="switch-control"><input type="checkbox" aria-label="启用" disabled={busy} checked={value.enabled} onChange={event => change({...value, enabled: event.target.checked})}/>启用预设</label>}<button disabled={busy} onClick={() => onTransfer({mode: 'import', selection: {kind: 'preset', novelId}})}>导入预设</button>{!!value.blocks.length&&<button disabled={busy || dirty} title={dirty ? '先保存当前预设后导出' : undefined} onClick={() => onTransfer({mode: 'export', selection: {kind: 'preset', novelId}})}>导出预设</button>}</>}
+    footer={(dirty||!!value.blocks.length)&&<SaveBar {...{dirty, busy}} error={cacheError} invalid={invalid || (!value.name.trim() ? '请填写预设名称' : '')} onSave={save} label="保存预设" children={null}/>}
   >
     {initial.revision > base.revision && <p className="notice">已保存的预设有更新，当前草稿仍保留。可保存后核对，或在预设设置里读取最新版本。</p>}
-    <div className="preset-workspace">
+    {!value.blocks.length?<div className="preset-onboarding"><span><Icon name="edit"/></span><h3>给这本书写下要求</h3><p>文风、叙述视角、你希望保留的表达习惯。<br/>从一条要求开始，也可以导入已有预设。</p><button className="primary" disabled={busy} onClick={add}>＋ 新增提示词</button></div>:<div className="preset-workspace">
       <aside className={'preset-list ' + (index !== null ? 'is-selected' : '')} aria-label="提示词条目列表">
         <div className="preset-list-heading"><h3>提示词条目</h3><button disabled={busy} aria-label="新增提示词" title="新增提示词" onClick={add}>＋</button></div>
         {value.blocks.map((item, i) => onlyUnsupported && !presetBlockNotice(item) ? null : <button className={index === i ? 'selected' : ''} aria-pressed={index === i} key={item.identifier} onClick={() => setSelected(i)}><span className="prompt-list-title"><span>{i + 1}</span>{item.name || '未命名条目'}</span><small>{state(item)}</small></button>)}
@@ -63,14 +64,14 @@ function PresetEditor({call, novelId, run, busy, initial, onTransfer, onBack, ba
           <label className="prompt-content-field"><span>提示词内容</span><textarea aria-label="提示词内容" placeholder="写下这条要求的具体内容…" disabled={busy} value={block.content} onChange={event => {const content = event.target.value; update(index, {content, enabled: block.enabled && !presetBlockReason({...block, content})});}}/></label>
         </> : '从左侧选择一条提示词，开始编辑。'}
       </main>
-    </div>
-    <p role="status" className="management-hint preset-effective-summary">{value.blocks.length} 个条目 · {active} 个有效条目 · 启用后 {candidate.length.toLocaleString('zh-CN')} 字符</p>
-    {!candidate.trim() && <p className="management-hint">当前没有可生效的提示词正文。请启用有内容的条目，或新增写作要求。</p>}
+    </div>}
+    {!!value.blocks.length&&<p role="status" className="management-hint preset-effective-summary">{value.blocks.length} 个条目 · {active} 个有效条目 · 启用后 {candidate.length.toLocaleString('zh-CN')} 字符</p>}
+    {!!value.blocks.length&&!candidate.trim() && <p className="management-hint">当前没有可生效的提示词正文。请启用有内容的条目，或新增写作要求。</p>}
     <details className="management-disclosure"><summary>预设设置</summary><label className="management-field">预设名称<input disabled={busy} value={value.name} onChange={event => change({...value, name: event.target.value})}/></label>
       <div className="management-actions"><button disabled={busy} onClick={async () => {if (!dirty || await confirm('丢弃预设草稿并读取已保存版本？')) void run(async () => {const saved = await call<PresetDocument | null>('preset.get', {novelId}) || emptyPreset; accept(saved); setSelected(saved.blocks.length ? 0 : null); setOnlyUnsupported(false);});}}>读取已保存版本</button>{value.raw !== undefined && <button disabled={busy} onClick={() => downloadJSON(value.raw, 'original-tavern-preset.json')}>下载原始文件（不含编辑）</button>}</div>
       {value.raw !== undefined && !value.importFormat && <p>旧版导入的停用状态已保留；重新导入原文件可按新的内容优先规则解析。</p>}
       {!!warnings.length && <details><summary>导入说明 · {warnings.length} 项</summary>{warnings.map((warning, i) => <p key={i}>{warning}</p>)}</details>}
     </details>
-    <details className="management-disclosure"><summary>当前草稿的生效文本预览 · {preview.length} 字符</summary><pre>{preview || '预设未启用或没有启用的文本条目。'}</pre><p>保存并启用后，这些文本会在下次请求时加入当前作品绑定会话的系统提示词。酒馆的触发、角色与装填规则不执行，宏保留为原文。</p></details>
+    {!!candidate.trim()&&<details className="management-disclosure"><summary>当前草稿的生效文本预览 · {preview.length} 字符</summary><pre>{preview || '预设未启用或没有启用的文本条目。'}</pre><p>保存并启用后，这些文本会在下次请求时加入当前作品绑定会话的系统提示词。酒馆的触发、角色与装填规则不执行，宏保留为原文。</p></details>}
   </ManagementPage>;
 }

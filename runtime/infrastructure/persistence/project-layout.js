@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { chapterCounts, CHAPTER_COUNTS } from "../../domain/chapters/metadata.js";
 import { planProjectDirectories } from "./project-directories.js";
-const STORAGE_VERSION = 4;
+import { projectCollaboration, collaborationIndex } from "../../domain/collaboration/projection.js";
+import { validManagedPath, treeChapterFiles, treeSettingFiles, treePlanningFiles, pageManifest } from "./tree-layout.js";
+const STORAGE_VERSION = 5;
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const without = (value, keys) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
 const fileId = (id) => /^[a-z0-9][a-z0-9_-]{0,120}$/i.test(id) && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(id) ? id : "~" + createHash("sha256").update(id).digest("hex");
@@ -44,21 +46,28 @@ const bookPath = (id, directories) => {
 };
 const legacyBookPath = (id) => "novels/" + fileId(id);
 const pageKey = (id) => id === null ? "~main" : fileId(id);
-const sections = ["chapters", "nodes", "edges", "memoryGroups", "planning", "preset", "plan", "tavernSources"];
-const libraryRow = (novel) => Object.fromEntries(["id", "title", "description", "revision", "archived", "archivedAt", "createdAt", "updatedAt"].filter((key) => own(novel, key)).map((key) => [key, novel[key]]));
+const sections = ["chapters", "nodes", "edges", "memoryGroups", "planning", "preset", "plan", "tavernSources", "collaboration", "collaborationProgress"];
+const libraryRow = (novel) => ({
+  ...Object.fromEntries(["id", "title", "description", "revision", "archived", "archivedAt", "createdAt", "updatedAt"].filter((key) => own(novel, key)).map((key) => [key, novel[key]])),
+  ...novel.hasCollaboration || collaborationIndex(novel) ? { hasCollaboration: true } : {},
+  ...novel.collaboration?.sharedPlan || collaborationIndex(novel)?.sharedPlan || novel.sharedPlan ? { sharedPlan: novel.collaboration?.sharedPlan || collaborationIndex(novel)?.sharedPlan || novel.sharedPlan } : {},
+  ...novel.collaboration?.origin || novel.origin ? { origin: Object.fromEntries(["novelId", "novelTitle", "pageId", "pageTitle"].map((key) => [key, (novel.collaboration?.origin || novel.origin)[key]])) } : {}
+});
 const projectRecord = (novel) => ({ novel: without(novel, [...sections]), sections: sections.filter((key) => own(novel, key)), preview: {
   ...novel.preset ? { preset: without(novel.preset, ["blocks", "raw", "warnings"]) } : {},
-  ...novel.plan ? { plan: without(novel.plan, ["content"]) } : {}
+  ...novel.plan ? { plan: without(novel.plan, ["content"]) } : {},
+  ...novel.collaboration?.origin ? { origin: novel.collaboration.origin } : {},
+  ...novel.collaboration?.sharedPlan ? { sharedPlan: novel.collaboration.sharedPlan } : {}
 } });
 function storedChapterFile(index, id, version) {
-  return version >= 4 && validManagedFileName(index?.file) ? index.file : fileId(id) + ".json";
+  return version >= 4 && (version >= 5 ? validManagedPath(index?.file) : validManagedFileName(index?.file)) ? index.file : fileId(id) + ".json";
 }
 function storedSettingFile(index, id, version) {
-  return version >= 4 && validManagedFileName(index?.file) ? index.file : fileId(id) + ".json";
+  return version >= 4 && (version >= 5 ? validManagedPath(index?.file) : validManagedFileName(index?.file)) ? index.file : fileId(id) + ".json";
 }
 function storedPageFile(index, pageId, version) {
   const value = index?.pageFiles?.[pageKey(pageId)];
-  return version >= 4 && validManagedFileName(value) ? value : pageKey(pageId) + ".json";
+  return version >= 4 && (version >= 5 ? validManagedPath(value) : validManagedFileName(value)) ? value : pageKey(pageId) + ".json";
 }
 function namedChapterFiles(chapters, previous = {}, occupied = []) {
   const used = new Set([...occupied, ...Object.values(previous).map((row) => row.file).filter(validManagedFileName)].map(managedFileKey));
@@ -100,7 +109,10 @@ function indexedChapter(index) {
   Object.defineProperty(chapter, CHAPTER_COUNTS, { value: { charCount: index.charCount, textCount: index.textCount } });
   return chapter;
 }
-const indexMemory = (node, file) => ({ ...without(node, ["content"]), ...file ? { file } : {} });
+function indexMemory(node, file) {
+  const versions = Array.isArray(node.versions) ? node.versions.map((version) => without(version, ["content"])) : void 0;
+  return { ...without(node, ["content", "versions"]), ...versions?.length ? { versions } : {}, ...file ? { file } : {} };
+}
 const indexPlanningNode = (node) => without(node, ["content"]);
 const indexDecoration = (decoration) => without(decoration, ["content"]);
 function indexTransaction(transaction) {
@@ -132,7 +144,7 @@ function planningPageFiles(board, previous, occupied = []) {
   }
   return result;
 }
-function planningIndex(board, pageFiles) {
+function planningIndex(board, pageFiles, bodyFiles) {
   const pageIds = planningPageIds(board);
   return {
     board: without(board, ["nodes", "edges", "decorations", "transactions", "legacy", "pageFiles"]),
@@ -144,6 +156,7 @@ function planningIndex(board, pageFiles) {
     ...own(board, "legacy") ? { legacyPreview: board.legacy ? without(board.legacy, ["content"]) : null } : {},
     pageIds,
     ...pageFiles ? { pageFiles } : {},
+    ...bodyFiles || {},
     transactions: board.transactions.map(indexTransaction)
   };
 }
@@ -157,7 +170,7 @@ function splitNovel(id, novel, directories, storageVersion = STORAGE_VERSION, oc
   const readable = storageVersion >= 4;
   put("project.json", projectRecord(novel));
   const chapterIndex = {};
-  const chapterNames = readable ? namedChapterFiles(novel.chapters || {}, {}, occupied.chapters) : {};
+  const chapterNames = storageVersion >= 5 ? treeChapterFiles(novel, {}, occupied.chapters) : readable ? namedChapterFiles(novel.chapters || {}, {}, occupied.chapters) : {};
   for (const [key, chapter] of Object.entries(novel.chapters || {})) {
     const file = readable ? chapterNames[key] : fileId(key) + ".json";
     chapterIndex[key] = indexChapter(chapter, readable ? file : void 0);
@@ -166,11 +179,12 @@ function splitNovel(id, novel, directories, storageVersion = STORAGE_VERSION, oc
   }
   put("chapters/index.json", chapterIndex);
   const settingIndex = {};
-  const settingNames = readable ? namedSettingFiles(novel.nodes || {}, {}, occupied.settings) : {};
+  const settingNames = storageVersion >= 5 ? treeSettingFiles(novel, {}, occupied.settings) : readable ? namedSettingFiles(novel.nodes || {}, {}, occupied.settings) : {};
   for (const [key, value] of Object.entries(novel.nodes || {})) {
     const file = readable ? settingNames[key] : fileId(key) + ".json";
     settingIndex[key] = indexMemory(value, readable ? file : void 0);
-    put("settings/entries/" + file, value);
+    put("settings/entries/" + file, without(value, ["versions"]));
+    if (Array.isArray(value.versions) && value.versions.length) put("history/settings/" + fileId(key) + ".json", value.versions);
   }
   put("settings/index.json", settingIndex);
   if (own(novel, "edges")) put("settings/relations.json", novel.edges);
@@ -178,15 +192,25 @@ function splitNovel(id, novel, directories, storageVersion = STORAGE_VERSION, oc
   if (own(novel, "planning")) {
     if (!novel.planning) put("planning/index.json", null);
     else {
-      const pageFiles = readable ? planningPageFiles(novel.planning, void 0, occupied.planning) : void 0;
-      const index = planningIndex(novel.planning, pageFiles);
+      const tree = storageVersion >= 5 ? treePlanningFiles(novel.planning, void 0, occupied.planning) : void 0;
+      const pageFiles = tree?.pageFiles || (readable ? planningPageFiles(novel.planning, void 0, occupied.planning) : void 0);
+      const index = planningIndex(novel.planning, pageFiles, tree);
       put("planning/index.json", index);
       if (own(novel.planning, "legacy")) put("history/planning-legacy.json", novel.planning.legacy);
-      for (const pageId of index.pageIds) put("planning/" + storedPageFile(index, pageId, storageVersion), planningPage(novel.planning, pageId));
+      for (const pageId of index.pageIds) {
+        const page = planningPage(novel.planning, pageId);
+        put("planning/" + storedPageFile(index, pageId, storageVersion), tree ? pageManifest(page) : page);
+      }
+      if (tree) {
+        for (const [id2, node] of Object.entries(novel.planning.nodes)) put("planning/" + tree.nodeFiles[id2], node);
+        for (const [id2, decoration] of Object.entries(novel.planning.decorations || {})) put("planning/" + tree.decorationFiles[id2], decoration);
+      }
       for (const transaction of novel.planning.transactions) put("history/planning/" + fileId(transaction.id) + ".json", transaction);
     }
   }
-  for (const [field, path] of [["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"]]) if (own(novel, field)) put(path, novel[field]);
+  for (const [field, path] of [["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"], ["collaboration", "collaboration.json"], ["collaborationProgress", "collaboration-progress.json"]]) if (own(novel, field)) put(path, novel[field]);
+  const collaboration = projectCollaboration(novel);
+  if (collaboration) put("collaboration-index.json", collaboration);
   return files;
 }
 function splitWorkspace(state, directories = planProjectDirectories(state.novels).directories, storageVersion = STORAGE_VERSION, occupied = {}) {
@@ -194,7 +218,8 @@ function splitWorkspace(state, directories = planProjectDirectories(state.novels
   for (const [id, novel] of Object.entries(state.novels)) for (const [path, text] of splitNovel(id, novel, directories, storageVersion, occupied[id])) files.set(path, text);
   files.set("runtime/bindings.json", JSON.stringify(state.bindings));
   for (const [id, value] of Object.entries(state.requests)) files.set("runtime/requests/" + fileId(id) + ".json", JSON.stringify(value));
-  files.set("library.json", JSON.stringify({ format: "cuigengji-library", storageVersion, metadata: without(state, ["novels", "bindings", "requests"]), novels: Object.fromEntries(Object.entries(state.novels).map(([id, novel]) => [id, libraryRow(novel)])), directories }));
+  files.set("activity.json", JSON.stringify(state.activity || { format: "cuigengji-activity", version: 1, daily: {} }));
+  files.set("library.json", JSON.stringify({ format: "cuigengji-library", storageVersion, metadata: without(state, ["novels", "bindings", "requests", "activity"]), novels: Object.fromEntries(Object.entries(state.novels).map(([id, novel]) => [id, libraryRow(novel)])), directories }));
   return files;
 }
 export {
