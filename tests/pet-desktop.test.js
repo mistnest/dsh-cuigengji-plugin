@@ -28,6 +28,31 @@ function fakeChild(ready = true) {
 const input = { desktop: true, initial: true, role: 'bigfish', visible: true, reduced: false, sessionId: 'author-a', mood: 'idle' };
 const fakeDispatch = async (action, args, actor) => action === 'binding.get' ? { novelId: actor.sessionId } : { date: '2026-10-18', novelId: args.novelId || null, title: args.novelId || null, stats: { proseAdded: 12, settingAdded: 3, planningChanges: 1 } };
 
+test('Electron desktop host works without the installer-only executable variable', { skip: process.platform !== 'win32' }, async t => {
+  const root = await fixture(t);
+  const launcher = process.env.DSH_DESKTOP_NODE_EXECUTABLE;
+  const electron = Object.getOwnPropertyDescriptor(process.versions, 'electron');
+  let pet;
+  try {
+    delete process.env.DSH_DESKTOP_NODE_EXECUTABLE;
+    delete process.versions.electron;
+    const web = new DesktopPet(root, fakeDispatch, { launch() { throw Error('Web host must not launch a native pet'); } });
+    assert.deepEqual(await web.sync(input), { supported: false, available: false });
+    await web.close();
+    Object.defineProperty(process.versions, 'electron', { value: '44.7.0', configurable: true });
+    let starts = 0;
+    pet = new DesktopPet(root, fakeDispatch, { launch() { starts++; return fakeChild(); } });
+    assert.equal((await pet.sync(input)).available, true);
+    assert.equal(starts, 1);
+  } finally {
+    await pet?.close();
+    if (launcher === undefined) delete process.env.DSH_DESKTOP_NODE_EXECUTABLE;
+    else process.env.DSH_DESKTOP_NODE_EXECUTABLE = launcher;
+    if (electron) Object.defineProperty(process.versions, 'electron', electron);
+    else delete process.versions.electron;
+  }
+});
+
 test('desktop pet is human-only, opt-in from desktop preload, and launches once for concurrent calls', async t => {
   const root = await fixture(t); let starts = 0, child;
   const pet = new DesktopPet(root, fakeDispatch, { supported: true, launch() { starts++; return child = fakeChild(); } }); t.after(() => pet.close());

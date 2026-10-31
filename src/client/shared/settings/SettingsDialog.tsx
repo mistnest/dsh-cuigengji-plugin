@@ -36,7 +36,7 @@ export function SettingsDialog({close,novelTitle,onPreset,guidance,onData,onReco
           {item.id==='editor'&&<EditorSettings show={show}/>}
           {item.id==='writing'&&<>
             {show('guidance')&&guidance&&<SettingsRow title="当前会话写作指引" description={<>
-              <p>开启：核心写作指引和当前作品已启用的预设自动加入提示词，适合写作、讨论情节。</p>
+              <p>开启（默认）：核心写作指引和当前作品已启用的预设自动加入提示词，适合写作、讨论情节。</p>
               <p>关闭：通过 MCP 按需读取指引，适合编程等其他任务。</p>
               <p>注：关闭后，AI 可能不会主动使用催更姬，可明确说“使用催更姬”。已有聊天记录保留。</p>
             </>} scope="当前会话"><input type="checkbox" role="switch" aria-label="当前会话写作指引" checked={guidance.enabled===true} disabled={guidance.disabled||guidance.enabled===undefined} onChange={guidance.onToggle}/></SettingsRow>}

@@ -36,7 +36,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       signal: AbortSignal.any([extra.signal, AbortSignal.timeout(30_000)]),
     });
     const body = await response.json();
-    if (!response.ok) return { isError: true, content: [{ type: 'text', text: body.error ?? '记忆操作失败' }] };
+    if (!response.ok) return { isError: true, content: [{ type: 'text', text: body.error ?? '记忆操作失败' }],
+      ...(body.diagnostic ? {structuredContent:{error:body.diagnostic}} : {}) };
     return { content: [{ type: 'text', text: JSON.stringify(body.result ?? null) }] };
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: error.message }] };

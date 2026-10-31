@@ -16,6 +16,7 @@ import {ordinaryBindings} from '../../application/bindings/state.ts';
 import {sharedPlanRefs} from '../../domain/collaboration/legacy.ts';
 import {staleMemoryEntities} from '../../domain/memory/invalidation.ts';
 import {validManagedPath, treeChapterFiles, treeSettingFiles, treePlanningFiles, pageManifest} from './tree-layout.ts';
+import {parseJsonFile} from './json-file.ts';
 
 type LoadedBook = {
   id: string; project: Project; loaded: Set<string>;
@@ -48,7 +49,7 @@ export class ProjectStore extends AtomicStore<Workspace> {
     try {
       const text = await this.readText(path);
       view?.baseline.set(path, text);
-      try { return JSON.parse(text); } catch { corrupt(`小说数据文件无法解析：${path}`); }
+      return parseJsonFile(text, path);
     } catch (error) {
       if (errorCode(error) === 'ENOENT') { if (optional) return undefined; corrupt(`小说数据文件缺失：${path}`); }
       throw error;
@@ -459,7 +460,7 @@ export class ProjectStore extends AtomicStore<Workspace> {
     if(changes.size)await this.transaction.commit(changes);
     for(const [path,content] of changes)if(content===null)view.baseline.delete(path);else view.baseline.set(path,content);
     view.legacyActivity=false;
-    view.activityIndex=JSON.parse(view.baseline.get('activity/index.json')!).years;
+    view.activityIndex=parseJsonFile(view.baseline.get('activity/index.json')!, 'activity/index.json').years;
     return {files:changes.size};
   }
 
@@ -708,7 +709,7 @@ export class ProjectStore extends AtomicStore<Workspace> {
     await put('runtime/bindings.json', state.bindings);
     for(const [path,content] of this.activityFiles(state,view)) {
       if(content===null)changes.set(path,null);
-      else await put(path,JSON.parse(content));
+      else await put(path,parseJsonFile(content, path));
     }
     for (const [id, request] of Object.entries(state.requests)) await put(`runtime/requests/${fileId(id)}.json`, request);
     for (const id of view.requests) if (!own(state.requests, id)) changes.set(`runtime/requests/${fileId(id)}.json`, null);
@@ -721,6 +722,6 @@ export class ProjectStore extends AtomicStore<Workspace> {
     for (const [path, content] of changes) if (content === null) view.baseline.delete(path); else view.baseline.set(path, content);
     view.library = library;
     view.legacyActivity=false;
-    view.activityIndex=JSON.parse(view.baseline.get('activity/index.json')!).years;
+    view.activityIndex=parseJsonFile(view.baseline.get('activity/index.json')!, 'activity/index.json').years;
   }
 }

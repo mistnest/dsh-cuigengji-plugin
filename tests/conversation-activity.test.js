@@ -49,6 +49,19 @@ test('chat follows focus at submission, ignores unrelated code conversations, an
   assert.deepEqual(warnings,[]);
 });
 
+test('a fresh unbound conversation follows default-on guidance; explicitly switching off still excludes outside-workspace messages',async t=>{
+  const {root,store,session,event,emit,actor}=await fixture(t);
+  const outside={...session,header:{cwd:root}};
+  assert.deepEqual(await store.dispatch('guidance.get',{},actor),{enabled:true});
+  await emit(outside,event('default-on'));
+  await store.dispatch('guidance.set',{enabled:false},actor);
+  await emit(outside,event('explicit-off'));
+  const stats=await store.dispatch('activity.stats',{from:localDay(),to:localDay()},actor);
+  assert.equal(stats.stats.conversationInput,8);
+  assert.equal(stats.novels[0].novelId,LIBRARY_DISCUSSION);
+  assert.deepEqual(await new Store(store.root).dispatch('guidance.get',{},actor),{enabled:false});
+});
+
 test('real DSH session publication and flush persist submitted human counts without a model call',async t=>{
   const {libraries,store,actor}=await fixture(t),ctx=new Context();
   await ctx.plugin(Sessions);t.after(()=>ctx.fiber.dispose());

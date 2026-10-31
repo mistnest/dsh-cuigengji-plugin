@@ -31,7 +31,7 @@ class DesktopPet {
   constructor(root, dispatch, options = {}) {
     this.root = root;
     this.dispatch = dispatch;
-    this.supported = options.supported ?? (process.platform === "win32" && Boolean(process.env.DSH_DESKTOP_NODE_EXECUTABLE));
+    this.supported = options.supported ?? (process.platform === "win32" && Boolean(process.versions.electron || process.env.DSH_DESKTOP_NODE_EXECUTABLE));
     this.launch = options.launch || (() => spawn(join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), [
       "-NoLogo",
       "-NoProfile",

@@ -10,26 +10,31 @@ import {chromium,expect} from '@playwright/test';
 import {selectSettingsCategory} from '../tests/helpers/navigation.mjs';
 
 const argv=process.argv.slice(2),arg=name=>argv[argv.indexOf(name)+1];
-assert.ok(argv.includes('--desktop-exe')&&argv.includes('--package'),'--desktop-exe <exe> --package <tgz> [--report <json>]');
-const exe=resolve(arg('--desktop-exe')),archive=resolve(arg('--package'));
+assert.ok((argv.includes('--desktop-exe')!==argv.includes('--cli'))&&argv.includes('--package'),'(--desktop-exe <exe> | --cli <bin.js> --pnpm <pnpm.mjs>) --package <tgz> [--report <json>]');
+const cliMode=argv.includes('--cli');
+const exe=cliMode?process.execPath:resolve(arg('--desktop-exe')),archive=resolve(arg('--package'));
+const hostCli=cliMode?resolve(arg('--cli')):join(dirname(exe),'resources/app.asar/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js');
+const hostAnchor=cliMode?resolve(dirname(hostCli),'../package.json'):undefined;
+if(cliMode)assert.ok(argv.includes('--pnpm'),'CLI acceptance needs an explicit pnpm.mjs from a trusted runtime');
 const manifest=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
 const root=await mkdtemp(join(tmpdir(),'cuigengji-host-compat-')),home=join(root,'home'),profile=join(home,'profiles/compatibility');
 const runtime=join(dirname(exe),'resources/runtime'), windows=process.env.SystemRoot||'C:\\Windows';
 const env={...process.env,DSH_HOME:home,CUIGENGJI_DATA_ROOT:join(root,'novel-data'),DSH_DESKTOP_NODE_EXECUTABLE:exe,ELECTRON_RUN_AS_NODE:'1',CI:'true',
-  PNPM_HOME:join(root,'pnpm'),PATH:[join(runtime,'bin'),join(windows,'System32'),windows].join(';')};
+  PNPM_HOME:join(root,'pnpm'),PATH:[cliMode?dirname(exe):join(runtime,'bin'),join(windows,'System32'),windows].join(';')};
 for(const key of ['NODE_OPTIONS','DEEPSEEK_API_KEY','OPENAI_API_KEY','DSH_URL','DSH_TOKEN'])delete env[key];
-const report={ok:false,pluginVersion:manifest.version,modelCalls:0,checks:[]};
+const report={ok:false,pluginVersion:manifest.version,hostKind:cliMode?'npm-web':'desktop-bundled-web',modelCalls:0,checks:[]};
 let child,browser,page,log='';
 try {
   await mkdir(profile,{recursive:true});
   await writeFile(join(profile,'package.json'),JSON.stringify({name:'isolated-host-compatibility',private:true,dsh:{profile:{bundles:['@deepseek-ai/dsh-base','@deepseek-ai/dsh-web-app']}}}));
   const installed=spawnSync(exe,['--expose-internals',fileURLToPath(new URL('./desktop-package-operation.mjs',import.meta.url)),JSON.stringify({
     context:{profile:'compatibility',dir:profile,cwd:root,home},args:['add',archive,...(argv.includes('--registry')?['--registry='+arg('--registry')]:[])],options:{execution:'service',outputBytes:5000,activateNewBundles:true,idleTimeoutMs:120000,lookupTimeoutMs:20000,lockWaitMs:10000},
+    ...(cliMode?{runtime:{anchor:hostAnchor,pnpm:resolve(arg('--pnpm'))}}:{}),
   })],{env,encoding:'utf8',windowsHide:true,timeout:240000});
   assert.equal(installed.status,0,installed.stderr||installed.stdout||installed.error?.message);
   const installation=JSON.parse(installed.stdout.trim().split(/\r?\n/).at(-1));
   assert.equal(installation.exitCode,0,installation.output);report.dshVersion=installation.runtimeVersion;
-  const metadata=spawnSync(exe,['--expose-internals',fileURLToPath(new URL('./check-installed-metadata.mjs',import.meta.url)),profile],{env,encoding:'utf8',windowsHide:true,timeout:30000});
+  const metadata=spawnSync(exe,['--expose-internals',fileURLToPath(new URL('./check-installed-metadata.mjs',import.meta.url)),profile,...(hostAnchor?[hostAnchor]:[])],{env,encoding:'utf8',windowsHide:true,timeout:30000});
   assert.equal(metadata.status,0,metadata.stderr||metadata.stdout);report.metadata=JSON.parse(metadata.stdout.trim());
   const probe=join(root,'probe.mjs');
   await mkdir(join(root,'writing-workspace'));
@@ -44,8 +49,7 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
   return Response.json({tools,skills,result:JSON.parse(result)});
 }});}`);
   const patch=join(root,'probe.patch.yml');await writeFile(patch,`- insert:\n    - id: isolated-compatibility-probe\n      name: ${JSON.stringify(probe)}\n`);
-  const cli=join(dirname(exe),'resources/app.asar/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js');
-  child=spawn(exe,['--expose-internals',cli,'--profile','compatibility','--patch',patch,'--host','127.0.0.1','--port','0','--no-open'],{env,windowsHide:true,stdio:['ignore','pipe','pipe']});
+  child=spawn(exe,['--expose-internals',hostCli,'--profile','compatibility','--patch',patch,'--host','127.0.0.1','--port','0','--no-open'],{env,windowsHide:true,stdio:['ignore','pipe','pipe']});
   const url=await new Promise((done,reject)=>{
     const timer=setTimeout(()=>reject(new Error('Host startup timed out')),45000);
     const receive=bytes=>{log+=bytes;const match=log.match(/http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+/);if(match){clearTimeout(timer);done(match[0]);}};
@@ -124,6 +128,10 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
   if(argv.includes('--report')){const target=resolve(arg('--report'));await mkdir(dirname(target),{recursive:true});await page.screenshot({path:target.replace(/\.json$/,'.png')});await writeFile(target,JSON.stringify(report,null,2));}
   console.log(JSON.stringify(report));
 }catch(error){
+  if(argv.includes('--report')){
+    const target=resolve(arg('--report'));await mkdir(dirname(target),{recursive:true});
+    await writeFile(target,JSON.stringify({...report,error:error.message,...(argv.includes('--keep-on-failure')?{testRoot:root}:{})},null,2));
+  }
   if(page&&argv.includes('--report')){
     const target=resolve(arg('--report'));await mkdir(dirname(target),{recursive:true});
     await page.screenshot({path:target.replace(/\.json$/,'.error.png')}).catch(()=>{});
@@ -134,5 +142,6 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
 }finally{
   await browser?.close();
   if(child&&child.exitCode===null){const closed=new Promise(done=>child.once('exit',done));child.kill();await closed;}
-  assert.ok(resolve(root).startsWith(resolve(tmpdir())));await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:300});
+  assert.ok(resolve(root).startsWith(resolve(tmpdir())));
+  if(report.ok||!argv.includes('--keep-on-failure'))await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:300});
 }

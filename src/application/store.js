@@ -207,9 +207,9 @@ export class Store extends ProjectStore {
         state.guidance ??= {};
         state.guidance[key] = a.enabled;
       }
-      const binding = state.bindings[key];
-      const target = binding?.activeNovelId || binding?.novelId;
-      return {enabled: state.guidance?.[key] ?? Boolean(target && state.novels[target] && !state.novels[target].archived)};
+      // New conversations receive guidance immediately. An explicit choice,
+      // including false, survives book switches and upgrades.
+      return {enabled: state.guidance?.[key] ?? true};
     }
     if (action === 'activity.input') return recordConversationInput(state,a,actor);
     if (action === 'activity.today') return todayActivity(state, a.novelId);

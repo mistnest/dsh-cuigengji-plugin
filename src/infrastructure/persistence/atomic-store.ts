@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, rename, unlink, rmdir, open } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {parseJsonFile} from './json-file.ts';
 const fail=(code:string,message:string):never=>{throw Object.assign(new Error(message),{code});};
 const errorCode=(error:unknown):string=>error!==null&&typeof error==='object'&&'code' in error?String(error.code):'';
 /** Durable JSON snapshots and process-owned locking, independent of novel business rules. */
@@ -75,12 +76,12 @@ export class AtomicStore<T> {
 
   async load(): Promise<T> {
     try {
-      const pending = JSON.parse(await readFile(this.pending, 'utf8'));
+      const pending = parseJsonFile(await readFile(this.pending, 'utf8'), 'store.pending.json');
       this.validate(pending);
       await rename(this.pending, this.file);
     } catch (e) { if (errorCode(e) !== 'ENOENT') throw e; }
     try {
-      const state = JSON.parse(await readFile(this.file, 'utf8'));
+      const state = parseJsonFile(await readFile(this.file, 'utf8'), 'store.json');
       this.validate(state);
       return state;
     } catch (e) { if (errorCode(e) === 'ENOENT') return this.empty(); throw e; }

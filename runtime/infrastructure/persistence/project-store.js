@@ -33,6 +33,7 @@ import { ordinaryBindings } from "../../application/bindings/state.js";
 import { sharedPlanRefs } from "../../domain/collaboration/legacy.js";
 import { staleMemoryEntities } from "../../domain/memory/invalidation.js";
 import { validManagedPath, treeChapterFiles, treeSettingFiles, treePlanningFiles, pageManifest } from "./tree-layout.js";
+import { parseJsonFile } from "./json-file.js";
 const corrupt = (message) => {
   throw Object.assign(new Error(message), { code: "CORRUPT_STORE" });
 };
@@ -59,11 +60,7 @@ class ProjectStore extends AtomicStore {
     try {
       const text = await this.readText(path);
       view?.baseline.set(path, text);
-      try {
-        return JSON.parse(text);
-      } catch {
-        corrupt(`\u5C0F\u8BF4\u6570\u636E\u6587\u4EF6\u65E0\u6CD5\u89E3\u6790\uFF1A${path}`);
-      }
+      return parseJsonFile(text, path);
     } catch (error) {
       if (errorCode(error) === "ENOENT") {
         if (optional) return void 0;
@@ -501,7 +498,7 @@ class ProjectStore extends AtomicStore {
     for (const [path, content] of changes) if (content === null) view.baseline.delete(path);
     else view.baseline.set(path, content);
     view.legacyActivity = false;
-    view.activityIndex = JSON.parse(view.baseline.get("activity/index.json")).years;
+    view.activityIndex = parseJsonFile(view.baseline.get("activity/index.json"), "activity/index.json").years;
     return { files: changes.size };
   }
   async loadForAction(action, args, actor) {
@@ -791,7 +788,7 @@ class ProjectStore extends AtomicStore {
     await put("runtime/bindings.json", state.bindings);
     for (const [path, content] of this.activityFiles(state, view)) {
       if (content === null) changes.set(path, null);
-      else await put(path, JSON.parse(content));
+      else await put(path, parseJsonFile(content, path));
     }
     for (const [id, request] of Object.entries(state.requests)) await put(`runtime/requests/${fileId(id)}.json`, request);
     for (const id of view.requests) if (!own(state.requests, id)) changes.set(`runtime/requests/${fileId(id)}.json`, null);
@@ -808,7 +805,7 @@ class ProjectStore extends AtomicStore {
     else view.baseline.set(path, content);
     view.library = library;
     view.legacyActivity = false;
-    view.activityIndex = JSON.parse(view.baseline.get("activity/index.json")).years;
+    view.activityIndex = parseJsonFile(view.baseline.get("activity/index.json"), "activity/index.json").years;
   }
 }
 export {

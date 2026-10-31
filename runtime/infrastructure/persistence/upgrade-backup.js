@@ -3,13 +3,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { copyFile, lstat, mkdir, open, readdir, readFile, readlink, rename, symlink } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { errorCode } from "./file-transaction.js";
+import { parseJsonFile } from "./json-file.js";
 const fail = (message) => {
   throw Object.assign(new Error(message), { code: "UPGRADE_BACKUP_INVALID" });
 };
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 async function optionalJson(path) {
   try {
-    return JSON.parse(await readFile(path, "utf8"));
+    return parseJsonFile(await readFile(path, "utf8"), path);
   } catch (error) {
     if (errorCode(error) === "ENOENT") return void 0;
     throw error;

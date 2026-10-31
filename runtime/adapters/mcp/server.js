@@ -29,7 +29,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       signal: AbortSignal.any([extra.signal, AbortSignal.timeout(3e4)])
     });
     const body = await response.json();
-    if (!response.ok) return { isError: true, content: [{ type: "text", text: body.error ?? "\u8BB0\u5FC6\u64CD\u4F5C\u5931\u8D25" }] };
+    if (!response.ok) return {
+      isError: true,
+      content: [{ type: "text", text: body.error ?? "\u8BB0\u5FC6\u64CD\u4F5C\u5931\u8D25" }],
+      ...body.diagnostic ? { structuredContent: { error: body.diagnostic } } : {}
+    };
     return { content: [{ type: "text", text: JSON.stringify(body.result ?? null) }] };
   } catch (error) {
     return { isError: true, content: [{ type: "text", text: error.message }] };

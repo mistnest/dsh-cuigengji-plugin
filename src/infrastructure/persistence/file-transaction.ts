@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, unlink, rm, open, readdir, lstat } from 'node:
 import { resolve, join, dirname, basename, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import {directoryKey, validProjectDirectory, type ProjectDirectoryMove} from './project-directories.ts';
+import {parseJsonFile} from './json-file.ts';
 
 type Entry = { path: string; stage: string | null; sha256: string | null };
 export type ProjectDirectoryRemoval = {path: string; novelId: string};
@@ -63,7 +64,7 @@ export class FileTransaction {
     try {
       const info = await lstat(this.path(relative));
       if (!info.isDirectory() || info.isSymbolicLink()) corrupt('作品目录不能是文件或符号链接');
-      const project = JSON.parse(await readFile(join(this.path(relative), 'project.json'), 'utf8'));
+      const project = parseJsonFile(await readFile(join(this.path(relative), 'project.json'), 'utf8'), `${relative}/project.json`);
       if (project?.novel?.id !== novelId) corrupt('作品目录与内部 ID 不匹配');
       return true;
     } catch (error) { if (errorCode(error) === 'ENOENT') {
@@ -124,7 +125,7 @@ export class FileTransaction {
 
   async recover() {
     let journal: Journal;
-    try { journal = JSON.parse(await readFile(this.journal, 'utf8')); }
+    try { journal = parseJsonFile(await readFile(this.journal, 'utf8'), 'transaction.pending.json'); }
     catch (error) { if (errorCode(error) === 'ENOENT') return; throw error; }
     if (![1, 2, 3].includes(journal?.version) || typeof journal.id !== 'string' || !/^[a-f0-9-]{36}$/.test(journal.id) || !Array.isArray(journal.entries) || !journal.entries.length || (journal.version >= 2 && !Array.isArray(journal.moves)) || (journal.version === 3 && !Array.isArray(journal.removals))) corrupt('存储事务日志无效');
     const moves = journal.version >= 2 ? journal.moves! : [];
@@ -140,7 +141,7 @@ export class FileTransaction {
       if (typeof entry.stage !== 'string' || !entry.stage.startsWith(`runtime/transactions/${journal.id}/`) || !/^\d+\.part$/.test(entry.stage.split('/').at(-1) || '') || typeof entry.sha256 !== 'string') corrupt('事务暂存文件无效');
       const content = await readFile(this.path(entry.stage!), 'utf8');
       if (digest(content) !== entry.sha256) corrupt('存储事务校验失败，保留原文件与事务供恢复');
-      if (!entry.path.startsWith('audit/')) JSON.parse(content);
+      if (!entry.path.startsWith('audit/')) parseJsonFile(content, entry.path);
       contents.push(content);
     }
     await this.preflightMoves(moves, true);
@@ -149,12 +150,12 @@ export class FileTransaction {
     if (journal.entries.some(entry => removals.some(removal => entry.path.startsWith(removal.path + '/')))) corrupt('事务不能写入待删除的作品目录');
     if (moves.length) {
       const libraryIndex = journal.entries.findIndex(entry => entry.path === 'library.json');
-      const library = libraryIndex >= 0 && contents[libraryIndex] ? JSON.parse(contents[libraryIndex]!) : null;
+      const library = libraryIndex >= 0 && contents[libraryIndex] ? parseJsonFile(contents[libraryIndex]!, 'library.json') : null;
       if (!([3, 4, 5].includes(library?.storageVersion) && moves.every(move => library.directories?.[move.novelId] === move.to.slice(7)))) corrupt('目录迁移与暂存的作品索引不一致');
     }
     if (removals.length) {
       const libraryIndex = journal.entries.findIndex(entry => entry.path === 'library.json');
-      const library = libraryIndex >= 0 && contents[libraryIndex] ? JSON.parse(contents[libraryIndex]!) : null;
+      const library = libraryIndex >= 0 && contents[libraryIndex] ? parseJsonFile(contents[libraryIndex]!, 'library.json') : null;
       if (!([4,5].includes(library?.storageVersion) && removals.every(removal => !Object.hasOwn(library.novels || {}, removal.novelId) && !Object.hasOwn(library.directories || {}, removal.novelId)))) corrupt('作品删除与暂存索引不一致');
     }
     for (const move of moves) await this.applyMove(move);

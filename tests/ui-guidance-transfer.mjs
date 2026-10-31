@@ -16,9 +16,9 @@ try {
  const toggle=page.getByRole('switch',{name:'当前会话写作指引'});
  await expect(toggle).toHaveCount(0);
  await page.getByRole('button',{name:'设置',exact:true}).click();const settings=page.getByRole('dialog',{name:'设置'});
- await selectSettingsCategory(page,'AI与写作');await expect(toggle).not.toBeChecked();await toggle.click();await expect(toggle).toBeChecked();
+ await selectSettingsCategory(page,'AI与写作');await expect(toggle).toBeChecked();await toggle.click();await expect(toggle).not.toBeChecked();
  await settings.getByRole('button',{name:'关闭设置'}).click();await page.reload();await expect(toggle).toHaveCount(0);
- await page.getByRole('button',{name:'设置',exact:true}).click();await expect(toggle).toBeChecked();await toggle.click();await expect(toggle).not.toBeChecked();await settings.getByRole('button',{name:'关闭设置'}).click();
+ await page.getByRole('button',{name:'设置',exact:true}).click();await expect(toggle).not.toBeChecked();await toggle.click();await expect(toggle).toBeChecked();await toggle.click();await expect(toggle).not.toBeChecked();await settings.getByRole('button',{name:'关闭设置'}).click();
  await page.getByRole('button',{name:`导出《${second.title}》`,exact:true}).click();
  await expect(page.getByRole('button',{name:'下载文件',exact:true})).toBeEnabled();
  const pending=page.waitForEvent('download');await page.getByRole('button',{name:'下载文件',exact:true}).click();const file=await pending;

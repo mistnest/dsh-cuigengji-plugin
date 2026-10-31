@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { assertMemoryAction, toolName } from './actions.js';
+import { errorInfo } from '../../contracts/errors.ts';
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -82,7 +83,7 @@ export class MemoryBridge {
       const result = await this.dispatch(action, { ...safeArgs, ...(novelId ? {novelId} : {}) }, actor);
       reply(200, { result });
     } catch (error) {
-      reply(400, { error: error.message });
+      reply(400, { error: error.message, diagnostic: errorInfo(error) });
     }
   }
 
@@ -155,7 +156,11 @@ export class MemoryBridge {
       timeout: this.timeoutMs, signal,
     });
     const output = result.content?.find(item => item.type === 'text')?.text;
-    if (result.isError) throw new Error(output ?? '记忆工具失败');
+    if (result.isError) {
+      const diagnostic = result.structuredContent?.error;
+      throw Object.assign(new Error(output ?? '记忆工具失败'), diagnostic && typeof diagnostic.code === 'string'
+        ? {code:diagnostic.code, details:diagnostic.details || {}} : {});
+    }
     return JSON.parse(output ?? 'null');
   }
 

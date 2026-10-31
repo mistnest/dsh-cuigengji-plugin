@@ -1,4 +1,4 @@
-type RpcResult = {ok:true;value:unknown}|{ok:false;error:{code:string;message:string}};
+type RpcResult = {ok:true;value:unknown}|{ok:false;error:{code:string;message:string;details?:Record<string,unknown>}};
 type Transport = (action:string,args:Record<string,unknown>,sessionId?:string,signal?:AbortSignal)=>Promise<RpcResult>;
 interface Options {signal?:AbortSignal;retryWindowMs?:number;retryDelayMs?:number}
 const startupReads = new Set(['novel.list','binding.get','settings.get','maintenance.status']);
@@ -32,7 +32,7 @@ export function createWorkbenchRPC(transport:Transport,{signal,retryWindowMs=60_
         await wait(Math.min(remaining,retryDelayMs*2**Math.min(attempt,3)),signal);
         continue;
       }
-      if(!result.ok)throw Object.assign(new Error(result.error.message),{code:result.error.code});
+      if(!result.ok)throw Object.assign(new Error(result.error.message),{code:result.error.code,details:result.error.details||{}});
       return result.value;
     }
   };

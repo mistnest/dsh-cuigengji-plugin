@@ -78,6 +78,10 @@ npm run test:release -- --desktop-exe <DSH可执行文件> --package <成品tgz>
 
 前者实际启动 DSH 工作台，检查入口、正文保存、规划、设定、预设和工具注册；后者使用桌面内置运行时验证无 Git 安装。通过 `--old-package <旧包>` 验证升级；跨宿主升级另传 `--old-desktop-exe <旧版DSH>`。npm 入口用 `--npm-package dsh-cuigengji-plugin@<版本>` 替代 `--package`。
 
+只有 npm 发布的 alpha 版可通过 `test:host-compat -- --cli <官方DSH包的lib/bin.js> --pnpm <可信运行时的pnpm.mjs> --package <成品tgz> --report <报告json>` 检查真实 Web 宿主；这不等于通过对应版本的桌面验收。排查失败时可加 `--keep-on-failure` 保留报告中的临时目录，不复制真实作品或账号配置到这些自动检查中。
+
+Windows 桌面是主要验收目标。记录应写清宿主版本、官方安装包或源码构建、真实操作与落库结果；Web 检查和脚本通过不能替代桌面实际使用。尚无官方桌面成品的版本可补充对应标签的源码桌面验收，但不得记作官方安装包验收。
+
 真实 RPC 验收使用 `test:rpc` / `test:rpc-flow`，需要独立 DSH 实例与其认证 URL；后者会写入测试作品。`test:live` 只核对已安装文件与版本，不代表界面或模型验证。不要在用户正式 profile、小说目录运行写入测试，不做模型连通性请求。
 
 ## 贡献与公开范围

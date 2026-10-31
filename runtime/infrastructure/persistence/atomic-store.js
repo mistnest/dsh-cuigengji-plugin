@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, rename, unlink, rmdir, open } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { parseJsonFile } from "./json-file.js";
 const fail = (code, message) => {
   throw Object.assign(new Error(message), { code });
 };
@@ -83,14 +84,14 @@ class AtomicStore {
   }
   async load() {
     try {
-      const pending = JSON.parse(await readFile(this.pending, "utf8"));
+      const pending = parseJsonFile(await readFile(this.pending, "utf8"), "store.pending.json");
       this.validate(pending);
       await rename(this.pending, this.file);
     } catch (e) {
       if (errorCode(e) !== "ENOENT") throw e;
     }
     try {
-      const state = JSON.parse(await readFile(this.file, "utf8"));
+      const state = parseJsonFile(await readFile(this.file, "utf8"), "store.json");
       this.validate(state);
       return state;
     } catch (e) {

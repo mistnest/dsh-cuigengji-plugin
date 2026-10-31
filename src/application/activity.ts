@@ -263,7 +263,7 @@ export function recordConversationInput(state:Row,args:Row,actor:Row) {
   if(actor.kind !== 'activity') throw Object.assign(new Error('聊天字数由 DSH 消息事件统计'),{code:'HUMAN_REQUIRED'});
   if(!Number.isSafeInteger(args.count)||args.count<=0||!Number.isSafeInteger(args.time)||args.time<0)throw Object.assign(new Error('聊天字数或时间无效'),{code:'INVALID_INPUT'});
   const binding=state.bindings[args.sessionKey], target=binding?.activeNovelId||binding?.novelId;
-  if(!args.inWorkspace && !(state.guidance?.[args.sessionKey] ?? Boolean(target)))return {recorded:false};
+  if(!args.inWorkspace && !(state.guidance?.[args.sessionKey] ?? true))return {recorded:false};
   const novelId=target&&state.novels[target]&&!state.novels[target].archived?target:LIBRARY_DISCUSSION;
   const bucket=bucketFor(state,localDay(new Date(args.time)),novelId);
   add(bucket,'human','conversationInput',args.count);

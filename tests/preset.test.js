@@ -63,7 +63,9 @@ test('preset persistence enforces human authorship and CAS; enabled requirements
   await store.dispatch('guidance.set',{enabled:true},human);
   const base={sections:[{name:'host',text:'DSH'}],contexts:[],tools:[],variables:{}};
   const assemble=id=>handlers['system-prompt/assemble'](base,{agent:{id}},async()=>base);
-  assert.equal((await assemble('unbound')).sections.length,1);
+  const unbound=await assemble('unbound');
+  assert.deepEqual(unbound.sections.map(section=>section.name),['host','cuigengji:writing']);
+  assert.equal(unbound.sections.some(section=>section.name==='cuigengji:preset'),false,'default guidance must not leak another conversation\'s preset');
   const bound=await assemble('author');
   assert.equal(bound.sections.some(s=>s.name==='cuigengji:handoff'),false);
   assert.ok(bound.sections.some(s=>s.name==='cuigengji:writing'));

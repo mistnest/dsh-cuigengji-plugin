@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, unlink, rm, open, readdir, lstat } from "node:
 import { resolve, join, dirname, basename, sep } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { directoryKey, validProjectDirectory } from "./project-directories.js";
+import { parseJsonFile } from "./json-file.js";
 const digest = (text) => createHash("sha256").update(text).digest("hex");
 const errorCode = (error) => error && typeof error === "object" && "code" in error ? String(error.code) : "";
 const corrupt = (message) => {
@@ -66,7 +67,7 @@ class FileTransaction {
     try {
       const info = await lstat(this.path(relative));
       if (!info.isDirectory() || info.isSymbolicLink()) corrupt("\u4F5C\u54C1\u76EE\u5F55\u4E0D\u80FD\u662F\u6587\u4EF6\u6216\u7B26\u53F7\u94FE\u63A5");
-      const project = JSON.parse(await readFile(join(this.path(relative), "project.json"), "utf8"));
+      const project = parseJsonFile(await readFile(join(this.path(relative), "project.json"), "utf8"), `${relative}/project.json`);
       if (project?.novel?.id !== novelId) corrupt("\u4F5C\u54C1\u76EE\u5F55\u4E0E\u5185\u90E8 ID \u4E0D\u5339\u914D");
       return true;
     } catch (error) {
@@ -134,7 +135,7 @@ class FileTransaction {
   async recover() {
     let journal;
     try {
-      journal = JSON.parse(await readFile(this.journal, "utf8"));
+      journal = parseJsonFile(await readFile(this.journal, "utf8"), "transaction.pending.json");
     } catch (error) {
       if (errorCode(error) === "ENOENT") return;
       throw error;
@@ -155,7 +156,7 @@ class FileTransaction {
       if (typeof entry.stage !== "string" || !entry.stage.startsWith(`runtime/transactions/${journal.id}/`) || !/^\d+\.part$/.test(entry.stage.split("/").at(-1) || "") || typeof entry.sha256 !== "string") corrupt("\u4E8B\u52A1\u6682\u5B58\u6587\u4EF6\u65E0\u6548");
       const content = await readFile(this.path(entry.stage), "utf8");
       if (digest(content) !== entry.sha256) corrupt("\u5B58\u50A8\u4E8B\u52A1\u6821\u9A8C\u5931\u8D25\uFF0C\u4FDD\u7559\u539F\u6587\u4EF6\u4E0E\u4E8B\u52A1\u4F9B\u6062\u590D");
-      if (!entry.path.startsWith("audit/")) JSON.parse(content);
+      if (!entry.path.startsWith("audit/")) parseJsonFile(content, entry.path);
       contents.push(content);
     }
     await this.preflightMoves(moves, true);
@@ -164,12 +165,12 @@ class FileTransaction {
     if (journal.entries.some((entry) => removals.some((removal) => entry.path.startsWith(removal.path + "/")))) corrupt("\u4E8B\u52A1\u4E0D\u80FD\u5199\u5165\u5F85\u5220\u9664\u7684\u4F5C\u54C1\u76EE\u5F55");
     if (moves.length) {
       const libraryIndex = journal.entries.findIndex((entry) => entry.path === "library.json");
-      const library = libraryIndex >= 0 && contents[libraryIndex] ? JSON.parse(contents[libraryIndex]) : null;
+      const library = libraryIndex >= 0 && contents[libraryIndex] ? parseJsonFile(contents[libraryIndex], "library.json") : null;
       if (!([3, 4, 5].includes(library?.storageVersion) && moves.every((move) => library.directories?.[move.novelId] === move.to.slice(7)))) corrupt("\u76EE\u5F55\u8FC1\u79FB\u4E0E\u6682\u5B58\u7684\u4F5C\u54C1\u7D22\u5F15\u4E0D\u4E00\u81F4");
     }
     if (removals.length) {
       const libraryIndex = journal.entries.findIndex((entry) => entry.path === "library.json");
-      const library = libraryIndex >= 0 && contents[libraryIndex] ? JSON.parse(contents[libraryIndex]) : null;
+      const library = libraryIndex >= 0 && contents[libraryIndex] ? parseJsonFile(contents[libraryIndex], "library.json") : null;
       if (!([4, 5].includes(library?.storageVersion) && removals.every((removal) => !Object.hasOwn(library.novels || {}, removal.novelId) && !Object.hasOwn(library.directories || {}, removal.novelId)))) corrupt("\u4F5C\u54C1\u5220\u9664\u4E0E\u6682\u5B58\u7D22\u5F15\u4E0D\u4E00\u81F4");
     }
     for (const move of moves) await this.applyMove(move);

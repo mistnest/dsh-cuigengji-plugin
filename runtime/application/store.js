@@ -225,9 +225,7 @@ class Store extends ProjectStore {
         state.guidance ??= {};
         state.guidance[key] = a.enabled;
       }
-      const binding2 = state.bindings[key];
-      const target = binding2?.activeNovelId || binding2?.novelId;
-      return { enabled: state.guidance?.[key] ?? Boolean(target && state.novels[target] && !state.novels[target].archived) };
+      return { enabled: state.guidance?.[key] ?? true };
     }
     if (action === "activity.input") return recordConversationInput(state, a, actor);
     if (action === "activity.today") return todayActivity(state, a.novelId);

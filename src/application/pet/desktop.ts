@@ -40,7 +40,9 @@ export class DesktopPet {
   private dispatch: (action: string, args: Row, actor: Row) => Promise<any>;
   constructor(root: string, dispatch: (action: string, args: Row, actor: Row) => Promise<any>, options: Options = {}) {
     this.root = root; this.dispatch = dispatch;
-    this.supported = options.supported ?? (process.platform === 'win32' && Boolean(process.env.DSH_DESKTOP_NODE_EXECUTABLE));
+    // Newer DSH scopes the launcher variable to package installation. Its Host
+    // still runs in Electron's Node mode; the client separately requires the desktop preload.
+    this.supported = options.supported ?? (process.platform === 'win32' && Boolean(process.versions.electron || process.env.DSH_DESKTOP_NODE_EXECUTABLE));
     this.launch = options.launch || (() => spawn(join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), [
       '-NoLogo', '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File',
       fileURLToPath(new URL('../../../src/desktop/pet.ps1', import.meta.url)),

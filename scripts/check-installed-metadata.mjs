@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 const profile=resolve(process.argv[2]),name='dsh-cuigengji-plugin';
-const anchor=join(dirname(process.execPath),'resources/app.asar/dsh/node_modules/@deepseek-ai/dsh/package.json');
+const anchor=process.argv[3] || join(dirname(process.execPath),'resources/app.asar/dsh/node_modules/@deepseek-ai/dsh/package.json');
 const requireDesktop=createRequire(anchor);
 const {readPluginMeta,evaluatePluginCompatibility}=await import(pathToFileURL(requireDesktop.resolve('@deepseek-ai/dsh-app-boot')));
 const parentURL=pathToFileURL(join(profile,'package.json')).href;

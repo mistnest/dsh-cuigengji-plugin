@@ -3,6 +3,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {copyFile, lstat, mkdir, open, readdir, readFile, readlink, rename, symlink} from 'node:fs/promises';
 import {dirname, join, resolve, sep} from 'node:path';
 import {errorCode} from './file-transaction.ts';
+import {parseJsonFile} from './json-file.ts';
 
 export type BackupEntry = {path: string; kind: 'file'; bytes: number; sha256: string} | {path: string; kind: 'link'; target: string} | {path: string; kind: 'directory'};
 export type BackupManifest = {format: 'cuigengji-upgrade-backup'; version: 1; dataRoot: string; createdAt: string; entries: BackupEntry[]};
@@ -10,7 +11,7 @@ const fail = (message: string): never => {throw Object.assign(new Error(message)
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 
 export async function optionalJson(path: string): Promise<any> {
-  try {return JSON.parse(await readFile(path, 'utf8'));} catch (error) {if (errorCode(error) === 'ENOENT') return undefined; throw error;}
+  try {return parseJsonFile(await readFile(path, 'utf8'), path);} catch (error) {if (errorCode(error) === 'ENOENT') return undefined; throw error;}
 }
 export async function exists(path: string) {
   try {await lstat(path); return true;} catch (error) {if (errorCode(error) === 'ENOENT') return false; throw error;}

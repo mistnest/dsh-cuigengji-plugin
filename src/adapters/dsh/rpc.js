@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { HUMAN_ACTIONS } from '../../contracts/actions.js';
 import { convertLegacyExport } from '../../infrastructure/migrations/legacy.js';
+import { errorInfo } from '../../contracts/errors.ts';
 
 const manifest = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'));
 export const RPC_ENDPOINT = 'cuigengji/dispatch';
@@ -11,11 +12,7 @@ const invalid = message => Object.assign(new Error(message), { code: 'INVALID_IN
 function failure(error) {
   return {
     ok: false,
-    error: {
-      code: error.code || 'CUIGENGJI_ERROR',
-      message: error.message || String(error),
-      details: {},
-    },
+    error: errorInfo(error),
   };
 }
 

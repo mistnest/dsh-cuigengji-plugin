@@ -231,7 +231,7 @@ function recordConversationInput(state, args, actor) {
   if (actor.kind !== "activity") throw Object.assign(new Error("\u804A\u5929\u5B57\u6570\u7531 DSH \u6D88\u606F\u4E8B\u4EF6\u7EDF\u8BA1"), { code: "HUMAN_REQUIRED" });
   if (!Number.isSafeInteger(args.count) || args.count <= 0 || !Number.isSafeInteger(args.time) || args.time < 0) throw Object.assign(new Error("\u804A\u5929\u5B57\u6570\u6216\u65F6\u95F4\u65E0\u6548"), { code: "INVALID_INPUT" });
   const binding = state.bindings[args.sessionKey], target = binding?.activeNovelId || binding?.novelId;
-  if (!args.inWorkspace && !(state.guidance?.[args.sessionKey] ?? Boolean(target))) return { recorded: false };
+  if (!args.inWorkspace && !(state.guidance?.[args.sessionKey] ?? true)) return { recorded: false };
   const novelId = target && state.novels[target] && !state.novels[target].archived ? target : LIBRARY_DISCUSSION;
   const bucket = bucketFor(state, localDay(new Date(args.time)), novelId);
   add(bucket, "human", "conversationInput", args.count);
