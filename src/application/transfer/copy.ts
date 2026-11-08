@@ -5,6 +5,7 @@ import type {Collection, PlanningEntity, Change} from '../../contracts/planning.
 import type {Novel, PresetData, ImportOptions} from '../../contracts/transfer.ts';
 import {copy, newNovel, own} from './model.ts';
 import {directoryKey,orderedDirectory} from '../../domain/directory/order.ts';
+import {copyStory} from '../../domain/story/transfer.ts';
 
 const idMap = (map: object = {}): Map<string,string> => new Map(Object.keys(map).map(id => [id, randomUUID() as string]));
 const remap = (map: Map<string, string>, id: string | null | undefined) => id ? map.get(id) ?? null : null;
@@ -20,6 +21,7 @@ function uniqueName(name: string, items: {name: string}[]) {
 /** Share/copy never aliases source IDs or treats imported settings as confirmed facts.
  * Version numbers remain meaningful inside the copied chapters and their references. */
 export function copyInto(source: Novel, target: Novel, options: ImportOptions): void {
+  const initializeStory = target.story === undefined && !Object.keys(target.chapters).length && !Object.keys(target.nodes).length;
   const n = copy(source), time = new Date().toISOString();
   const volumeIds = idMap(n.volumes), chapterIds = idMap(n.chapters), nodeIds = idMap(n.nodes), edgeIds = idMap(n.edges), groupIds = idMap(n.memoryGroups);
   const memoryPageIds=idMap(n.memoryPages);
@@ -93,6 +95,7 @@ export function copyInto(source: Novel, target: Novel, options: ImportOptions): 
     draft.sequence++;
     draft.transactions.push({id: randomUUID(), sequence: draft.sequence, ...stamp, reason: `导入“${source.title}”的规划`, changes});
   }
+  copyStory(n, target, chapterIds, nodeIds, initializeStory);
   target.revision++; target.updatedAt = time;
 }
 function mergePreset(target: Novel, preset: PresetData, policy: 'append' | 'replace') {

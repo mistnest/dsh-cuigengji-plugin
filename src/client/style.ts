@@ -11,6 +11,7 @@ import {settingsStyles} from './shared/settings/style.ts';
 import {canvasExportStyles} from './shared/canvas-export-style.ts';
 import {documentStyles} from './shared/document-style.ts';
 import {manuscriptSearchStyles} from './features/chapters/search-style.ts';
+import {storyStyles} from './features/story/style.ts';
 export const styles = `
 .cuigengji { color:var(--dsw-alias-label-primary,#252936); font-family:var(--dsw-font-family,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif); font-size:13px; padding:14px; height:100%; overflow:auto; box-sizing:border-box; }
 .cuigengji * { box-sizing:border-box; }
@@ -279,4 +280,4 @@ export const styles = `
  .cuigengji .chapter-main .manuscript {padding-left:8px;padding-right:8px;}
  .cuigengji .chapter-toolbar {gap:8px;}
 }
-` + visualStyles + selectStyles + graphStyles + managementStyles + transferStyles + welcomeStyles + batchStyles + navigationStyles + organizedStyles + settingsStyles + canvasExportStyles + documentStyles + manuscriptSearchStyles;
+` + visualStyles + selectStyles + graphStyles + managementStyles + transferStyles + welcomeStyles + batchStyles + navigationStyles + organizedStyles + settingsStyles + canvasExportStyles + documentStyles + manuscriptSearchStyles + storyStyles;

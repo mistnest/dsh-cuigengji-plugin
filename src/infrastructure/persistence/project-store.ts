@@ -17,6 +17,8 @@ import {sharedPlanRefs} from '../../domain/collaboration/legacy.ts';
 import {staleMemoryEntities} from '../../domain/memory/invalidation.ts';
 import {validManagedPath, treeChapterFiles, treeSettingFiles, treePlanningFiles, pageManifest} from './tree-layout.ts';
 import {parseJsonFile} from './json-file.ts';
+import {orderedChapters} from '../../domain/story/model.ts';
+import {chapterCounts} from '../../domain/chapters/metadata.ts';
 
 type LoadedBook = {
   id: string; project: Project; loaded: Set<string>;
@@ -513,7 +515,7 @@ export class ProjectStore extends AtomicStore<Workspace> {
     // A volume rename also renames its physical directory, even when no
     // chapter body was requested by the business action.
     if (action === 'volume.update') await this.chapterIndex(novel, book, view);
-    const memory = action.startsWith('graph.') || action.startsWith('edge.') || action.startsWith('planning.') || ['novel.get', 'novel.handoff', 'context.get', 'chapter.update', 'chapter.replace', 'chapter.restore', 'chapter.delete', 'volume.delete', 'tavern.import'].includes(action);
+    const memory = action.startsWith('story.') || action.startsWith('graph.') || action.startsWith('edge.') || action.startsWith('planning.') || ['novel.get', 'novel.handoff', 'context.get', 'chapter.update', 'chapter.replace', 'chapter.restore', 'chapter.delete', 'volume.delete', 'tavern.import'].includes(action);
     if (memory) await this.memoryIndex(novel, book, view);
     if (action.startsWith('graph.') || action.startsWith('edge.') || ['novel.get', 'context.get', 'chapter.update', 'chapter.replace', 'chapter.restore', 'chapter.delete', 'volume.delete'].includes(action)) await this.section(novel, book, view, 'edges', 'settings/relations.json');
     if (action.startsWith('graph.') || action === 'novel.get' || action === 'tavern.import') await this.section(novel, book, view, 'memoryGroups', 'settings/groups.json');
@@ -530,6 +532,14 @@ export class ProjectStore extends AtomicStore<Workspace> {
         for (const id of [...previous.map(chapter => chapter.id), ...(chapterId ? [chapterId] : [])]) await this.chapter(novel, book, view, id);
       }
       if (Array.isArray(args.nodeIds)) for (const id of args.nodeIds) await this.node(novel, book, view, id);
+    }
+    if (action === 'story.context.get') {
+      const chapters = orderedChapters(novel as any);
+      const boundary = args.chapterId === undefined ? chapters.length - 1 : chapters.findIndex(chapter => chapter.id === args.chapterId);
+      // Only three nearby nonempty bodies are needed; workflow summaries and
+      // setting facts come from metadata, never a full-book hydration.
+      const selected = chapters.slice(0, boundary + 1).filter(chapter => chapterCounts(chapter as {content:string}).textCount > 0).slice(-3);
+      for (const chapter of selected) await this.chapter(novel, book, view, chapter.id);
     }
     const nodeIds = new Set<string>();
     if(action==='graph.workspace.ensure'&&Object.keys(novel.memoryPages||{}).length)for(const id of Object.keys(novel.nodes))if(novel.nodes[id].pageId)nodeIds.add(id);

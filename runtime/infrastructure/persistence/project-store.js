@@ -34,6 +34,8 @@ import { sharedPlanRefs } from "../../domain/collaboration/legacy.js";
 import { staleMemoryEntities } from "../../domain/memory/invalidation.js";
 import { validManagedPath, treeChapterFiles, treeSettingFiles, treePlanningFiles, pageManifest } from "./tree-layout.js";
 import { parseJsonFile } from "./json-file.js";
+import { orderedChapters } from "../../domain/story/model.js";
+import { chapterCounts } from "../../domain/chapters/metadata.js";
 const corrupt = (message) => {
   throw Object.assign(new Error(message), { code: "CORRUPT_STORE" });
 };
@@ -555,7 +557,7 @@ class ProjectStore extends AtomicStore {
     const directory = !preset && !["novel.update", "novel.archive", "novel.restore", "volume.list", "volume.create", "volume.update"].includes(action);
     if (directory) await this.chapterIndex(novel, book, view);
     if (action === "volume.update") await this.chapterIndex(novel, book, view);
-    const memory = action.startsWith("graph.") || action.startsWith("edge.") || action.startsWith("planning.") || ["novel.get", "novel.handoff", "context.get", "chapter.update", "chapter.replace", "chapter.restore", "chapter.delete", "volume.delete", "tavern.import"].includes(action);
+    const memory = action.startsWith("story.") || action.startsWith("graph.") || action.startsWith("edge.") || action.startsWith("planning.") || ["novel.get", "novel.handoff", "context.get", "chapter.update", "chapter.replace", "chapter.restore", "chapter.delete", "volume.delete", "tavern.import"].includes(action);
     if (memory) await this.memoryIndex(novel, book, view);
     if (action.startsWith("graph.") || action.startsWith("edge.") || ["novel.get", "context.get", "chapter.update", "chapter.replace", "chapter.restore", "chapter.delete", "volume.delete"].includes(action)) await this.section(novel, book, view, "edges", "settings/relations.json");
     if (action.startsWith("graph.") || action === "novel.get" || action === "tavern.import") await this.section(novel, book, view, "memoryGroups", "settings/groups.json");
@@ -576,6 +578,12 @@ class ProjectStore extends AtomicStore {
         for (const id2 of [...previous.map((chapter) => chapter.id), ...chapterId ? [chapterId] : []]) await this.chapter(novel, book, view, id2);
       }
       if (Array.isArray(args.nodeIds)) for (const id2 of args.nodeIds) await this.node(novel, book, view, id2);
+    }
+    if (action === "story.context.get") {
+      const chapters = orderedChapters(novel);
+      const boundary = args.chapterId === void 0 ? chapters.length - 1 : chapters.findIndex((chapter) => chapter.id === args.chapterId);
+      const selected = chapters.slice(0, boundary + 1).filter((chapter) => chapterCounts(chapter).textCount > 0).slice(-3);
+      for (const chapter of selected) await this.chapter(novel, book, view, chapter.id);
     }
     const nodeIds = /* @__PURE__ */ new Set();
     if (action === "graph.workspace.ensure" && Object.keys(novel.memoryPages || {}).length) {

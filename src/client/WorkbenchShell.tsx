@@ -8,6 +8,7 @@ import { TransferPage } from './features/transfer/index.tsx';
 import {Welcome} from './features/welcome/index.tsx';
 import { Chapters } from './features/chapters/index.jsx';
 import { Planning } from './features/planning/index.tsx';
+import { Story } from './features/story/index.tsx';
 import { Preset } from './features/preset/index.tsx';
 import { SessionScope,LibraryScope } from './shared/state.js';
 import { ResourceState } from './shared/ui.jsx';
@@ -126,13 +127,14 @@ function WorkbenchContent({ sessionId, rpc, recordsNavigation }:WorkbenchProps) 
   return <section className="cuigengji" data-motion={preferences.motion} style={{'--prose-size':`${preferences.fontSize}px`,'--prose-leading':preferences.leading} as React.CSSProperties} aria-label="催更姬小说工作台">
     <style>{styles}{guidanceStyle}</style>
     <SurfaceActivity.Provider value={hostActive&&!recordsOpen}><div className="workbench-base" ref={base} aria-hidden={recordsOpen||undefined}>
-    <WorkbenchHeader home={showHome} novelTitle={novel?.title} tab={tab} showTabs={['chapters','plan','memory'].includes(tab)} busy={busy} refreshing={resource.loading} onHome={()=>{setSettingsChild(null);navigation.goHome();}} onTab={page=>{setSettingsChild(null);navigation.openBookPage(page as BookPage);}} onRefresh={refresh} onSettings={()=>setUtility('settings')} onAbout={()=>setUtility('about')}/>
+    <WorkbenchHeader home={showHome} novelTitle={novel?.title} tab={tab} showTabs={['story','chapters','plan','memory'].includes(tab)} busy={busy} refreshing={resource.loading} onHome={()=>{setSettingsChild(null);navigation.goHome();}} onTab={page=>{setSettingsChild(null);navigation.openBookPage(page as BookPage);}} onRefresh={refresh} onSettings={()=>setUtility('settings')} onAbout={()=>setUtility('about')}/>
     {error && <div className="notice error" role="alert">{error}<button onClick={()=>setError('')}>关闭提示</button></div>}
 
     <SurfaceActivity.Provider value={hostActive&&!recordsOpen&&!utility}><ResourceState resource={resource}>
       {homeOpen?<Welcome {...welcomeProps}/>:tab==='data'?<TransferPage key={transferVisit} {...{call,run,busy,novelId}} {...childBack} initial={transferInitial||undefined} onOpen={openNovel}/>:<>
       {!novelId ? (tab==='manage'?<Manage {...manageProps}/>:<Welcome {...welcomeProps}/>) : <div className="workbench-body" key={novelId}>
-        {referenceReturn&&<div className="return-strip"><button onClick={()=>{navigation.backFromReference();}}>‹ 返回{({chapters:'正文',plan:'规划',memory:'设定'})[referenceReturn]||'上一页'}</button></div>}
+        {referenceReturn&&<div className="return-strip"><button onClick={()=>{navigation.backFromReference();}}>‹ 返回{({story:'创作',chapters:'正文',plan:'规划',memory:'设定'})[referenceReturn]||'上一页'}</button></div>}
+        {tab==='story' && <Story {...{call,novelId,tick,run,busy}} onChapter={(id?:string)=>id?jump('chapters','chapter',id):jump('chapters','chapter','')} />}
         {tab==='chapters' && <Chapters {...{call,novelId,tick,run,busy}} onTransfer={openTransfer}/>}
         {tab==='memory' && <Memory {...{call,novelId,tick,run,busy}} novelTitle={novel?.title} onTransfer={openTransfer}/>}
         {tab==='plan' && <Planning {...{call,novelId,tick,run,busy}} novelTitle={novel?.title} onTransfer={openTransfer} onMemory={(id:string)=>jump('memory','memory-selected',id)} onChapter={(id:string)=>jump('chapters','chapter',id)}/>}

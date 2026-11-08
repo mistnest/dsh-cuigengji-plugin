@@ -24,6 +24,7 @@ import {memoryVersionFields,memoryHistory} from '../domain/memory/history.ts';
 import {staleMemoryEntities} from '../domain/memory/invalidation.ts';
 import {directoryKey,orderedDirectory,directorySnapshot,checkDirectorySnapshot,planDirectoryMove,validateDirectoryOrder} from '../domain/directory/order.ts';
 import {findProse,replaceLiteral} from '../domain/chapters/find.ts';
+import {storyAction, validateStory} from '../domain/story/index.ts';
 
 export class StoreError extends Error {
   constructor(code, message) { super(message); this.name = 'StoreError'; this.code = code; }
@@ -163,7 +164,8 @@ export class Store extends ProjectStore {
       // A synchronous host guard sees the latest bindings while the Store lock
       // is held, including Agent tasks that started during disk reads.
       beforeExecute?.(state);
-      const signature = hash(JSON.stringify({ action, args, actor: source(actor) }));
+      const storyNovelId = action === 'story.apply' ? args.novelId || state.bindings[hash(actor.sessionId || '')]?.activeNovelId || state.bindings[hash(actor.sessionId || '')]?.novelId : undefined;
+      const signature = hash(JSON.stringify({ action, args, actor: source(actor), ...(action === 'story.apply' ? {novelId: storyNovelId} : {}) }));
       const requestKey = args.requestId === undefined ? null : hash(text(args.requestId, 'requestId'));
       if (requestKey && own(state.requests, requestKey)) {
         const previous = state.requests[requestKey];
@@ -324,9 +326,10 @@ export class Store extends ProjectStore {
     }
     if (action === 'planning.layout.get')return layoutPlanning(n,a,actor,true);
     if (action === 'planning.layout') {const previous=n.planning?.sequence;return layoutPlanning(n,a,actor).then(result=>{if(previous!==n.planning.sequence)touch(n);return result;});}
+    if (action.startsWith('story.')) { const result = storyAction(n, action, a); if (action === 'story.apply') touch(n); return result; }
     if (action.startsWith('planning.')) { const previous=n.planning?.sequence; const result=planningAction(n,action,a,actor); if(previous!==n.planning.sequence)touch(n); return result; }
     if (action.startsWith('plan.')) fail('MIGRATED_ACTION', '旧规划接口已迁移，请使用 cuigengji_plan 的 planning.list/get/apply');
-    if (action === 'novel.get') return { ...n, tavernSources: undefined, planning: undefined, plan: undefined, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, versions, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
+    if (action === 'novel.get') return { ...n, story: undefined, tavernSources: undefined, planning: undefined, plan: undefined, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, versions, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
     if (action === 'novel.handoff') return createHandoff(n, binding, a);
     if (action === 'novel.export') { ensurePlanning(n); return { format: 'cuigengji', schemaVersion: 2, exportedAt: now(), novel: portableNovel(state,n) }; }
     if (action === 'novel.update') {
@@ -693,6 +696,7 @@ export class Store extends ProjectStore {
     }
     for (const edge of Object.values(n.edges)) { if (!own(n.nodes, edge.from) || !own(n.nodes, edge.to)) fail('INVALID_BACKUP', '关系端点不存在'); Object.assign(edge, memoryFields(edge, n, true, true)); }
     if (n.plan && (typeof n.plan.content !== 'string' || !Number.isSafeInteger(n.plan.revision) || n.plan.revision < 1 || typeof n.plan.approved !== 'boolean')) fail('INVALID_BACKUP', '规划格式无效');
+    if (n.story !== undefined) validateStory(n.story, n, 'INVALID_BACKUP');
     validateDirectoryOrder(n.directoryOrder);
     validateMemoryGroups(n);
     if (n.planning) validatePlanning(n.planning,n);

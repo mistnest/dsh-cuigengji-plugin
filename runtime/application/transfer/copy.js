@@ -3,6 +3,7 @@ import { ensurePlanning } from "../../domain/planning/model.js";
 import { validatePreset } from "../../domain/preset/index.js";
 import { copy, newNovel, own } from "./model.js";
 import { directoryKey, orderedDirectory } from "../../domain/directory/order.js";
+import { copyStory } from "../../domain/story/transfer.js";
 const idMap = (map = {}) => new Map(Object.keys(map).map((id) => [id, randomUUID()]));
 const remap = (map, id) => id ? map.get(id) ?? null : null;
 const maxOrder = (items) => items.reduce((max, item) => Math.max(max, item.order), -1);
@@ -14,6 +15,7 @@ function uniqueName(name, items) {
   return candidate;
 }
 function copyInto(source, target, options) {
+  const initializeStory = target.story === void 0 && !Object.keys(target.chapters).length && !Object.keys(target.nodes).length;
   const n = copy(source), time = (/* @__PURE__ */ new Date()).toISOString();
   const volumeIds = idMap(n.volumes), chapterIds = idMap(n.chapters), nodeIds = idMap(n.nodes), edgeIds = idMap(n.edges), groupIds = idMap(n.memoryGroups);
   const memoryPageIds = idMap(n.memoryPages);
@@ -156,6 +158,7 @@ function copyInto(source, target, options) {
     draft.sequence++;
     draft.transactions.push({ id: randomUUID(), sequence: draft.sequence, ...stamp, reason: `\u5BFC\u5165\u201C${source.title}\u201D\u7684\u89C4\u5212`, changes });
   }
+  copyStory(n, target, chapterIds, nodeIds, initializeStory);
   target.revision++;
   target.updatedAt = time;
 }

@@ -5,6 +5,8 @@ import {active, copy, fail, hash, checkSelection, own} from './model.ts';
 import {portableNovel} from '../../domain/collaboration/legacy.ts';
 import {directoryKey} from '../../domain/directory/order.ts';
 import {groupDescendants,groupTrail} from '../../domain/directory/groups.ts';
+import {readStory} from '../../domain/story/model.ts';
+import {chapterStory} from '../../domain/story/transfer.ts';
 
 export interface Slice {projects: Novel[]; warnings: string[]; dependencies: {kind: string; title: string}[]}
 const pick = <T>(map: Record<string, T>, ids: Set<string>) => Object.fromEntries([...ids].map(id => [id, copy(map[id])]));
@@ -46,6 +48,7 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
   if (selection.kind === 'chapters' && !chapters.size || selection.kind === 'memory' && !nodes.size && !selection.pageIds?.length && !selection.groupIds?.length || selection.kind === 'planning' && !pages.size) fail('请至少选择一项内容');
   const initialChapters = new Set(chapters), initialNodes = new Set(nodes);
   if (selection.includeDependencies) {
+    if (selection.kind === 'chapters' && n.story !== undefined) for (const item of Object.values(readStory(n).tracking)) if (chapters.has(item.chapterId)) for (const id of item.activeCharacterIds) nodes.add(id);
     for (const id of beats) {for (const ref of board.nodes[id].chapterRefs) chapters.add(ref.chapterId); for (const ref of board.nodes[id].memoryRefs) nodes.add(ref);}
     // Dependencies may be cyclic. Iterate a finite set to closure, retaining all evidence versions.
     let changed = true;
@@ -64,7 +67,7 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
   for (const id of chapters) if (!initialChapters.has(id)) dependencies.push({kind: '正文', title: n.chapters[id].title});
   for (const id of nodes) if (!initialNodes.has(id)) dependencies.push({kind: '设定', title: n.nodes[id].name});
   const result: Novel = {...copy(n), volumes: {}, chapters: pick(n.chapters, chapters), nodes: pick(n.nodes, nodes), edges: {}, memoryGroups: {},memoryPages:{},plan: null};
-  delete result.planning; delete result.preset; delete result.tavernSources; delete result.collaboration; delete result.collaborationProgress;
+  delete result.planning; delete result.preset; delete result.tavernSources; delete result.collaboration; delete result.collaborationProgress; delete result.story;
   const volumes = new Set<string>();
   for (const ch of Object.values(result.chapters)) {
     if (ch.volumeId) volumes.add(ch.volumeId);
@@ -136,6 +139,11 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
       if(!result.planning||(pageId&&!own(result.planning.pages,pageId))||(!pageId&&result.transferScope?.mainPage===false))return [];
       return [[directoryKey('planning',pageId),order.filter(id=>own(result.planning!.nodes,id))]];
     }));
+  }
+  if (selection.kind === 'chapters') {
+    const partial = chapterStory(n, chapters, nodes);
+    if (partial.story) result.story = partial.story;
+    detached += partial.detached;
   }
   if (detached) warnings.push(`未携带的 ${detached} 项正文或设定引用会移除；相关设定需重新确认。`);
   return {projects: [result], warnings, dependencies};

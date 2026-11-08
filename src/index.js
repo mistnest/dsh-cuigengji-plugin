@@ -8,8 +8,9 @@ import { MemoryBridge } from './adapters/mcp/client.js';
 import { registerSkills } from './adapters/dsh/skills.js';
 import { planningArgsSchema } from './adapters/dsh/planning-schema.js';
 import { memoryArgsSchema } from './adapters/dsh/memory-schema.js';
+import { storyArgsSchema } from './adapters/dsh/story-schema.js';
 import { registerPrompt } from './adapters/dsh/prompt.js';
-import { readGuidance } from './adapters/dsh/guidance.js';
+import { readGuidance, GUIDANCE_SECTIONS } from './adapters/dsh/guidance.js';
 import { createSessionPolicy } from './application/bindings/session.js';
 import { TOOL_ACTIONS as allowed, isReadAction } from './contracts/actions.js';
 import { registerRpcRoute } from './adapters/dsh/rpc.js';
@@ -24,6 +25,7 @@ export const Config = z.object({
   recentLibraries: z.array(z.string()).default([]).volatile(),
 });
 const descriptions = {
+  cuigengji_story: '读取和维护原生小说创作工作台。story.get 返回简报、章节蓝图、已发生事实追踪、伏笔/下章承诺/长期期待/约束、证据审稿及版本诊断；story.context.get 按章节和字符预算返回分离的 plans/facts，不读后续正文。story.apply 使用已读 story.revision、requestId、operations 原子更新；追踪和审稿绑定当前正文版本。方法与完整操作字段通过 cuigengji_guidance 的 story 或 story-operations 按需读取。此工具维护创作资料，不改正文或会话焦点。',
   cuigengji_project: '管理作品库和卷、章、正文。所有会话包括 DSH 原生子 Agent 使用同一套作品选择规则：novel.list 查看作品，novel.focus {novelId} 记住本会话当前作品，或在单次操作显式提供 novelId；互不切换其他会话的焦点。novel.create {title,description?,requestId} 创建空白作品，不改变焦点。novel.handoff 返回作品索引和有限目录，不含正文。chapter.get 按 start/maxChars 读取。修改需 expectedRevision，chapter.update 的 content/append/patch:{oldText,newText} 三选一。删除 confirm:true；非空卷还需 chapterPolicy:detach/delete。',
   cuigengji_memory: '检索和维护当前作品的资源库。graph.groups 返回嵌套文件夹和路径，graph.list {query?,type?,groupId?} 搜索当前摘要，graph.get {nodeId} 按需读全文。文件夹就是界面画布范围，人物只有一份原卡，规划用 memoryRefs 引用；根目录可直接放卡片。graph.group.create/update/delete 管理嵌套文件夹，parentId 为父文件夹，删除时内容上移保留。graph.move {groupId,members:[{id,expectedRevision}]} 改归类不改正文、关系或坐标；graph.arrange 可整理指定 members。旧库首次整理可 graph.workspace.ensure 将旧设定页无损收进文件夹，旧 page API 保留兼容。edge.list {nodeId} 查真实关系，edge.create {from,to,name?,content?} 只记录有依据的关系。人物 character_card，规则/地点/组织 world_entry；检查 status/factType/sources/knownBy，规划意图不能写成已发生事实。每次修改用 requestId 和 expectedRevision，冲突重读合并。普通检索只读当前版本，作者要求追溯时才 graph.history，指定 revision 和 includeContent:true 才读某版全文；graph.restore 生成新当前版本。图谱浏览不会自动填入聊天。',
   cuigengji_plan: '与作者在共享工作台讨论剧情。节点是事件、选择或阶段，不是章节。用 planning.pages/list/search 定位，planning.get {nodeId,resourceOffset?} 返回全文、前后邻居、子情节及有限关联资源摘要（resources:items/total/nextOffset），图谱全文按需 graph.get。具体推演时核对相关当前人物、地点和规则；没关联可按名字检索后补 memoryRefs，不强制每轮重查或拦截保存。node.parentId 表示阶段包含的子情节，原阶段摘要就是收纳概括，不另建重复详情页；因果和选择用 edge，包含不能代替连线。独立用途可开 page，同一讨论更新原页。groupId 自由归类到嵌套文件夹，便签记录台词和未决问题；新收纳用真实节点层级或文件夹，不另维护 frame.members。修改用 planning.apply {requestId,operations:[{op,id?,expectedRevision?,ref?,value}],reason} 原子提交；读取所得 ID/revision，不编造引用。新增可 planning.layout 自动安放，mode:missing 保留已有布局，作者要求整理才 all。written 只代表已完整落实且有 chapterRefs 正文版本证据，未采用方案可长期 idea；规划不自动改人物事实。',
@@ -82,7 +84,7 @@ export async function apply(ctx, config = {}) {
   for (const [toolName, actions] of Object.entries(allowed)) {
     ctx.tools.register(defineTool({
       name:toolName, description:descriptions[toolName],
-      parameters:{action:{type:'string',enum:actions,required:true},args:toolName==='cuigengji_plan'?planningArgsSchema:toolName==='cuigengji_memory'?memoryArgsSchema:{type:'object',additionalProperties:true,description:'操作参数：实体ID、文本、版本等。默认使用本会话当前作品；也可显式提供 novelId，不改变当前作品。主会话与子 Agent 规则相同。'}},
+      parameters:{action:{type:'string',enum:actions,required:true},args:toolName==='cuigengji_story'?storyArgsSchema:toolName==='cuigengji_plan'?planningArgsSchema:toolName==='cuigengji_memory'?memoryArgsSchema:{type:'object',additionalProperties:true,description:'操作参数：实体ID、文本、版本等。默认使用本会话当前作品；也可显式提供 novelId，不改变当前作品。主会话与子 Agent 规则相同。'}},
       output:{schema:{type:'string'},render:(_args,value)=>[{type:'text',text:value}]},
       execute:async ({action,args},exec)=>libraries.use(async()=>{
         if (!exec.agent?.id) throw new Error('小说工具需要 DSH 会话');
@@ -100,9 +102,9 @@ export async function apply(ctx, config = {}) {
   }
   ctx.tools.register(defineTool({
     name: 'cuigengji_guidance',
-    description: '按需读取催更姬写作指引，使用 {section,args?}，与内容工具的 {action,args} 不同。关闭持续指引后仍可用：core 是基础规则，project/write/plan/memory/revise 是对应规范，preset 是当前作品预设，all 返回全部规则与预设。未选作品仍返回基础规则，并注明预设不可用；参考文件相对返回的 resourceBase 读取。',
+    description: '按 section 读取一种写作方法，args 可指定 novelId。story 是创作路由；story-long/story-short/story-outline/story-tracking/story-review/story-deslop 分别为长篇、短篇、章蓝图、追踪、审稿、精修；story-operations 是原生操作字段。原有 core/project/write/plan/memory/revise/preset 仍可使用。all 只返回入口规则和预设，阶段参考按需取；未选作品可读通用规则。',
     parameters: {
-      section: { type: 'string', enum: ['core','project','write','plan','memory','revise','preset','all'], required: true },
+      section: { type: 'string', enum: GUIDANCE_SECTIONS, required: true },
       args: { type: 'object', additionalProperties: true, description: '可选 novelId；不传则使用本会话当前作品。' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },

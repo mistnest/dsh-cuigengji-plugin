@@ -4,6 +4,8 @@ import { active, copy, fail, hash, checkSelection, own } from "./model.js";
 import { portableNovel } from "../../domain/collaboration/legacy.js";
 import { directoryKey } from "../../domain/directory/order.js";
 import { groupDescendants, groupTrail } from "../../domain/directory/groups.js";
+import { readStory } from "../../domain/story/model.js";
+import { chapterStory } from "../../domain/story/transfer.js";
 const pick = (map, ids) => Object.fromEntries([...ids].map((id) => [id, copy(map[id])]));
 const required = (map, ids, label) => {
   for (const id of ids) if (id !== null && !own(map, id)) fail(`${label}\u5DF2\u4E0D\u5B58\u5728\uFF0C\u8BF7\u91CD\u65B0\u9009\u62E9`);
@@ -64,6 +66,9 @@ function selectProjects(source, selection) {
   if (selection.kind === "chapters" && !chapters.size || selection.kind === "memory" && !nodes.size && !selection.pageIds?.length && !selection.groupIds?.length || selection.kind === "planning" && !pages.size) fail("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u9879\u5185\u5BB9");
   const initialChapters = new Set(chapters), initialNodes = new Set(nodes);
   if (selection.includeDependencies) {
+    if (selection.kind === "chapters" && n.story !== void 0) {
+      for (const item of Object.values(readStory(n).tracking)) if (chapters.has(item.chapterId)) for (const id of item.activeCharacterIds) nodes.add(id);
+    }
     for (const id of beats) {
       for (const ref of board.nodes[id].chapterRefs) chapters.add(ref.chapterId);
       for (const ref of board.nodes[id].memoryRefs) nodes.add(ref);
@@ -89,6 +94,7 @@ function selectProjects(source, selection) {
   delete result.tavernSources;
   delete result.collaboration;
   delete result.collaborationProgress;
+  delete result.story;
   const volumes = /* @__PURE__ */ new Set();
   for (const ch of Object.values(result.chapters)) {
     if (ch.volumeId) volumes.add(ch.volumeId);
@@ -189,6 +195,11 @@ function selectProjects(source, selection) {
       if (!result.planning || pageId && !own(result.planning.pages, pageId) || !pageId && result.transferScope?.mainPage === false) return [];
       return [[directoryKey("planning", pageId), order.filter((id) => own(result.planning.nodes, id))]];
     }));
+  }
+  if (selection.kind === "chapters") {
+    const partial = chapterStory(n, chapters, nodes);
+    if (partial.story) result.story = partial.story;
+    detached += partial.detached;
   }
   if (detached) warnings.push(`\u672A\u643A\u5E26\u7684 ${detached} \u9879\u6B63\u6587\u6216\u8BBE\u5B9A\u5F15\u7528\u4F1A\u79FB\u9664\uFF1B\u76F8\u5173\u8BBE\u5B9A\u9700\u91CD\u65B0\u786E\u8BA4\u3002`);
   return { projects: [result], warnings, dependencies };

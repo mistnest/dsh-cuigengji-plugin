@@ -72,7 +72,7 @@ test('disabled guidance has resolvable references, unbound rules and explicit-wo
   await human('preset.set',{novelId:b.id,expectedRevision:0,preset:{enabled:true,name:'乙',blocks:[{identifier:'b',name:'文风',enabled:true,content:'目标书文风'}]}});
   await human('guidance.set',{enabled:false});
   const unbound=await invoke('cuigengji_guidance',{section:'all'},'unbound');
-  assert.equal(unbound.modules.length,6);assert.equal(unbound.preset.unavailable,true);
+  assert.equal(unbound.modules.length,7);assert.equal(unbound.preset.unavailable,true);
   for(const section of ['plan','memory']){
     const guide=await invoke('cuigengji_guidance',{section});assert.equal(guide.modules.length,1);assert.equal(guide.preset,undefined);
     const resource=guide.modules[0].resourceBase;assert.equal(resource.kind,'directory');

@@ -23,6 +23,7 @@ import { memoryVersionFields, memoryHistory } from "../domain/memory/history.js"
 import { staleMemoryEntities } from "../domain/memory/invalidation.js";
 import { directoryKey, orderedDirectory, directorySnapshot, checkDirectorySnapshot, planDirectoryMove, validateDirectoryOrder } from "../domain/directory/order.js";
 import { findProse, replaceLiteral } from "../domain/chapters/find.js";
+import { storyAction, validateStory } from "../domain/story/index.js";
 class StoreError extends Error {
   constructor(code, message) {
     super(message);
@@ -179,7 +180,8 @@ class Store extends ProjectStore {
     try {
       const state = await this.loadForAction(action, args, actor);
       beforeExecute?.(state);
-      const signature = hash(JSON.stringify({ action, args, actor: source(actor) }));
+      const storyNovelId = action === "story.apply" ? args.novelId || state.bindings[hash(actor.sessionId || "")]?.activeNovelId || state.bindings[hash(actor.sessionId || "")]?.novelId : void 0;
+      const signature = hash(JSON.stringify({ action, args, actor: source(actor), ...action === "story.apply" ? { novelId: storyNovelId } : {} }));
       const requestKey = args.requestId === void 0 ? null : hash(text(args.requestId, "requestId"));
       if (requestKey && own(state.requests, requestKey)) {
         const previous = state.requests[requestKey];
@@ -381,6 +383,11 @@ class Store extends ProjectStore {
         return result;
       });
     }
+    if (action.startsWith("story.")) {
+      const result = storyAction(n, action, a);
+      if (action === "story.apply") touch(n);
+      return result;
+    }
     if (action.startsWith("planning.")) {
       const previous = n.planning?.sequence;
       const result = planningAction(n, action, a, actor);
@@ -388,7 +395,7 @@ class Store extends ProjectStore {
       return result;
     }
     if (action.startsWith("plan.")) fail("MIGRATED_ACTION", "\u65E7\u89C4\u5212\u63A5\u53E3\u5DF2\u8FC1\u79FB\uFF0C\u8BF7\u4F7F\u7528 cuigengji_plan \u7684 planning.list/get/apply");
-    if (action === "novel.get") return { ...n, tavernSources: void 0, planning: void 0, plan: void 0, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, versions, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
+    if (action === "novel.get") return { ...n, story: void 0, tavernSources: void 0, planning: void 0, plan: void 0, volumes: Object.values(n.volumes), chapters: Object.values(n.chapters).map(meta), nodes: Object.values(n.nodes).map(({ content, versions, ...v }) => v), edges: Object.values(n.edges).map(({ content, ...v }) => v) };
     if (action === "novel.handoff") return createHandoff(n, binding, a);
     if (action === "novel.export") {
       ensurePlanning(n);
@@ -850,6 +857,7 @@ class Store extends ProjectStore {
       Object.assign(edge, memoryFields(edge, n, true, true));
     }
     if (n.plan && (typeof n.plan.content !== "string" || !Number.isSafeInteger(n.plan.revision) || n.plan.revision < 1 || typeof n.plan.approved !== "boolean")) fail("INVALID_BACKUP", "\u89C4\u5212\u683C\u5F0F\u65E0\u6548");
+    if (n.story !== void 0) validateStory(n.story, n, "INVALID_BACKUP");
     validateDirectoryOrder(n.directoryOrder);
     validateMemoryGroups(n);
     if (n.planning) validatePlanning(n.planning, n);

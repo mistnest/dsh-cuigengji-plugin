@@ -12,6 +12,7 @@
 | 正文查找替换、桌宠、写作记录与设置 | [工作台常用功能](workbench.md) |
 | 从旧包名迁移 | [包名迁移](package-name-migration.md) |
 | 一起整理大纲、推演剧情和资源 | [规划与设定工作台](planning-board.md) |
+| 按章规划、追踪伏笔与审稿问题 | [创作工作台](story-workbench.md) |
 | 设置文风和写作要求 | [写作预设](presets.md) |
 | 导入已有酒馆资料 | [角色卡、世界书与预设导入](tavern-import.md) |
 | 导出作品或备份整个工作库 | [导入与导出](import-export.md) |

@@ -25,7 +25,7 @@ for(const optionalServices of [false,true])test(`native Cordis activates the bac
     const boot=ctx.plugin(plugin,{dataRoot:root});
     await Promise.race([Promise.resolve(boot),delay(2500).then(()=>{throw new Error('Backend never activated through the native dependency resolver');})]);
     const service=ctx.get('cuigengji');assert.ok(service,'the real service must be available after activation');
-    assert.equal(routes.length,1);assert.ok(tools.some(tool=>tool.name==='cuigengji_project'));assert.equal(skills.length,6);
+    assert.equal(routes.length,1);assert.ok(tools.some(tool=>tool.name==='cuigengji_project'));assert.equal(skills.length,7);
     const call=async(action,args={})=>{
       const response=await routes[0].fetch(new Request('http://localhost/api/cuigengji/dispatch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',method:'cuigengji/dispatch',rpcId:action,payload:{action,args}})}));
       assert.equal(response.status,200);const result=(await response.json()).result;assert.equal(result.ok,true,JSON.stringify(result));return result.value;
