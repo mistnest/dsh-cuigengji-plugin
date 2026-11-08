@@ -9,7 +9,6 @@
     ".": "./runtime/index.js",
     "./client": "./lib/client.js",
     "./icon": "./src/client/assets/plugin-icon.png",
-    "./locale/*.json": "./locale/*.json",
     "./core": "./runtime/core/store.js",
     "./maintenance/rename-installation": "./runtime/adapters/dsh/rename-installation.js",
     "./package.json": "./package.json"
@@ -20,6 +19,7 @@
     "skills",
     "cordis.patch.yml",
     "README.md",
+    "THIRD_PARTY_NOTICES.md",
     "docs",
     "runtime"
   ],
