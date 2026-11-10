@@ -94,7 +94,11 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
   await workbench.getByRole('button',{name:'规划',exact:true}).click();await expect(workbench.getByRole('button',{name:'灯塔来信',exact:true})).toBeVisible();
   await workbench.getByRole('button',{name:'设定',exact:true}).click();await expect(workbench.getByRole('button',{name:'林岚',exact:true})).toBeVisible();
   for(const name of ['林岚','雾港街区']) {
-    await workbench.locator('.planning-card .planning-title').filter({hasText:name}).dblclick();
+    // The resizable directory can cover a card's canvas position; open the
+    // visible explorer entry as a user would, without bypassing hit testing.
+    const showDirectory=workbench.getByRole('button',{name:'显示组织侧栏',exact:true});
+    if(await showDirectory.isVisible())await showDirectory.click();
+    await workbench.getByRole('button',{name:`选中 ${name}`,exact:true}).dblclick();
     await workbench.getByRole('button',{name:'编辑',exact:true}).click();
     const editor=workbench.getByRole('textbox',{name:'全文',exact:true});await editor.fill('');await editor.click();
     let body='',previousTop=0;
