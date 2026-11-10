@@ -47,6 +47,19 @@ export async function seedStoryDemo(store,actor){
  const final=await run('story.apply',{expectedRevision:styled.story.revision,requestId:randomUUID(),operations:[
   {op:'style.upsert',value:{targetSentence:30,dialogueRatio:35,viewpoint:'第三人称限知，始终贴着林照',tense:'过去时，按当日推进',diction:'克制、冷色调，少形容词',avoid:'避免直接抒情和替读者总结',anchors:['信里没有署名，只有一枚干枯的银杏叶。']}},
  ]});
+ // A demo-only 对标 copy; a real import reads a 拆文库 folder from disk.
+ const demoReference={id:'ref-demo-rain-city',title:'对标示例 · 雨城来信拆文',source:'演示数据（非真实拆文库）',importedAt:new Date().toISOString(),
+  report:'# 拆文报告（示例）\n\n这本书用一封迟到十年的信作为入口，前三章分别完成「日常被打破→旧人现身→真相推进」。\n\n## 可借鉴\n- 每章只解释一个新事实，其余留到下一章。\n- 章尾用具体动作收束，不用总结句。',
+  style:'# 文风（示例）\n\n- 句长偏短，平均 18–22 字。\n- 对白占比约 25%–35%，关键信息用对话推进。\n- 冷色调，少形容词，避免直接抒情。',
+  rhythm:'# 节奏（示例）\n\n第1章 紧张 / 建立\n第2章 压抑 / 升级\n第3章 悲伤 / 转折\n第4章 温馨 / 余波',
+  emotion:'# 情绪模块（示例）\n\n- 期待：读者想知道信为什么现在才到。\n- 缺口：主角不知道父亲是否还活着。\n- 兑现：每次只给一个可核对的小答案。',
+  chapters:[
+   {index:0,title:'第1章 雨夜来信',summary:'主角收到第三封信，决定去旧钟楼。',tone:'紧张',role:'建立',wordCount:2200},
+   {index:1,title:'第2章 旧钟楼',summary:'旧人现身，刻意回避关键问题。',tone:'压抑',role:'升级',wordCount:2400},
+   {index:2,title:'第3章 南岸码头',summary:'守夜人说出十年前最后一班货船。',tone:'悲伤',role:'转折',wordCount:2600},
+   {index:3,title:'第4章 未写完的约定',summary:'三封信摊开，主角决定继续。',tone:'温馨',role:'余波',wordCount:1800},
+  ],counts:{chapters:4,characters:3,settings:5}};
+ const referenced=await run('story.apply',{expectedRevision:final.story.revision,requestId:randomUUID(),operations:[{op:'reference.upsert',value:demoReference}]});
  const operations=[
   {op:'configure',value:{mode:'long',stage:'outline',brief:{premise:'一封迟到十年的信，把林照引向父亲最后出现的地方。',readerPromise:'读者想知道那封信为什么现在才到，以及父亲是否还活着。',protagonistGoal:'找到父亲，又不伤害仍在等她的人。',coreConflict:'追问真相会揭开陆行舟守护的秘密，也会让父亲更难回头。',ending:'林照决定不再等回信，自己寄出第一封。',style:'克制、冷色调，避免直接抒情。'}}},
   {op:'outline.upsert',value:{chapterId:chapters[0].id,intent:'用第三封信把林照从日常推向旧钟楼。',beats:['收到第三封信','比对父亲笔迹','前往旧钟楼'],endingHook:'钟楼里已经有人。',minWords:1800,maxWords:2600}},
@@ -63,6 +76,6 @@ export async function seedStoryDemo(store,actor){
   {op:'review.upsert',value:{chapterId:chapters[1].id,expectedChapterRevision:at(chapters[1].id),severity:'suggestion',category:'pacing',location:'中段对话',evidence:'“这机器坏了很多年。”',issue:'连续两句解释性对白拖慢节奏。',suggestion:'改成动作先行，让台词更短。',status:'open'}},
   {op:'review.upsert',value:{chapterId:chapters[0].id,expectedChapterRevision:at(chapters[0].id),severity:'note',category:'prose',location:'末段',evidence:'信里没有署名，只有一枚干枯的银杏叶。',issue:'意象很好，可以留到第二章再解释压叶方法。',suggestion:'把解释后移，第一章只保留疑惑。',status:'resolved'}},
  ];
- await run('story.apply',{expectedRevision:final.story.revision,requestId:randomUUID(),operations});
+ await run('story.apply',{expectedRevision:referenced.story.revision,requestId:randomUUID(),operations});
  return {novelId:novel.id,chapterId:chapters[0].id,emptyChapterId:empty.id};
 }

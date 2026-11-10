@@ -1,9 +1,10 @@
 import {randomUUID} from 'node:crypto';
-import type {ChapterRhythm, StoryApplyResult, StoryNovel, StoryOperationResult, StoryReview, StoryThread, StoryUnit} from '../../contracts/story.ts';
+import type {ChapterRhythm, StoryApplyResult, StoryNovel, StoryOperationResult, StoryReference, StoryReview, StoryThread, StoryUnit} from '../../contracts/story.ts';
 import {STORY_OPERATIONS} from '../../contracts/story.ts';
-import {BRIEF_FIELDS, chapter, copy, emptyStyle, fail, fields, freshChapter, isObject, oneOf, own, readStory, revision, sourceStale, storySnapshot, storySnapshotWrite, string, validId, validateOutline, validateReview, validateRhythm, validateStory, validateStoryLine, validateStoryUnit, validateStyle, validateThread, validateTracking} from './model.ts';
+import {BRIEF_FIELDS, chapter, copy, emptyStyle, fail, fields, freshChapter, isObject, oneOf, own, readStory, revision, sourceStale, storySnapshot, storySnapshotWrite, string, validId, validateOutline, validateReference, validateReview, validateRhythm, validateStory, validateStoryLine, validateStoryUnit, validateStyle, validateThread, validateTracking} from './model.ts';
 import {storyContext} from './context.ts';
 import {detectChapter, detectNovel} from './detect/index.ts';
+import {parseReferenceFolder} from './reference/parse.ts';
 export {defaultStory, normalizeStory, readStory, storySnapshot, storySnapshotWrite, validateStory} from './model.ts';
 
 /** A new unit is a plan with nothing claimed yet; the author fills what matters. */
@@ -23,6 +24,14 @@ export function storyAction(novel: StoryNovel, action: string, args: Record<stri
   }
   if (action === 'story.detect.get') {
     fields(args, ['novelId', 'chapterId'], 'story.detect.get'); return detectChapter(novel, args.chapterId as string);
+  }
+  // Reads an analyzed book folder and stores a project-scoped copy (对标).
+  if (action === 'story.reference.import') {
+    fields(args, ['novelId', 'path', 'requestId'], 'story.reference.import');
+    const reference = parseReferenceFolder(String(args.path || ''));
+    return applyStory(novel, {expectedRevision: readStory(novel).revision,
+      requestId: typeof args.requestId === 'string' ? args.requestId : randomUUID(),
+      operations: [{op: 'reference.upsert', value: reference}]});
   }
   if (action !== 'story.apply') fail('UNKNOWN_ACTION', action);
   return applyStory(novel, args);
@@ -147,6 +156,15 @@ export function applyStory(novel: StoryNovel, args: Record<string, unknown>): St
       const next = {...emptyStyle(), ...draft.style, ...value, ...citation};
       validateStyle(next, 'INVALID_INPUT', novel); draft.style = next;
       results.push({op: 'style.upsert'});
+    } else if (operation.op === 'reference.upsert') {
+      fields(value, ['id', 'title', 'source', 'importedAt', 'report', 'style', 'rhythm', 'emotion', 'chapters', 'counts'], 'reference.upsert');
+      validateReference(value);
+      draft.references[value.id] = copy(value) as StoryReference;
+      results.push({op: 'reference.upsert', id: value.id});
+    } else if (operation.op === 'reference.remove') {
+      fields(value, ['id'], 'reference.remove'); validId(value.id, 'reference.id');
+      if (!own(draft.references, value.id)) fail('NOT_FOUND', '待移除的对标书不存在');
+      delete draft.references[value.id]; results.push({op: 'reference.remove', id: value.id});
     } else if (operation.op === 'thread.remove' || operation.op === 'review.remove') {
       fields(value, ['id'], `${label}.value`); validId(value.id, 'id');
       const map = operation.op === 'thread.remove' ? draft.threads : draft.reviews;

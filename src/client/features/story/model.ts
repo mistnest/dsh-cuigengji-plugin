@@ -3,6 +3,7 @@ import type {FeatureCall} from '../../shared/workspace-state.ts';
 
 export const stageNames = {idea:'构思', design:'设计', outline:'细纲', draft:'正文', review:'审稿', ready:'定稿'} as const;
 export const threadKinds = {foreshadow:'伏笔', promise:'下章承诺', expectation:'长期期待', constraint:'设定约束'} as const;
+export const toneKey = (label: string) => ({紧张:'tense',轻松:'light',悲伤:'sad',热血:'hot',爽:'satisfying',甜蜜:'sweet',温馨:'warm',惊悚:'horror',压抑:'oppressive'} as Record<string, string>)[label] || 'other';
 export const threadStatuses = {open:'待推进', progressing:'推进中', resolved:'已兑现', retired:'已撤回'} as const;
 export const severityNames = {blocking:'阻断', suggestion:'建议', note:'提示'} as const;
 export const reviewStatuses = {open:'待处理', resolved:'已解决', dismissed:'已忽略'} as const;

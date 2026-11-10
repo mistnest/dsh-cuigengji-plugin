@@ -80,6 +80,13 @@ export function storyContext(novel: StoryNovel, args: {chapterId?: unknown; maxC
     add('plans', {kind: 'style', id: novel.id, title: '文风要求（表达层）', truncated: false,
       content: [['视角', profile.viewpoint], ['时态', profile.tense], ['用词', profile.diction], ['避免', profile.avoid]].filter(([, text]) => text).map(([label, text]) => `${label}：${text}`).join('\n')});
   }
+  // A project copy of an analyzed reference book is a style/rhythm hint, not a
+  // story fact. Include only the compact text fields, never its chapter plot.
+  const reference = Object.values(story.references)[0];
+  if (reference) {
+    add('plans', {kind: 'reference', id: reference.id, title: `对标书：${reference.title}（参考风格，不是本书事实）`, truncated: false,
+      content: [reference.style, reference.rhythm, reference.emotion].filter(Boolean).join('\n\n')});
+  }
   const tracking = Object.values(story.tracking).sort((a, b) => (ranks.get(b.chapterId) ?? Infinity) - (ranks.get(a.chapterId) ?? Infinity));  for (const item of tracking) {
     if (!allowed('tracking', item.chapterId, item.chapterId, item.chapterRevision)) continue;
     const title = novel.chapters[item.chapterId].title;

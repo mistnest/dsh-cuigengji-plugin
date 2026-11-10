@@ -116,6 +116,16 @@ ${outline.beats.map((beat, index) => `${index + 1}. ${beat}`).join("\n")}
       content: [["\u89C6\u89D2", profile.viewpoint], ["\u65F6\u6001", profile.tense], ["\u7528\u8BCD", profile.diction], ["\u907F\u514D", profile.avoid]].filter(([, text]) => text).map(([label, text]) => `${label}\uFF1A${text}`).join("\n")
     });
   }
+  const reference = Object.values(story.references)[0];
+  if (reference) {
+    add("plans", {
+      kind: "reference",
+      id: reference.id,
+      title: `\u5BF9\u6807\u4E66\uFF1A${reference.title}\uFF08\u53C2\u8003\u98CE\u683C\uFF0C\u4E0D\u662F\u672C\u4E66\u4E8B\u5B9E\uFF09`,
+      truncated: false,
+      content: [reference.style, reference.rhythm, reference.emotion].filter(Boolean).join("\n\n")
+    });
+  }
   const tracking = Object.values(story.tracking).sort((a, b) => (ranks.get(b.chapterId) ?? Infinity) - (ranks.get(a.chapterId) ?? Infinity));
   for (const item of tracking) {
     if (!allowed("tracking", item.chapterId, item.chapterId, item.chapterRevision)) continue;

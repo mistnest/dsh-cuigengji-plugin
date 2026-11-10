@@ -1,7 +1,7 @@
 // Static and behavioural guards for the visual additions. No browser needed.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, rm} from 'node:fs/promises';
+import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -79,6 +79,35 @@ test('legacy story data without the new plan fields stays readable', async t => 
   assert.deepEqual(normalized.storylines, {});
   assert.deepEqual(normalized.rhythms, {});
   assert.equal(normalized.style.targetSentence, null);
+});
+
+test('a reference book folder imports as a project-scoped 对标 copy', async t => {
+  const s = await setup(t), root = await mkdtemp(join(tmpdir(), 'cuigengji-ref-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  await mkdir(join(root, '章节'), {recursive: true});
+  await mkdir(join(root, '剧情'), {recursive: true});
+  await mkdir(join(root, '角色'), {recursive: true});
+  await writeFile(join(root, '_meta.json'), JSON.stringify({title: '合成对标书'}));
+  await writeFile(join(root, '章节', '第1章_开端_摘要.md'), '# 第1章 开端\n\n基调：紧张\n角色定位：建立\n字数：2,400\n\n主角收到一封信。');
+  await writeFile(join(root, '章节', '第2章_转折_摘要.md'), '# 第2章 转折\n\n基调：悲伤\n字数：1800\n\n他发现信是伪造的。');
+  await writeFile(join(root, '文风.md'), '# 文风\n短句，少形容词。');
+  await writeFile(join(root, '剧情', '节奏.md'), '# 节奏\n紧张 → 悲伤');
+  await writeFile(join(root, '角色', '主角.md'), '# 主角');
+  const result = await s.call('story.reference.import', {path: root});
+  const references = Object.values(result.story.references);
+  assert.equal(references.length, 1);
+  assert.equal(references[0].title, '合成对标书');
+  assert.equal(references[0].chapters.length, 2);
+  assert.equal(references[0].chapters[0].tone, '紧张');
+  assert.equal(references[0].chapters[0].wordCount, 2400);
+  assert.equal(references[0].counts.characters, 1);
+  assert.match(references[0].style, /短句/);
+  const read = await s.call('story.get');
+  const id = Object.keys(read.story.references)[0];
+  assert.ok(id.startsWith('ref-'));
+  await s.call('story.apply', {expectedRevision: read.story.revision, requestId: randomUUID(), operations: [{op: 'reference.remove', value: {id}}]});
+  assert.deepEqual((await s.call('story.get')).story.references, {});
+  await assert.rejects(() => s.call('story.reference.import', {path: join(root, 'missing')}), /没有找到拆文库书籍|拆文库路径/);
 });
 
 test('units and storylines are persisted as plans without changing chapter data', async t => {

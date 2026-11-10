@@ -8,7 +8,7 @@ type Props=StoryActions&{onChapter:(id?:string)=>void;onLoad:(chapterId:string,m
 const reasonNames:Record<StoryContextOmission['reason'],{label:string;note:string}>={'future':{label:'后续章节',note:'超出目标章的正文不会被读取。'},
   stale:{label:'来源已变化',note:'核对当前正文后才会重新进入上下文。'},deleted:{label:'已删除',note:'来源章节已不存在。'},
   budget:{label:'超出预算',note:'提高预算或减少其他材料后才能带入。'},unconfirmed:{label:'未确认设定',note:'设定尚未确认为当前事实。'}};
-const kindNames:Record<StoryContextItem['kind'],string>={brief:'创作简报',outline:'章节蓝图',tracking:'已发生事实',manuscript:'正文',setting:'已确认设定',commitment:'后续义务',thread:'未完成线索',review:'审稿意见',unit:'剧情单元',style:'文风要求'};
+const kindNames:Record<StoryContextItem['kind'],string>={brief:'创作简报',outline:'章节蓝图',tracking:'已发生事实',manuscript:'正文',setting:'已确认设定',commitment:'后续义务',thread:'未完成线索',review:'审稿意见',unit:'剧情单元',style:'文风要求',reference:'对标参考'};
 const budgets=[4000,8000,12000,16000,24000];
 export function ContextPreview({snapshot,onChapter,onLoad}:Props) {
   const [chapterId,setChapterId]=useWorkspacePreference(`${snapshot.novelId}:context-chapter`,'');

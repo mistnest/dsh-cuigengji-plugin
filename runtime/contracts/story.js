@@ -12,7 +12,9 @@ const STORY_OPERATIONS = [
   "storyline.remove",
   "rhythm.upsert",
   "rhythm.remove",
-  "style.upsert"
+  "style.upsert",
+  "reference.upsert",
+  "reference.remove"
 ];
 export {
   STORY_OPERATIONS

@@ -5,7 +5,7 @@ const TOOL_ACTIONS = Object.freeze({
   cuigengji_memory: Object.freeze(["graph.workspace.ensure", "graph.pages", "graph.page.create", "graph.page.update", "graph.page.delete", "graph.list", "graph.get", "graph.history", "graph.restore", "graph.groups", "graph.group.create", "graph.group.update", "graph.group.delete", "graph.move", "graph.layout", "graph.arrange", "graph.continue", "graph.duplicate", "graph.remove", "graph.create", "graph.update", "graph.delete", "edge.list", "edge.get", "edge.create", "edge.update", "edge.delete", "edge.disconnect"]),
   cuigengji_plan: Object.freeze(["planning.pages", "planning.page.create", "planning.page.update", "planning.page.delete", "planning.decorations", "planning.list", "planning.search", "planning.get", "planning.continue", "planning.groups", "planning.group.create", "planning.group.update", "planning.group.delete", "planning.changes", "planning.history", "planning.apply", "planning.layout", "planning.revert"]),
   cuigengji_context: Object.freeze(["context.get", "binding.get", "preset.read"]),
-  cuigengji_story: Object.freeze(["story.get", "story.apply", "story.context.get", "story.detect", "story.detect.get"])
+  cuigengji_story: Object.freeze(["story.get", "story.apply", "story.context.get", "story.detect", "story.detect.get", "story.reference.import"])
 });
 const MEMORY_ACTIONS = Object.freeze([...TOOL_ACTIONS.cuigengji_memory, "context.get", "guidance.read"]);
 const HUMAN_ACTIONS = Object.freeze([.../* @__PURE__ */ new Set([

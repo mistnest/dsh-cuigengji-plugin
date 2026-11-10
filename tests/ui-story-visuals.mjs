@@ -61,7 +61,16 @@ try{
   await expect(page.getByRole('region',{name:'审稿问题分布'})).toBeVisible();
   await page.screenshot({path:join(shots,'review-matrix.png'),fullPage:true});
 
-  // 6. Style board: real prose samples, targets set, and an editable dossier.
+  // 6. Reference library (拆文库/对标): imported copy with rhythm comparison.
+  await page.getByRole('button',{name:'拆文库与对标',exact:true}).click();
+  const reference=page.getByRole('region',{name:'拆文库与对标'});
+  await expect(reference.getByRole('heading',{name:'把拆文库变成可以对照的对标书'})).toBeVisible();
+  await expect(reference.getByText('对标示例 · 雨城来信拆文').first()).toBeVisible();
+  await expect(reference.getByRole('region',{name:'对标节奏对照'})).toBeVisible();
+  await expect(reference.locator('.story-reference-chapters tbody tr')).toHaveCount(4);
+  await page.screenshot({path:join(shots,'reference.png'),fullPage:true});
+
+  // 7. Style board: real prose samples, targets set, and an editable dossier.
   await page.getByRole('button',{name:'文风对照',exact:true}).click();
   await expect(page.locator('table')).toBeVisible();
   // A configured target must produce a signed deviation, never a bare number.
@@ -70,7 +79,7 @@ try{
   await page.screenshot({path:join(shots,'style.png'),fullPage:true});
 
   // Narrow layouts must not scroll sideways on any new section.
-  for(const name of ['卷纲与单元','去 AI 味体检','节奏热力图','双时间线','文风对照']){
+  for(const name of ['卷纲与单元','去 AI 味体检','节奏热力图','双时间线','拆文库与对标','文风对照']){
     await page.setViewportSize({width:420,height:900});
     await page.getByRole('button',{name,exact:true}).click();
     const overflow=await page.locator('.story-scroll').evaluate(el=>el.scrollWidth-el.clientWidth);

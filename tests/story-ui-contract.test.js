@@ -28,7 +28,7 @@ test('the story workbench is reachable from the book navigation and renders real
 
 test('the four visual additions read real data and never invent a score', async () => {
   const entry = await read('src/client/features/story/index.tsx');
-  for (const [section, label] of [['units', '卷纲与单元'], ['detect', '去 AI 味体检'], ['rhythm', '节奏热力图'], ['truth', '双时间线'], ['style', '文风对照']]) {
+  for (const [section, label] of [['units', '卷纲与单元'], ['detect', '去 AI 味体检'], ['rhythm', '节奏热力图'], ['truth', '双时间线'], ['style', '文风对照'], ['reference', '拆文库与对标']]) {
     assert.match(entry, new RegExp(`${section}:'${label}'`), `the ${label} section must be reachable`);
   }
   const detect = await read('src/client/features/story/DetectBoard.tsx');
@@ -60,6 +60,10 @@ test('the four visual additions read real data and never invent a score', async 
   const review = await read('src/client/features/story/ReviewDesk.tsx');
   assert.match(review, /ReviewMatrix/, 'review distribution must be part of the review page');
   assert.match(await read('src/client/features/story/ReviewMatrix.tsx'), /categoryNames/);
+  const reference = await read('src/client/features/story/ReferenceBoard.tsx');
+  assert.match(reference, /story\.reference\.import/, 'reference import must call the host action');
+  assert.match(reference, /reference\.remove/, 'removing a project reference must be possible');
+  assert.match(reference, /对标节奏对照/, 'the reference rhythm comparison must be visible');
 });
 
 test('story writes use the atomic apply path with a version and request identity', async () => {

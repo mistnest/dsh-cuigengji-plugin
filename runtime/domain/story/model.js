@@ -58,7 +58,8 @@ const defaultStory = () => ({
   units: {},
   storylines: {},
   rhythms: {},
-  style: emptyStyle()
+  style: emptyStyle(),
+  references: {}
 });
 const STYLE_TEXT_FIELDS = ["viewpoint", "tense", "diction", "avoid"];
 const RHYTHM_TONES = ["tense", "light", "sad", "hot", "satisfying", "sweet", "warm", "horror", "oppressive", "other"];
@@ -124,6 +125,29 @@ function validateRhythm(value, novel, code = "INVALID_INPUT", live = false) {
   if (value.role !== "") oneOf(value.role, RHYTHM_ROLES, "rhythm.role", code);
   string(value.note, "rhythm.note", 2e3, false, code);
 }
+function validateReference(value, code = "INVALID_INPUT") {
+  fields(value, ["id", "title", "source", "importedAt", "report", "style", "rhythm", "emotion", "chapters", "counts"], "reference", code);
+  validId(value.id, "reference.id", code);
+  string(value.title, "reference.title", 300, true, code);
+  string(value.source, "reference.source", 1e3, false, code);
+  string(value.importedAt, "reference.importedAt", 60, true, code);
+  for (const key of ["report", "style", "rhythm", "emotion"]) string(value[key], `reference.${key}`, 12e4, false, code);
+  if (!Array.isArray(value.chapters) || value.chapters.length > 2e3) fail(code, "reference.chapters \u5FC5\u987B\u662F\u6700\u591A 2000 \u9879\u7684\u6570\u7EC4");
+  for (const [index, item] of value.chapters.entries()) {
+    fields(item, ["index", "title", "summary", "tone", "role", "wordCount"], `reference.chapters[${index}]`, code);
+    if (!Number.isSafeInteger(item.index) || item.index < 0) fail(code, `reference.chapters[${index}].index \u65E0\u6548`);
+    string(item.title, `reference.chapters[${index}].title`, 300, true, code);
+    string(item.summary, `reference.chapters[${index}].summary`, 4e3, false, code);
+    string(item.tone, `reference.chapters[${index}].tone`, 60, false, code);
+    string(item.role, `reference.chapters[${index}].role`, 60, false, code);
+    if (item.wordCount !== null && (!Number.isSafeInteger(item.wordCount) || item.wordCount < 0)) fail(code, `reference.chapters[${index}].wordCount \u65E0\u6548`);
+  }
+  fields(value.counts, ["chapters", "characters", "settings"], "reference.counts", code);
+  for (const key of ["chapters", "characters", "settings"]) {
+    const number = value.counts[key];
+    if (!Number.isSafeInteger(number) || number < 0) fail(code, `reference.counts.${key} \u5FC5\u987B\u662F\u975E\u8D1F\u6574\u6570`);
+  }
+}
 function validateOutline(value, novel, code = "INVALID_INPUT", live = false) {
   fields(value, ["chapterId", "intent", "beats", "endingHook", "minWords", "maxWords"], "outline", code);
   chapter(novel, value.chapterId, code, live);
@@ -172,7 +196,7 @@ function validateReview(value, novel, code = "INVALID_INPUT", live = false) {
   for (const key of ["location", "evidence", "issue", "suggestion"]) string(value[key], `review.${key}`, key === "location" ? 1e3 : 4e3, true, code);
 }
 function validateStory(value, novel, code = "INVALID_STORY") {
-  fields(value, ["schemaVersion", "revision", "mode", "stage", "brief", "outlines", "tracking", "threads", "reviews", "units", "storylines", "rhythms", "style"], "story", code);
+  fields(value, ["schemaVersion", "revision", "mode", "stage", "brief", "outlines", "tracking", "threads", "reviews", "units", "storylines", "rhythms", "style", "references"], "story", code);
   if (value.schemaVersion !== 1) fail(code, "\u4E0D\u652F\u6301\u7684\u6545\u4E8B\u6D41\u7A0B\u7248\u672C");
   revision(value.revision, "story.revision", code, 0);
   oneOf(value.mode, ["long", "short"], "story.mode", code);
@@ -209,12 +233,19 @@ function validateStory(value, novel, code = "INVALID_STORY") {
     if (item.chapterId !== id) fail(code, "story.rhythms ID \u4E0E\u6761\u76EE\u4E0D\u4E00\u81F4");
   }
   validateStyle(value.style, code, novel);
-  if (JSON.stringify(value).length > 2e6) fail(code, "\u5355\u90E8\u4F5C\u54C1\u7684\u6545\u4E8B\u6D41\u7A0B\u6570\u636E\u6700\u591A 2000000 \u4E2A\u5B57\u7B26");
+  const references = value.references;
+  if (!isObject(references) || Object.keys(references).length > 100) fail(code, "story.references\u5FC5\u987B\u662F\u6700\u591A 100 \u9879\u7684\u5BF9\u8C61");
+  for (const [id, item] of Object.entries(references)) {
+    validId(id, "story.references ID", code);
+    validateReference(item, code);
+    if (item.id !== id) fail(code, "story.references ID \u4E0E\u6761\u76EE\u4E0D\u4E00\u81F4");
+  }
+  if (JSON.stringify(value).length > 8e6) fail(code, "\u5355\u90E8\u4F5C\u54C1\u7684\u6545\u4E8B\u6D41\u7A0B\u6570\u636E\u6700\u591A 8000000 \u4E2A\u5B57\u7B26");
 }
 function normalizeStory(value, novel, code = "INVALID_STORY") {
   if (!isObject(value)) fail(code, "\u6545\u4E8B\u6D41\u7A0B\u6570\u636E\u5FC5\u987B\u662F\u5BF9\u8C61");
   const raw = copy(value);
-  for (const key of ["units", "storylines", "rhythms"]) if (!isObject(raw[key])) raw[key] = {};
+  for (const key of ["units", "storylines", "rhythms", "references"]) if (!isObject(raw[key])) raw[key] = {};
   if (!isObject(raw.style)) raw.style = emptyStyle();
   if (isObject(raw.tracking)) for (const item of Object.values(raw.tracking)) {
     if (!Array.isArray(item.authorTruth)) item.authorTruth = [];
@@ -333,6 +364,7 @@ export {
   threadStale,
   validId,
   validateOutline,
+  validateReference,
   validateReview,
   validateRhythm,
   validateStory,

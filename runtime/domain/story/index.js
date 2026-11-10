@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { STORY_OPERATIONS } from "../../contracts/story.js";
-import { BRIEF_FIELDS, chapter, copy, emptyStyle, fail, fields, freshChapter, isObject, oneOf, own, readStory, revision, sourceStale, storySnapshot, storySnapshotWrite, string, validId, validateOutline, validateReview, validateRhythm, validateStory, validateStoryLine, validateStoryUnit, validateStyle, validateThread, validateTracking } from "./model.js";
+import { BRIEF_FIELDS, chapter, copy, emptyStyle, fail, fields, freshChapter, isObject, oneOf, own, readStory, revision, sourceStale, storySnapshot, storySnapshotWrite, string, validId, validateOutline, validateReference, validateReview, validateRhythm, validateStory, validateStoryLine, validateStoryUnit, validateStyle, validateThread, validateTracking } from "./model.js";
 import { storyContext } from "./context.js";
 import { detectChapter, detectNovel } from "./detect/index.js";
+import { parseReferenceFolder } from "./reference/parse.js";
 import { defaultStory, normalizeStory, readStory as readStory2, storySnapshot as storySnapshot2, storySnapshotWrite as storySnapshotWrite2, validateStory as validateStory2 } from "./model.js";
 const unitDefaults = () => ({ order: 0, promise: "", emotionEngine: "", causeEntry: "", blocker: "", choice: "", payoff: "", hook: "", lineIds: [], chapterIds: [], contractRisk: "" });
 const lineDefaults = () => ({ kind: "subplot", driver: "", junction: "", canCarryChapter: "no" });
@@ -22,6 +23,15 @@ function storyAction(novel, action, args) {
   if (action === "story.detect.get") {
     fields(args, ["novelId", "chapterId"], "story.detect.get");
     return detectChapter(novel, args.chapterId);
+  }
+  if (action === "story.reference.import") {
+    fields(args, ["novelId", "path", "requestId"], "story.reference.import");
+    const reference = parseReferenceFolder(String(args.path || ""));
+    return applyStory(novel, {
+      expectedRevision: readStory(novel).revision,
+      requestId: typeof args.requestId === "string" ? args.requestId : randomUUID(),
+      operations: [{ op: "reference.upsert", value: reference }]
+    });
   }
   if (action !== "story.apply") fail("UNKNOWN_ACTION", action);
   return applyStory(novel, args);
@@ -172,6 +182,17 @@ function applyStory(novel, args) {
       validateStyle(next, "INVALID_INPUT", novel);
       draft.style = next;
       results.push({ op: "style.upsert" });
+    } else if (operation.op === "reference.upsert") {
+      fields(value, ["id", "title", "source", "importedAt", "report", "style", "rhythm", "emotion", "chapters", "counts"], "reference.upsert");
+      validateReference(value);
+      draft.references[value.id] = copy(value);
+      results.push({ op: "reference.upsert", id: value.id });
+    } else if (operation.op === "reference.remove") {
+      fields(value, ["id"], "reference.remove");
+      validId(value.id, "reference.id");
+      if (!own(draft.references, value.id)) fail("NOT_FOUND", "\u5F85\u79FB\u9664\u7684\u5BF9\u6807\u4E66\u4E0D\u5B58\u5728");
+      delete draft.references[value.id];
+      results.push({ op: "reference.remove", id: value.id });
     } else if (operation.op === "thread.remove" || operation.op === "review.remove") {
       fields(value, ["id"], `${label}.value`);
       validId(value.id, "id");

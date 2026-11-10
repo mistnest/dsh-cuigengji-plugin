@@ -7,6 +7,7 @@
 - `story.get {novelId?}` 返回 `{novelId,story,chapters,volumes,characters,diagnostics,style}`。旧作品没有 story 时返回 revision=0 的默认状态，读取不会初始化写盘。`chapters` 带真实正文测量（sentences/dialogueRatio/paragraphs），`style` 是文风要求与已写章节的对照。
 - `story.context.get {novelId?,chapterId?,maxChars?}` 返回有界上下文：`plans` 是简报、目标蓝图、剧情单元、文风要求、未完成意图；`facts` 是目标及此前的有效追踪、设定与有限原文。maxChars 默认 12000，范围 1000–24000，约束整个 JSON 返回。
 - `story.detect {novelId?,chapterId?,limit?}` 只读扫描已保存正文的 AI 味句式，按章返回带行号 column 的候选、分类计数（blocking/advisory）和 perThousand；不评分、不改正文。`story.detect.get` 只扫指定章。命中是候选：零命中也不代表故事成立。
+- `story.reference.import {novelId?,path}` 读取本机拆文库书籍文件夹（如 `拆文库/书名/`），把章节摘要、文风、节奏、情绪模块和拆文报告保存为本书的对标副本；原文件夹只读，不修改拆文库。返回更新后的 story 快照。
 - 每条 context item 包含 kind/id/title/content、来源章/版本（适用时）和 truncated。顶层 omitted 给出 future/stale/deleted/budget/unconfirmed 原因，omittedCount 是省略总数，omittedTruncated 表示省略清单也被截断。缺关键资料时按 ID 使用原生章节/设定工具补读，不假装窗口完整。
 
 ## 原子修改
@@ -25,6 +26,8 @@
 | rhythm.upsert | 某章的基调与章内角色：chapterId、expectedChapterRevision（必填，绑定当前正文版本）、tone（tense/light/sad/hot/satisfying/sweet/warm/horror/oppressive/other）、role（''/setup/escalate/turn/payoff/aftermath）、note |
 | style.upsert | 文风要求（表达层）：targetSentence（目标平均句长，按每句可见字数，0–400）、dialogueRatio（目标对白占比 0–100）、viewpoint/tense/diction/avoid、anchors 数组；只提交变动字段，未提交的保留 |
 | rhythm.remove | chapterId；只删节奏记录，不影响正文 |
+| reference.upsert | 对标书副本：id/title/source/importedAt/report/style/rhythm/emotion/chapters[]/counts；通常由 story.reference.import 生成，手工调用需完整对象 |
+| reference.remove | 真实 id；只移除本书副本，不影响原拆文库 |
 | thread.remove / review.remove / unit.remove / storyline.remove | 真实 id；需要保留处理轨迹时优先 retired/dismissed。仍被单元引用的故事线不能删除 |
 
 mode 为 long/short；stage 为 idea/design/outline/draft/review/ready。stage 记录作者工作位置，不代表模型验收或自动开始下一阶段。

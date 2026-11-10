@@ -423,7 +423,41 @@ export const storyStyles=`
 .cuigengji .story-timeline-table td {vertical-align:top;min-width:150px;}
 .cuigengji .story-timeline-table th[scope=row] button {display:flex;flex-direction:column;align-items:flex-start;gap:2px;}
 .cuigengji .story-review-matrix td {min-width:76px;}
+.cuigengji .story-reference-workspace {display:flex;flex-direction:column;gap:14px;max-width:1180px;}
+.cuigengji .story-reference-import {display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px dashed var(--dsw-alias-border-l1,#8883);border-radius:10px;}
+.cuigengji .story-reference-path {flex:1;min-width:220px;}
+.cuigengji .story-reference-path input {flex:1;min-width:180px;padding:6px 8px;font-size:13px;}
+.cuigengji .story-reference-layout {display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px;align-items:start;}
+.cuigengji .story-reference-list {display:flex;flex-direction:column;gap:6px;position:sticky;top:0;}
+.cuigengji .story-reference-list button {display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:9px 10px;border:1px solid var(--dsw-alias-border-l1,#8883);border-radius:9px;background:transparent;text-align:left;}
+.cuigengji .story-reference-list button[aria-pressed=true] {border-color:var(--dsw-alias-state-business-primary,#4d6bfe);background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4d6bfe) 8%,transparent);}
+.cuigengji .story-reference-list strong {font-size:13px;}
+.cuigengji .story-reference-list small {font-size:11px;color:var(--dsw-alias-label-secondary,#737780);}
+.cuigengji .story-reference-detail {display:flex;flex-direction:column;gap:12px;min-width:0;}
+.cuigengji .story-reference-remove {min-height:30px;padding:4px 10px;border:1px solid var(--dsw-alias-border-l1,#8883);border-radius:8px;background:transparent;font-size:12px;}
+.cuigengji .story-reference-metrics>div {padding:10px;}
+.cuigengji .story-reference-rhythm td,.cuigengji .story-reference-rhythm th {min-width:58px;padding:5px;}
+.cuigengji .story-reference-chapters td {vertical-align:top;font-size:12px;}
+.cuigengji .story-reference-summary {min-width:240px;max-width:420px;line-height:1.55;}
+.cuigengji .story-reference-text {border:1px solid var(--dsw-alias-border-l1,#8883);border-radius:10px;padding:10px 12px;}
+.cuigengji .story-reference-text summary {cursor:pointer;font-size:13px;font-weight:600;}
+.cuigengji .story-reference-text pre {margin:8px 0 0;max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.6;}
+.cuigengji .story-tone-chip {display:inline-block;padding:1px 7px;border-radius:999px;border:0;font-size:11px;line-height:18px;background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 12%,transparent);color:var(--dsw-alias-label-primary,#252936);}
+.cuigengji .story-tone-chip.tone-tense {background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#d92d20) 20%,transparent);}
+.cuigengji .story-tone-chip.tone-light {background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#12805c) 18%,transparent);}
+.cuigengji .story-tone-chip.tone-sad {background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4d6bfe) 16%,transparent);}
+.cuigengji .story-tone-chip.tone-hot {background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#d92d20) 18%,var(--dsw-alias-state-warn-primary,#b25e09) 24%,transparent);}
+.cuigengji .story-tone-chip.tone-satisfying {background:color-mix(in srgb,var(--dsw-alias-state-warn-primary,#b25e09) 22%,transparent);}
+.cuigengji .story-tone-chip.tone-sweet {background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#d92d20) 10%,var(--dsw-alias-state-warn-primary,#b25e09) 10%,transparent);}
+.cuigengji .story-tone-chip.tone-warm {background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#12805c) 10%,var(--dsw-alias-state-warn-primary,#b25e09) 16%,transparent);}
+.cuigengji .story-tone-chip.tone-horror {background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 32%,transparent);color:var(--dsw-alias-label-on-color,#fff);}
+.cuigengji .story-tone-chip.tone-oppressive {background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 58%,transparent);color:var(--dsw-alias-label-on-color,#fff);}
+.cuigengji .story-tone-chip.tone-other {background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 10%,transparent);}
 @container(max-width:759px) {
+ .cuigengji .story-reference-layout {grid-template-columns:1fr;}
+ .cuigengji .story-reference-list {position:static;flex-direction:row;overflow-x:auto;}
+ .cuigengji .story-reference-list button {flex:none;max-width:200px;}
+ .cuigengji .story-reference-path {min-width:0;width:100%;}
  .cuigengji .story-scroll {padding:12px;}
  .cuigengji .story-workspace-heading {padding:12px 12px 8px;}
  .cuigengji .story-sections {padding:0 12px 10px;}

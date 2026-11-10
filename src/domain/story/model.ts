@@ -1,5 +1,5 @@
 import {chapterCounts} from '../chapters/metadata.ts';
-import type {StoryBrief, StoryState, StoryOutline, StoryTracking, StoryThread, StoryReview, StoryNovel, StorySnapshot, StoryDiagnostics, StoryUnit, StoryLine, ChapterRhythm, StyleProfile, StyleComparison, StyleSample, StoryVolume} from '../../contracts/story.ts';
+import type {StoryBrief, StoryState, StoryOutline, StoryTracking, StoryThread, StoryReview, StoryNovel, StorySnapshot, StoryDiagnostics, StoryUnit, StoryLine, ChapterRhythm, StyleProfile, StyleComparison, StyleSample, StoryVolume, StoryReference} from '../../contracts/story.ts';
 
 export const BRIEF_FIELDS = ['premise', 'readerPromise', 'protagonistGoal', 'coreConflict', 'ending', 'style'] as const;
 export function fail(code: string, message: string): never {throw Object.assign(new Error(message), {code});}
@@ -48,7 +48,7 @@ export function freshChapter(novel: StoryNovel, id: unknown, expected: unknown) 
 export const defaultStory = (): StoryState => ({schemaVersion: 1, revision: 0, mode: 'long', stage: 'idea',
   brief: Object.fromEntries(BRIEF_FIELDS.map(key => [key, ''])) as unknown as StoryBrief,
   outlines: {}, tracking: {}, threads: {}, reviews: {},
-  units: {}, storylines: {}, rhythms: {}, style: emptyStyle()});
+  units: {}, storylines: {}, rhythms: {}, style: emptyStyle(), references: {}});
 const STYLE_TEXT_FIELDS = ['viewpoint', 'tense', 'diction', 'avoid'] as const;
 const RHYTHM_TONES = ['tense', 'light', 'sad', 'hot', 'satisfying', 'sweet', 'warm', 'horror', 'oppressive', 'other'] as const;
 const RHYTHM_ROLES = ['setup', 'escalate', 'turn', 'payoff', 'aftermath'] as const;
@@ -103,6 +103,29 @@ export function validateRhythm(value: unknown, novel: StoryNovel, code = 'INVALI
   if (value.role !== '') oneOf(value.role, RHYTHM_ROLES, 'rhythm.role', code);
   string(value.note, 'rhythm.note', 2000, false, code);
 }
+export function validateReference(value: unknown, code = 'INVALID_INPUT'): asserts value is StoryReference {
+  fields(value, ['id', 'title', 'source', 'importedAt', 'report', 'style', 'rhythm', 'emotion', 'chapters', 'counts'], 'reference', code);
+  validId(value.id, 'reference.id', code);
+  string(value.title, 'reference.title', 300, true, code);
+  string(value.source, 'reference.source', 1000, false, code);
+  string(value.importedAt, 'reference.importedAt', 60, true, code);
+  for (const key of ['report', 'style', 'rhythm', 'emotion'] as const) string(value[key], `reference.${key}`, 120000, false, code);
+  if (!Array.isArray(value.chapters) || value.chapters.length > 2000) fail(code, 'reference.chapters 必须是最多 2000 项的数组');
+  for (const [index, item] of value.chapters.entries()) {
+    fields(item, ['index', 'title', 'summary', 'tone', 'role', 'wordCount'], `reference.chapters[${index}]`, code);
+    if (!Number.isSafeInteger(item.index) || (item.index as number) < 0) fail(code, `reference.chapters[${index}].index 无效`);
+    string(item.title, `reference.chapters[${index}].title`, 300, true, code);
+    string(item.summary, `reference.chapters[${index}].summary`, 4000, false, code);
+    string(item.tone, `reference.chapters[${index}].tone`, 60, false, code);
+    string(item.role, `reference.chapters[${index}].role`, 60, false, code);
+    if (item.wordCount !== null && (!Number.isSafeInteger(item.wordCount) || (item.wordCount as number) < 0)) fail(code, `reference.chapters[${index}].wordCount 无效`);
+  }
+  fields(value.counts, ['chapters', 'characters', 'settings'], 'reference.counts', code);
+  for (const key of ['chapters', 'characters', 'settings'] as const) {
+    const number = value.counts[key];
+    if (!Number.isSafeInteger(number) || (number as number) < 0) fail(code, `reference.counts.${key} 必须是非负整数`);
+  }
+}
 
 export function validateOutline(value: unknown, novel: StoryNovel, code = 'INVALID_INPUT', live = false): asserts value is StoryOutline {
   fields(value, ['chapterId', 'intent', 'beats', 'endingHook', 'minWords', 'maxWords'], 'outline', code);
@@ -145,7 +168,7 @@ export function validateReview(value: unknown, novel: StoryNovel, code = 'INVALI
   for (const key of ['location', 'evidence', 'issue', 'suggestion']) string(value[key], `review.${key}`, key === 'location' ? 1000 : 4000, true, code);
 }
 export function validateStory(value: unknown, novel: StoryNovel, code = 'INVALID_STORY'): asserts value is StoryState {
-  fields(value, ['schemaVersion', 'revision', 'mode', 'stage', 'brief', 'outlines', 'tracking', 'threads', 'reviews', 'units', 'storylines', 'rhythms', 'style'], 'story', code);
+  fields(value, ['schemaVersion', 'revision', 'mode', 'stage', 'brief', 'outlines', 'tracking', 'threads', 'reviews', 'units', 'storylines', 'rhythms', 'style', 'references'], 'story', code);
   if (value.schemaVersion !== 1) fail(code, '不支持的故事流程版本');
   revision(value.revision, 'story.revision', code, 0);
   oneOf(value.mode, ['long', 'short'], 'story.mode', code); oneOf(value.stage, ['idea', 'design', 'outline', 'draft', 'review', 'ready'], 'story.stage', code);
@@ -177,14 +200,20 @@ export function validateStory(value: unknown, novel: StoryNovel, code = 'INVALID
     if ((item as ChapterRhythm).chapterId !== id) fail(code, 'story.rhythms ID 与条目不一致');
   }
   validateStyle(value.style, code, novel);
-  if (JSON.stringify(value).length > 2000000) fail(code, '单部作品的故事流程数据最多 2000000 个字符');
+  const references = value.references;
+  if (!isObject(references) || Object.keys(references).length > 100) fail(code, 'story.references必须是最多 100 项的对象');
+  for (const [id, item] of Object.entries(references)) {
+    validId(id, 'story.references ID', code); validateReference(item, code);
+    if ((item as StoryReference).id !== id) fail(code, 'story.references ID 与条目不一致');
+  }
+  if (JSON.stringify(value).length > 8000000) fail(code, '单部作品的故事流程数据最多 8000000 个字符');
 }
 /** Story fields added after a release are optional on disk; normalize before validating.
  * This keeps old projects readable without a destructive migration. */
 export function normalizeStory(value: unknown, novel: StoryNovel, code = 'INVALID_STORY'): StoryState {
   if (!isObject(value)) fail(code, '故事流程数据必须是对象');
   const raw = copy(value) as Record<string, any>;
-  for (const key of ['units', 'storylines', 'rhythms'] as const) if (!isObject(raw[key])) raw[key] = {};
+  for (const key of ['units', 'storylines', 'rhythms', 'references'] as const) if (!isObject(raw[key])) raw[key] = {};
   if (!isObject(raw.style)) raw.style = emptyStyle();
   if (isObject(raw.tracking)) for (const item of Object.values(raw.tracking) as Record<string, any>[]) {
     if (!Array.isArray(item.authorTruth)) item.authorTruth = [];

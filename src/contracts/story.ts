@@ -1,7 +1,7 @@
 /** Native story workflow. Plans remain separate from versioned manuscript facts. */
 export const STORY_OPERATIONS = ['configure', 'outline.upsert', 'tracking.commit', 'thread.upsert', 'review.upsert', 'thread.remove', 'review.remove',
   'unit.upsert', 'storyline.upsert', 'unit.remove', 'storyline.remove',
-  'rhythm.upsert', 'rhythm.remove', 'style.upsert'] as const;
+  'rhythm.upsert', 'rhythm.remove', 'style.upsert', 'reference.upsert', 'reference.remove'] as const;
 export type StoryOperationName = typeof STORY_OPERATIONS[number];
 export type StoryMode = 'long' | 'short';
 export type StoryStage = 'idea' | 'design' | 'outline' | 'draft' | 'review' | 'ready';
@@ -28,6 +28,20 @@ export interface StoryReview {
   id: string; chapterId: string; chapterRevision: number; severity: 'blocking' | 'suggestion' | 'note';
   category: 'causality' | 'character' | 'continuity' | 'pacing' | 'prose' | 'promise';
   location: string; evidence: string; issue: string; suggestion: string; status: 'open' | 'resolved' | 'dismissed';
+}
+/** A chapter digest imported from an analyzed reference book (拆文库). */
+export interface StoryReferenceChapter {
+  index: number; title: string; summary: string;
+  /** Free text from the digest, normally one of the tone names. */
+  tone: string; role: string; wordCount: number | null;
+}
+/** A per-project copy of an analyzed reference book (对标). The workspace
+ * library remains the source of truth; this copy is what the project compares. */
+export interface StoryReference {
+  id: string; title: string; source: string; importedAt: string;
+  report: string; style: string; rhythm: string; emotion: string;
+  chapters: StoryReferenceChapter[];
+  counts: {chapters: number; characters: number; settings: number};
 }
 /** A story line runs across units (vertical cut): main plot, romance, growth… */
 export interface StoryLine {
@@ -68,6 +82,8 @@ export interface StoryState {
   threads: Record<string, StoryThread>; reviews: Record<string, StoryReview>;
   units: Record<string, StoryUnit>; storylines: Record<string, StoryLine>;
   rhythms: Record<string, ChapterRhythm>; style: StyleProfile;
+  /** Project-scoped copies of analyzed reference books (对标). */
+  references: Record<string, StoryReference>;
 }
 export interface StoryVolume {
   id: string; title: string; order: number; chapterIds: string[];
@@ -116,12 +132,14 @@ export type StoryOperation =
   | {op: 'rhythm.upsert'; value: Omit<ChapterRhythm, 'chapterRevision'> & {expectedChapterRevision: number; chapterRevision?: number}}
   | {op: 'rhythm.remove'; value: {chapterId: string}}
   | {op: 'style.upsert'; value: Partial<Omit<StyleProfile, 'chapterRevision'>> & {expectedChapterRevision?: number}}
+  | {op: 'reference.upsert'; value: StoryReference}
+  | {op: 'reference.remove'; value: {id: string}}
   | {op: 'review.upsert'; value: (Omit<StoryReview, 'id' | 'chapterRevision'> & {id?: string; chapterRevision?: number; expectedChapterRevision: number}) | (Partial<StoryReview> & {id: string; expectedChapterRevision: number})}
   | {op: 'thread.remove' | 'review.remove'; value: {id: string}};
 export interface StoryApplyArgs {novelId?: string; expectedRevision: number; requestId?: string; operations: StoryOperation[]}
 export interface StoryOperationResult {op: StoryOperationName; id?: string; chapterId?: string}
 export interface StoryApplyResult extends StorySnapshot {revision: number; results: StoryOperationResult[]}
-export type StoryContextKind = 'brief' | 'outline' | 'tracking' | 'manuscript' | 'setting' | 'commitment' | 'thread' | 'review' | 'unit' | 'style';
+export type StoryContextKind = 'brief' | 'outline' | 'tracking' | 'manuscript' | 'setting' | 'commitment' | 'thread' | 'review' | 'unit' | 'style' | 'reference';
 export interface StoryContextItem {
   kind: StoryContextKind; id: string; chapterId?: string; revision?: number; title: string; content: string; truncated: boolean;
 }
