@@ -46,6 +46,7 @@ npm run check:build
 | --- | --- |
 | 正文编辑、同步和章节顺序 | `test:manuscript`、`test:chapter-order` |
 | 规划、设定与多页操作 | `test:graph`、`test:pages`、`test:ui-director-workspaces` |
+| 创作工作台（简报、章节、线索、审稿、卷纲、体检、节奏、文风） | `test:ui-story`、`test:ui-story-visuals` |
 | 嵌套目录与拖拽排序 | `test:ui-folders`、`test:ui-content-order` |
 | 正文查找与替换 | `test:manuscript-search`、`test:ui-manuscript-search` |
 | 桌宠、日期统计和会话范围 | `test:pet`、`test:records`、`test:session-access` |

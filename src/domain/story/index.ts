@@ -1,9 +1,14 @@
 import {randomUUID} from 'node:crypto';
-import type {StoryApplyResult, StoryNovel, StoryOperationResult, StoryReview, StoryThread} from '../../contracts/story.ts';
+import type {ChapterRhythm, StoryApplyResult, StoryNovel, StoryOperationResult, StoryReview, StoryThread, StoryUnit} from '../../contracts/story.ts';
 import {STORY_OPERATIONS} from '../../contracts/story.ts';
-import {BRIEF_FIELDS, chapter, copy, fail, fields, freshChapter, isObject, oneOf, own, readStory, revision, sourceStale, storySnapshot, string, validId, validateOutline, validateReview, validateStory, validateThread, validateTracking} from './model.ts';
+import {BRIEF_FIELDS, chapter, copy, emptyStyle, fail, fields, freshChapter, isObject, oneOf, own, readStory, revision, sourceStale, storySnapshot, storySnapshotWrite, string, validId, validateOutline, validateReview, validateRhythm, validateStory, validateStoryLine, validateStoryUnit, validateStyle, validateThread, validateTracking} from './model.ts';
 import {storyContext} from './context.ts';
-export {defaultStory, readStory, storySnapshot, validateStory} from './model.ts';
+import {detectChapter, detectNovel} from './detect/index.ts';
+export {defaultStory, normalizeStory, readStory, storySnapshot, storySnapshotWrite, validateStory} from './model.ts';
+
+/** A new unit is a plan with nothing claimed yet; the author fills what matters. */
+const unitDefaults = () => ({order: 0, promise: '', emotionEngine: '', causeEntry: '', blocker: '', choice: '', payoff: '', hook: '', lineIds: [], chapterIds: [], contractRisk: ''});
+const lineDefaults = () => ({kind: 'subplot', driver: '', junction: '', canCarryChapter: 'no'});
 
 export function storyAction(novel: StoryNovel, action: string, args: Record<string, unknown>) {
   if (action === 'story.get') {
@@ -11,6 +16,13 @@ export function storyAction(novel: StoryNovel, action: string, args: Record<stri
   }
   if (action === 'story.context.get') {
     fields(args, ['novelId', 'chapterId', 'maxChars'], 'story.context.get'); return storyContext(novel, args);
+  }
+  // Read-only: the detector reports candidates and never edits prose.
+  if (action === 'story.detect') {
+    fields(args, ['novelId', 'chapterId', 'limit'], 'story.detect'); return detectNovel(novel, args);
+  }
+  if (action === 'story.detect.get') {
+    fields(args, ['novelId', 'chapterId'], 'story.detect.get'); return detectChapter(novel, args.chapterId as string);
   }
   if (action !== 'story.apply') fail('UNKNOWN_ACTION', action);
   return applyStory(novel, args);
@@ -47,9 +59,13 @@ export function applyStory(novel: StoryNovel, args: Record<string, unknown>): St
       validateOutline(value, novel, 'INVALID_INPUT', true); draft.outlines[value.chapterId] = value;
       results.push({op: 'outline.upsert', chapterId: value.chapterId});
     } else if (operation.op === 'tracking.commit') {
-      fields(value, ['chapterId', 'chapterRevision', 'expectedChapterRevision', 'summary', 'storyTime', 'location', 'activeCharacterIds', 'commitments', 'risks'], 'tracking.commit');
+      fields(value, ['chapterId', 'chapterRevision', 'expectedChapterRevision', 'summary', 'storyTime', 'location', 'activeCharacterIds', 'commitments', 'risks', 'authorTruth', 'readerKnown'], 'tracking.commit');
       const current = freshChapter(novel, value.chapterId, value.expectedChapterRevision);
       if (value.chapterRevision !== undefined && value.chapterRevision !== current.revision) fail('CONFLICT', 'tracking.chapterRevision 与当前正文版本不符');
+      // Older records and older callers predate the dual timeline; keep their
+      // existing lists and default only what is actually absent.
+      value.authorTruth = value.authorTruth === undefined ? draft.tracking[current.id]?.authorTruth ?? [] : value.authorTruth;
+      value.readerKnown = value.readerKnown === undefined ? draft.tracking[current.id]?.readerKnown ?? [] : value.readerKnown;
       delete value.expectedChapterRevision; value.chapterRevision = current.revision;
       validateTracking(value, novel, 'INVALID_INPUT', true); draft.tracking[current.id] = value;
       results.push({op: 'tracking.commit', chapterId: current.id});
@@ -69,7 +85,8 @@ export function applyStory(novel: StoryNovel, args: Record<string, unknown>): St
       const id = value.id === undefined ? randomUUID() : value.id; validId(id, 'review.id');
       if (value.id !== undefined && !own(draft.reviews, id)) fail('NOT_FOUND', `审稿问题不存在：${id}`);
       const previous = draft.reviews[id];
-      const current = freshChapter(novel, value.chapterId ?? previous?.chapterId, value.expectedChapterRevision);
+      // review.remove carries only an id; upsert always resolves a real chapter.
+      const current = freshChapter(novel, value.chapterId ?? previous?.chapterId, value.expectedChapterRevision as number);
       delete value.expectedChapterRevision; delete value.chapterRevision;
       // A status change is not a fresh review of edited prose. Even full-form
       // submissions keep their old evidence version when those fields match.
@@ -77,6 +94,59 @@ export function applyStory(novel: StoryNovel, args: Record<string, unknown>): St
       const next = {...previous, ...value, id, chapterId: current.id, chapterRevision: changedEvidence ? current.revision : previous.chapterRevision};
       validateReview(next, novel); draft.reviews[id] = next;
       results.push({op: 'review.upsert', id, chapterId: current.id});
+    } else if (operation.op === 'unit.upsert') {
+      fields(value, ['id', 'title', 'volumeId', 'order', 'promise', 'emotionEngine', 'causeEntry', 'blocker', 'choice', 'payoff', 'hook', 'lineIds', 'chapterIds', 'contractRisk', 'retired'], 'unit.upsert');
+      const id = value.id === undefined ? randomUUID() : value.id; validId(id, 'unit.id');
+      if (value.id !== undefined && !own(draft.units, id)) fail('NOT_FOUND', `剧情单元不存在：${id}`);
+      const previous = draft.units[id], merged = {...previous, ...value, id};
+      const order = merged.order ?? Object.keys(draft.units).length;
+      const next = {...unitDefaults(), ...merged, id, order,
+        volumeId: merged.volumeId === undefined ? null : merged.volumeId,
+        lineIds: merged.lineIds ?? [], chapterIds: merged.chapterIds ?? []};
+      validateStoryUnit(next, novel, draft.storylines, 'INVALID_INPUT', true);
+      draft.units[id] = next as StoryUnit; results.push({op: 'unit.upsert', id});
+    } else if (operation.op === 'storyline.upsert') {
+      fields(value, ['id', 'title', 'kind', 'driver', 'junction', 'canCarryChapter'], 'storyline.upsert');
+      const id = value.id === undefined ? randomUUID() : value.id; validId(id, 'storyline.id');
+      if (value.id !== undefined && !own(draft.storylines, id)) fail('NOT_FOUND', `故事线不存在：${id}`);
+      const previous = draft.storylines[id];
+      const next = {...lineDefaults(), ...previous, ...value, id, kind: value.kind ?? previous?.kind ?? 'subplot', canCarryChapter: value.canCarryChapter ?? previous?.canCarryChapter ?? 'no'};
+      validateStoryLine(next); draft.storylines[id] = next;
+      results.push({op: 'storyline.upsert', id});
+    } else if (operation.op === 'unit.remove' || operation.op === 'storyline.remove') {
+      fields(value, ['id'], `${label}.value`); validId(value.id, 'id');
+      if (operation.op === 'unit.remove') {
+        if (!own(draft.units, value.id)) fail('NOT_FOUND', '待移除的剧情单元不存在');
+        delete draft.units[value.id]; results.push({op: 'unit.remove', id: value.id});
+      } else {
+        if (!own(draft.storylines, value.id)) fail('NOT_FOUND', '待移除的故事线不存在');
+        // A line referenced by a unit is a plan the author still relies on.
+        const users = Object.values(draft.units).filter(unit => unit.lineIds.includes(value.id as string)).map(unit => unit.title);
+        if (users.length) fail('IN_USE', `故事线仍被剧情单元引用：${users.join('、')}；请先在单元中取消引用`);
+        delete draft.storylines[value.id]; results.push({op: 'storyline.remove', id: value.id});
+      }
+    } else if (operation.op === 'rhythm.upsert') {
+      fields(value, ['chapterId', 'chapterRevision', 'expectedChapterRevision', 'tone', 'role', 'note'], 'rhythm.upsert');
+      const current = freshChapter(novel, value.chapterId, value.expectedChapterRevision);
+      delete value.expectedChapterRevision; delete value.chapterRevision;
+      const next = {...{tone: 'other', role: '', note: ''}, ...draft.rhythms[current.id], ...value, chapterId: current.id, chapterRevision: current.revision};
+      validateRhythm(next, novel); draft.rhythms[current.id] = next as ChapterRhythm;
+      results.push({op: 'rhythm.upsert', chapterId: current.id});
+    } else if (operation.op === 'rhythm.remove') {
+      fields(value, ['chapterId'], 'rhythm.remove'); validId(value.chapterId, 'chapterId');
+      if (!own(draft.rhythms, value.chapterId)) fail('NOT_FOUND', '该章没有节奏记录');
+      delete draft.rhythms[value.chapterId]; results.push({op: 'rhythm.remove', chapterId: value.chapterId});
+    } else if (operation.op === 'style.upsert') {
+      fields(value, ['chapterId', 'chapterRevision', 'expectedChapterRevision', 'targetSentence', 'dialogueRatio', 'viewpoint', 'tense', 'diction', 'avoid', 'anchors'], 'style.upsert');
+      // The dossier may cite the chapter it was derived from; that citation keeps
+      // its own version so a later edit of that chapter shows up as "source changed".
+      const cited = value.chapterId === undefined ? draft.style.chapterId : value.chapterId as string | null;
+      delete value.chapterId; delete value.chapterRevision; delete value.expectedChapterRevision;
+      const citation = cited === null || cited === undefined ? {chapterId: null, chapterRevision: null}
+        : {chapterId: freshChapter(novel, cited, novel.chapters[cited]?.revision).id, chapterRevision: novel.chapters[cited]!.revision};
+      const next = {...emptyStyle(), ...draft.style, ...value, ...citation};
+      validateStyle(next, 'INVALID_INPUT', novel); draft.style = next;
+      results.push({op: 'style.upsert'});
     } else if (operation.op === 'thread.remove' || operation.op === 'review.remove') {
       fields(value, ['id'], `${label}.value`); validId(value.id, 'id');
       const map = operation.op === 'thread.remove' ? draft.threads : draft.reviews;
@@ -85,7 +155,7 @@ export function applyStory(novel: StoryNovel, args: Record<string, unknown>): St
     }
   }
   draft.revision++; validateStory(draft, novel, 'INVALID_INPUT');
-  const result = {...storySnapshot(novel, draft), revision: draft.revision, results};
+  const result = {...storySnapshotWrite(novel, draft), revision: draft.revision, results};
   novel.story = draft;
   return result;
 }

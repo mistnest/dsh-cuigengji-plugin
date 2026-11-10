@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { STORY_OPERATIONS } from "../../contracts/story.js";
-import { BRIEF_FIELDS, chapter, copy, fail, fields, freshChapter, isObject, oneOf, own, readStory, revision, sourceStale, storySnapshot, string, validId, validateOutline, validateReview, validateStory, validateThread, validateTracking } from "./model.js";
+import { BRIEF_FIELDS, chapter, copy, emptyStyle, fail, fields, freshChapter, isObject, oneOf, own, readStory, revision, sourceStale, storySnapshot, storySnapshotWrite, string, validId, validateOutline, validateReview, validateRhythm, validateStory, validateStoryLine, validateStoryUnit, validateStyle, validateThread, validateTracking } from "./model.js";
 import { storyContext } from "./context.js";
-import { defaultStory, readStory as readStory2, storySnapshot as storySnapshot2, validateStory as validateStory2 } from "./model.js";
+import { detectChapter, detectNovel } from "./detect/index.js";
+import { defaultStory, normalizeStory, readStory as readStory2, storySnapshot as storySnapshot2, storySnapshotWrite as storySnapshotWrite2, validateStory as validateStory2 } from "./model.js";
+const unitDefaults = () => ({ order: 0, promise: "", emotionEngine: "", causeEntry: "", blocker: "", choice: "", payoff: "", hook: "", lineIds: [], chapterIds: [], contractRisk: "" });
+const lineDefaults = () => ({ kind: "subplot", driver: "", junction: "", canCarryChapter: "no" });
 function storyAction(novel, action, args) {
   if (action === "story.get") {
     fields(args, ["novelId"], "story.get");
@@ -11,6 +14,14 @@ function storyAction(novel, action, args) {
   if (action === "story.context.get") {
     fields(args, ["novelId", "chapterId", "maxChars"], "story.context.get");
     return storyContext(novel, args);
+  }
+  if (action === "story.detect") {
+    fields(args, ["novelId", "chapterId", "limit"], "story.detect");
+    return detectNovel(novel, args);
+  }
+  if (action === "story.detect.get") {
+    fields(args, ["novelId", "chapterId"], "story.detect.get");
+    return detectChapter(novel, args.chapterId);
   }
   if (action !== "story.apply") fail("UNKNOWN_ACTION", action);
   return applyStory(novel, args);
@@ -55,9 +66,11 @@ function applyStory(novel, args) {
       draft.outlines[value.chapterId] = value;
       results.push({ op: "outline.upsert", chapterId: value.chapterId });
     } else if (operation.op === "tracking.commit") {
-      fields(value, ["chapterId", "chapterRevision", "expectedChapterRevision", "summary", "storyTime", "location", "activeCharacterIds", "commitments", "risks"], "tracking.commit");
+      fields(value, ["chapterId", "chapterRevision", "expectedChapterRevision", "summary", "storyTime", "location", "activeCharacterIds", "commitments", "risks", "authorTruth", "readerKnown"], "tracking.commit");
       const current = freshChapter(novel, value.chapterId, value.expectedChapterRevision);
       if (value.chapterRevision !== void 0 && value.chapterRevision !== current.revision) fail("CONFLICT", "tracking.chapterRevision \u4E0E\u5F53\u524D\u6B63\u6587\u7248\u672C\u4E0D\u7B26");
+      value.authorTruth = value.authorTruth === void 0 ? draft.tracking[current.id]?.authorTruth ?? [] : value.authorTruth;
+      value.readerKnown = value.readerKnown === void 0 ? draft.tracking[current.id]?.readerKnown ?? [] : value.readerKnown;
       delete value.expectedChapterRevision;
       value.chapterRevision = current.revision;
       validateTracking(value, novel, "INVALID_INPUT", true);
@@ -90,6 +103,75 @@ function applyStory(novel, args) {
       validateReview(next, novel);
       draft.reviews[id] = next;
       results.push({ op: "review.upsert", id, chapterId: current.id });
+    } else if (operation.op === "unit.upsert") {
+      fields(value, ["id", "title", "volumeId", "order", "promise", "emotionEngine", "causeEntry", "blocker", "choice", "payoff", "hook", "lineIds", "chapterIds", "contractRisk", "retired"], "unit.upsert");
+      const id = value.id === void 0 ? randomUUID() : value.id;
+      validId(id, "unit.id");
+      if (value.id !== void 0 && !own(draft.units, id)) fail("NOT_FOUND", `\u5267\u60C5\u5355\u5143\u4E0D\u5B58\u5728\uFF1A${id}`);
+      const previous = draft.units[id], merged = { ...previous, ...value, id };
+      const order = merged.order ?? Object.keys(draft.units).length;
+      const next = {
+        ...unitDefaults(),
+        ...merged,
+        id,
+        order,
+        volumeId: merged.volumeId === void 0 ? null : merged.volumeId,
+        lineIds: merged.lineIds ?? [],
+        chapterIds: merged.chapterIds ?? []
+      };
+      validateStoryUnit(next, novel, draft.storylines, "INVALID_INPUT", true);
+      draft.units[id] = next;
+      results.push({ op: "unit.upsert", id });
+    } else if (operation.op === "storyline.upsert") {
+      fields(value, ["id", "title", "kind", "driver", "junction", "canCarryChapter"], "storyline.upsert");
+      const id = value.id === void 0 ? randomUUID() : value.id;
+      validId(id, "storyline.id");
+      if (value.id !== void 0 && !own(draft.storylines, id)) fail("NOT_FOUND", `\u6545\u4E8B\u7EBF\u4E0D\u5B58\u5728\uFF1A${id}`);
+      const previous = draft.storylines[id];
+      const next = { ...lineDefaults(), ...previous, ...value, id, kind: value.kind ?? previous?.kind ?? "subplot", canCarryChapter: value.canCarryChapter ?? previous?.canCarryChapter ?? "no" };
+      validateStoryLine(next);
+      draft.storylines[id] = next;
+      results.push({ op: "storyline.upsert", id });
+    } else if (operation.op === "unit.remove" || operation.op === "storyline.remove") {
+      fields(value, ["id"], `${label}.value`);
+      validId(value.id, "id");
+      if (operation.op === "unit.remove") {
+        if (!own(draft.units, value.id)) fail("NOT_FOUND", "\u5F85\u79FB\u9664\u7684\u5267\u60C5\u5355\u5143\u4E0D\u5B58\u5728");
+        delete draft.units[value.id];
+        results.push({ op: "unit.remove", id: value.id });
+      } else {
+        if (!own(draft.storylines, value.id)) fail("NOT_FOUND", "\u5F85\u79FB\u9664\u7684\u6545\u4E8B\u7EBF\u4E0D\u5B58\u5728");
+        const users = Object.values(draft.units).filter((unit) => unit.lineIds.includes(value.id)).map((unit) => unit.title);
+        if (users.length) fail("IN_USE", `\u6545\u4E8B\u7EBF\u4ECD\u88AB\u5267\u60C5\u5355\u5143\u5F15\u7528\uFF1A${users.join("\u3001")}\uFF1B\u8BF7\u5148\u5728\u5355\u5143\u4E2D\u53D6\u6D88\u5F15\u7528`);
+        delete draft.storylines[value.id];
+        results.push({ op: "storyline.remove", id: value.id });
+      }
+    } else if (operation.op === "rhythm.upsert") {
+      fields(value, ["chapterId", "chapterRevision", "expectedChapterRevision", "tone", "role", "note"], "rhythm.upsert");
+      const current = freshChapter(novel, value.chapterId, value.expectedChapterRevision);
+      delete value.expectedChapterRevision;
+      delete value.chapterRevision;
+      const next = { ...{ tone: "other", role: "", note: "" }, ...draft.rhythms[current.id], ...value, chapterId: current.id, chapterRevision: current.revision };
+      validateRhythm(next, novel);
+      draft.rhythms[current.id] = next;
+      results.push({ op: "rhythm.upsert", chapterId: current.id });
+    } else if (operation.op === "rhythm.remove") {
+      fields(value, ["chapterId"], "rhythm.remove");
+      validId(value.chapterId, "chapterId");
+      if (!own(draft.rhythms, value.chapterId)) fail("NOT_FOUND", "\u8BE5\u7AE0\u6CA1\u6709\u8282\u594F\u8BB0\u5F55");
+      delete draft.rhythms[value.chapterId];
+      results.push({ op: "rhythm.remove", chapterId: value.chapterId });
+    } else if (operation.op === "style.upsert") {
+      fields(value, ["chapterId", "chapterRevision", "expectedChapterRevision", "targetSentence", "dialogueRatio", "viewpoint", "tense", "diction", "avoid", "anchors"], "style.upsert");
+      const cited = value.chapterId === void 0 ? draft.style.chapterId : value.chapterId;
+      delete value.chapterId;
+      delete value.chapterRevision;
+      delete value.expectedChapterRevision;
+      const citation = cited === null || cited === void 0 ? { chapterId: null, chapterRevision: null } : { chapterId: freshChapter(novel, cited, novel.chapters[cited]?.revision).id, chapterRevision: novel.chapters[cited].revision };
+      const next = { ...emptyStyle(), ...draft.style, ...value, ...citation };
+      validateStyle(next, "INVALID_INPUT", novel);
+      draft.style = next;
+      results.push({ op: "style.upsert" });
     } else if (operation.op === "thread.remove" || operation.op === "review.remove") {
       fields(value, ["id"], `${label}.value`);
       validId(value.id, "id");
@@ -101,15 +183,17 @@ function applyStory(novel, args) {
   }
   draft.revision++;
   validateStory(draft, novel, "INVALID_INPUT");
-  const result = { ...storySnapshot(novel, draft), revision: draft.revision, results };
+  const result = { ...storySnapshotWrite(novel, draft), revision: draft.revision, results };
   novel.story = draft;
   return result;
 }
 export {
   applyStory,
   defaultStory,
+  normalizeStory,
   readStory2 as readStory,
   storyAction,
   storySnapshot2 as storySnapshot,
+  storySnapshotWrite2 as storySnapshotWrite,
   validateStory2 as validateStory
 };

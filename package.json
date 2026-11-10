@@ -1,6 +1,6 @@
 {
   "name": "dsh-cuigengji-plugin",
-  "version": "0.5.2-story.1",
+  "version": "0.5.2-story.3",
   "description": "催更姬：给大肥鱼一个小说工作台，一起写正文、讨论情节、整理人物与世界设定。",
   "icon": "./src/client/assets/plugin-icon.png",
   "type": "module",
@@ -53,6 +53,8 @@
     "test:live": "node scripts/live-smoke.mjs",
     "typecheck": "tsc --noEmit",
     "test:ui": "node tests/ui-smoke.mjs",
+    "test:ui-story": "node tests/ui-story.mjs",
+    "test:ui-story-visuals": "node tests/ui-story-visuals.mjs",
     "preview:workbench": "node scripts/preview-workbench.mjs",
     "test:layout": "node tests/ui-layout.mjs",
     "test:controls": "node tests/ui-controls.mjs",

@@ -57,7 +57,10 @@ test('legacy projects return defaults without adding story, writing files, or re
   assert.deepEqual(snapshot.story, defaultStory()); assert.equal(snapshot.chapters[0].id, chapter.id);
   assert.deepEqual(snapshot.diagnostics.untrackedChapterIds, [chapter.id]); assert.equal(snapshot.characters[0].summary, '短摘要');
   assert.equal(JSON.stringify(snapshot).includes('OLD_CHARACTER_BODY'), false);
-  assert.equal(reads.some(path => /chapters\/(?!index\.json)|settings\/entries\//.test(path)), false);
+  // story.get measures real prose for the style board, so it reads the saved
+  // chapter bodies — but never setting bodies, and never writes anything.
+  assert.equal(reads.some(path => /settings\/entries\//.test(path)), false);
+  assert.equal(reads.some(path => /chapters\/(?!index\.json)/.test(path)), true, 'the style board needs real prose');
   await s.call('story.context.get', {chapterId: chapter.id});
   assert.deepEqual(await disk(s.store.root), before);
   assert.equal(Object.hasOwn((await s.store.load()).novels[s.novel.id], 'story'), false);
@@ -74,7 +77,11 @@ test('apply returns the complete read model, keeps chapter facts separate, and r
   assert.deepEqual(snapshot.diagnostics.staleThreadIds, []);
   const result = await s.apply([{op: 'configure', value: {brief: {style: '短句，动作推进'}}}]);
   assert.equal(result.revision, 2); assert.equal(result.story.revision, 2); assert.deepEqual(result.results, [{op: 'configure'}]);
-  assert.equal(result.story.brief.premise, '港口谜案'); assert.deepEqual(result.chapters, snapshot.chapters);
+  assert.equal(result.story.brief.premise, '港口谜案');
+  // story.apply answers with the plan it wrote; prose measurements stay unread
+  // there so a write never claims a prose read it did not perform.
+  assert.deepEqual(result.chapters.map(ch => [ch.id, ch.charCount]), snapshot.chapters.map(ch => [ch.id, ch.charCount]));
+  assert.equal(result.chapters.every(ch => ch.sentences === 0 && ch.paragraphs === 0), true);
   assert.equal((await s.call('chapter.get', {chapterId: s.c1.id})).content, '林澈在港口捡到一枚铜钥匙。');
 });
 

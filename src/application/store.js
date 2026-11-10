@@ -24,7 +24,7 @@ import {memoryVersionFields,memoryHistory} from '../domain/memory/history.ts';
 import {staleMemoryEntities} from '../domain/memory/invalidation.ts';
 import {directoryKey,orderedDirectory,directorySnapshot,checkDirectorySnapshot,planDirectoryMove,validateDirectoryOrder} from '../domain/directory/order.ts';
 import {findProse,replaceLiteral} from '../domain/chapters/find.ts';
-import {storyAction, validateStory} from '../domain/story/index.ts';
+import {normalizeStory, storyAction} from '../domain/story/index.ts';
 
 export class StoreError extends Error {
   constructor(code, message) { super(message); this.name = 'StoreError'; this.code = code; }
@@ -696,7 +696,7 @@ export class Store extends ProjectStore {
     }
     for (const edge of Object.values(n.edges)) { if (!own(n.nodes, edge.from) || !own(n.nodes, edge.to)) fail('INVALID_BACKUP', '关系端点不存在'); Object.assign(edge, memoryFields(edge, n, true, true)); }
     if (n.plan && (typeof n.plan.content !== 'string' || !Number.isSafeInteger(n.plan.revision) || n.plan.revision < 1 || typeof n.plan.approved !== 'boolean')) fail('INVALID_BACKUP', '规划格式无效');
-    if (n.story !== undefined) validateStory(n.story, n, 'INVALID_BACKUP');
+    if (n.story !== undefined) normalizeStory(n.story, n, 'INVALID_BACKUP');
     validateDirectoryOrder(n.directoryOrder);
     validateMemoryGroups(n);
     if (n.planning) validatePlanning(n.planning,n);

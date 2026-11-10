@@ -7,6 +7,7 @@ import {resolve,join} from 'node:path';
 import {LibraryService} from '../src/application/libraries/service.ts';
 import {convertLegacyExport} from '../src/infrastructure/migrations/legacy.js';
 import {seedCanvasDemo} from './canvas-demo.mjs';
+import {seedStoryDemo} from './story-demo.mjs';
 import {seedReadableCanvasDemo} from './readable-canvas-demo.mjs';
 
 const root=resolve(import.meta.dirname,'..');
@@ -23,6 +24,8 @@ if(readableCanvas){
   novelId=await seedReadableCanvasDemo(store,actor);
 }else if(process.argv[2]==='--canvas-demo'){
   novelId=await seedCanvasDemo(store,actor);
+}else if(process.argv.includes('--story-demo')){
+  novelId=(await seedStoryDemo(store,actor)).novelId;
 }else if(empty){
   // A genuine first launch, with no works and no session binding.
 }else if(process.argv[2]&&!process.argv[2].startsWith('--')){
@@ -34,8 +37,7 @@ if(readableCanvas){
   await store.dispatch('chapter.create',{novelId,title:'第一章 雨夜来信',content:'　　雨停以后，街道重新安静下来。窗边的灯仍亮着，故事还在继续。'},actor);
 }
 if(novelId&&!welcome&&!empty)await store.dispatch('binding.set',{novelId},actor);
-const initialView=readableCanvas?"if(localStorage.getItem('cuigengji:ui:production-preview:page')===null)localStorage.setItem('cuigengji:ui:production-preview:page',JSON.stringify('plan'));":"";
-const previewEntry=process.argv.includes('--sidebar-host')?"import{mountSidebarHost}from'./tests/fixtures/sidebar-host.tsx';mountSidebarHost(rpc);":"createRoot(document.getElementById('root')).render(<Workbench sessionId=\"production-preview\" rpc={rpc}/>);";
+const initialView=readableCanvas?"if(localStorage.getItem('cuigengji:ui:production-preview:page')===null)localStorage.setItem('cuigengji:ui:production-preview:page',JSON.stringify('plan'));":process.argv.includes('--story-demo')?"if(localStorage.getItem('cuigengji:ui:production-preview:page')===null)localStorage.setItem('cuigengji:ui:production-preview:page',JSON.stringify('story'));":"";const previewEntry=process.argv.includes('--sidebar-host')?"import{mountSidebarHost}from'./tests/fixtures/sidebar-host.tsx';mountSidebarHost(rpc);":"createRoot(document.getElementById('root')).render(<Workbench sessionId=\"production-preview\" rpc={rpc}/>);";
 const output=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{Workbench}from'./src/client/index.tsx';${initialView}const rpc=async(action,args)=>{const response=await fetch('/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,args})});const result=await response.json();if(!response.ok)throw new Error(result.error);return result;};${previewEntry}`,resolveDir:root,loader:'tsx'},bundle:true,write:false,format:'iife',loader:{'.png':'dataurl'},define:{'process.env.NODE_ENV':'"development"'}});
 const server=createServer(async(req,res)=>{
   try{

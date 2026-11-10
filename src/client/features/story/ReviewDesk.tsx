@@ -4,6 +4,7 @@ import {useWorkspacePreference} from '../../shared/workspace-state.ts';
 import {saveShortcut} from '../../shared/ui.jsx';
 import {Badge, ChapterSelect, DraftFooter, useStoryDraft} from './shared.tsx';
 import {categoryNames, chapterTitle, filterReviews, isReviewStale, reviewStatuses, severityNames} from './model.ts';
+import {ReviewMatrix} from './ReviewMatrix.tsx';
 import type {StoryActions} from './useStoryWorkspace.ts';
 
 type Props=StoryActions&{onChapter:(id?:string)=>void};
@@ -12,9 +13,10 @@ export function ReviewDesk(props:Props) {
   const [severity,setSeverity]=useWorkspacePreference(`${snapshot.novelId}:story-review-severity`,'');
   const [status,setStatus]=useWorkspacePreference(`${snapshot.novelId}:story-review-status`,'open');
   const [chapterId,setChapterId]=useWorkspacePreference(`${snapshot.novelId}:story-review-chapter`,'');
+  const [category,setCategory]=useWorkspacePreference(`${snapshot.novelId}:story-review-category`,'');
   const [staleOnly,setStaleOnly]=useWorkspacePreference(`${snapshot.novelId}:story-review-stale`,false);
   const [editing,setEditing]=useState<{id?:string;chapterId:string}|null>(null);
-  const reviews=Object.values(snapshot.story.reviews),visible=filterReviews(reviews,{severity,status,chapterId,staleOnly},snapshot);
+  const reviews=Object.values(snapshot.story.reviews),visible=filterReviews(reviews,{severity,status,chapterId,category,staleOnly},snapshot);
   const updateStatus=(review:StoryReview,next:StoryReview['status'])=>{
     const chapter=snapshot.chapters.find(value=>value.id===review.chapterId);if(!chapter)return;
     void save([{op:'review.upsert',value:{id:review.id,status:next,expectedChapterRevision:chapter.revision}}],snapshot.story.revision,[{chapterId:chapter.id,revision:chapter.revision}]);
@@ -22,7 +24,8 @@ export function ReviewDesk(props:Props) {
   return <section className="story-review-workspace" aria-label="证据审稿">
     <div className="story-section-heading"><div><h2>让每条修改意见都有正文依据</h2><p>记录定位、原文证据、问题和修法，优先处理阻断项。</p></div><button disabled={busy||!snapshot.chapters.length} onClick={()=>setEditing({chapterId:chapterId||snapshot.chapters[0].id})}>＋ 记录审稿问题</button></div>
     {editing?<ReviewEditor key={editing.id||'new'} {...props} review={editing.id?snapshot.story.reviews[editing.id]:undefined} initialChapterId={editing.chapterId} onClose={()=>setEditing(null)}/>:<>
-      <div className="story-review-filters" role="group" aria-label="审稿筛选"><label>严重程度<select value={severity} onChange={event=>setSeverity(event.target.value)}><option value="">全部程度</option>{Object.entries(severityNames).map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></label><label>审稿状态<select value={status} onChange={event=>setStatus(event.target.value)}><option value="">全部状态</option>{Object.entries(reviewStatuses).map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></label><ChapterSelect snapshot={snapshot} value={chapterId} optional label="筛选审稿章节" onChange={setChapterId}/><label className="story-check"><input type="checkbox" checked={staleOnly} onChange={event=>setStaleOnly(event.target.checked)}/>只看来源已变化</label></div>
+      <ReviewMatrix snapshot={snapshot} onSelect={(nextChapter,nextCategory,nextSeverity)=>{setChapterId(nextChapter);setCategory(nextCategory);setSeverity(nextSeverity);setStatus('open');}}/>
+      <div className="story-review-filters" role="group" aria-label="审稿筛选"><label>严重程度<select value={severity} onChange={event=>setSeverity(event.target.value)}><option value="">全部程度</option>{Object.entries(severityNames).map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></label><label>审稿状态<select value={status} onChange={event=>setStatus(event.target.value)}><option value="">全部状态</option>{Object.entries(reviewStatuses).map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></label><label>问题类别<select value={category} onChange={event=>setCategory(event.target.value)}><option value="">全部类别</option>{Object.entries(categoryNames).map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></label><ChapterSelect snapshot={snapshot} value={chapterId} optional label="筛选审稿章节" onChange={setChapterId}/><label className="story-check"><input type="checkbox" checked={staleOnly} onChange={event=>setStaleOnly(event.target.checked)}/>只看来源已变化</label></div>
       <p className="story-muted" role="status">共 {reviews.length} 条审稿记录 · 当前显示 {visible.length} 条{snapshot.diagnostics.staleReviewIds.length?` · ${snapshot.diagnostics.staleReviewIds.length} 条来源已变化`:''}</p>
       {visible.length?<div className="story-review-list">{visible.map(review=>{const stale=isReviewStale(snapshot,review),chapter=snapshot.chapters.find(value=>value.id===review.chapterId);return <article className="story-review-card" key={review.id}>
         <div className="story-card-flags"><Badge tone={review.severity==='blocking'?'error':review.severity==='suggestion'?'warning':'idle'}>{severityNames[review.severity]}</Badge><Badge tone={review.status==='resolved'?'success':'idle'}>{reviewStatuses[review.status]}</Badge><Badge>{categoryNames[review.category]}</Badge>{stale&&<Badge tone="warning">来源已变化</Badge>}</div>

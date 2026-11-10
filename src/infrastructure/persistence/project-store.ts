@@ -236,8 +236,7 @@ export class ProjectStore extends AtomicStore<Workspace> {
       const body = await this.json(`${bookPath(book.id, view.library.directories)}/chapters/${storedChapterFile(book.chapters[id], id, view.library.storageVersion)}`, view);
       if (!object(body) || body.id !== id || typeof body.content !== 'string' || body.contentHash !== digest(body.content)) corrupt('章节正文或哈希无效');
       if (!isDeepStrictEqual(without(body, ['content', 'versions']), book.chapters[id].metadata) || body.content.length !== book.chapters[id].charCount) corrupt('章节索引与正文不一致');
-      novel.chapters[id] = { ...body, versions: novel.chapters[id].versions }; book.chapterBodies.add(id);
-    }
+      novel.chapters[id] = { ...body, versions: novel.chapters[id].versions }; book.chapterBodies.add(id);}
     if (history && !book.chapterHistories.has(id)) {
       novel.chapters[id].versions = await this.json(`${bookPath(book.id, view.library.directories)}/history/chapters/${fileId(id)}.json`, view);
       if (!Array.isArray(novel.chapters[id].versions)) corrupt('章节历史无效');
@@ -540,6 +539,15 @@ export class ProjectStore extends AtomicStore<Workspace> {
       // setting facts come from metadata, never a full-book hydration.
       const selected = chapters.slice(0, boundary + 1).filter(chapter => chapterCounts(chapter as {content:string}).textCount > 0).slice(-3);
       for (const chapter of selected) await this.chapter(novel, book, view, chapter.id);
+    }
+    // The story board measures real prose (style samples) and reports AI-flavor
+    // candidates. Both need bodies; loading them is a read, never a write, and
+    // save() still skips an unchanged workspace.
+    if (['story.get', 'story.detect', 'story.detect.get'].includes(action)) {
+      const targets = action === 'story.detect.get'
+        ? (args.chapterId ? [args.chapterId] : [])
+        : (Object.values(novel.chapters) as Row[]).filter(chapter => !chapter.deleted).slice(0, 200).map(chapter => chapter.id);
+      for (const chapterId of targets) if (own(novel.chapters, chapterId)) await this.chapter(novel, book, view, chapterId);
     }
     const nodeIds = new Set<string>();
     if(action==='graph.workspace.ensure'&&Object.keys(novel.memoryPages||{}).length)for(const id of Object.keys(novel.nodes))if(novel.nodes[id].pageId)nodeIds.add(id);

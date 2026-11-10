@@ -1,5 +1,5 @@
 import {chapterCounts} from '../chapters/metadata.ts';
-import type {StoryBrief, StoryState, StoryOutline, StoryTracking, StoryThread, StoryReview, StoryNovel, StorySnapshot, StoryDiagnostics} from '../../contracts/story.ts';
+import type {StoryBrief, StoryState, StoryOutline, StoryTracking, StoryThread, StoryReview, StoryNovel, StorySnapshot, StoryDiagnostics, StoryUnit, StoryLine, ChapterRhythm, StyleProfile, StyleComparison, StyleSample, StoryVolume} from '../../contracts/story.ts';
 
 export const BRIEF_FIELDS = ['premise', 'readerPromise', 'protagonistGoal', 'coreConflict', 'ending', 'style'] as const;
 export function fail(code: string, message: string): never {throw Object.assign(new Error(message), {code});}
@@ -47,7 +47,62 @@ export function freshChapter(novel: StoryNovel, id: unknown, expected: unknown) 
 }
 export const defaultStory = (): StoryState => ({schemaVersion: 1, revision: 0, mode: 'long', stage: 'idea',
   brief: Object.fromEntries(BRIEF_FIELDS.map(key => [key, ''])) as unknown as StoryBrief,
-  outlines: {}, tracking: {}, threads: {}, reviews: {}});
+  outlines: {}, tracking: {}, threads: {}, reviews: {},
+  units: {}, storylines: {}, rhythms: {}, style: emptyStyle()});
+const STYLE_TEXT_FIELDS = ['viewpoint', 'tense', 'diction', 'avoid'] as const;
+const RHYTHM_TONES = ['tense', 'light', 'sad', 'hot', 'satisfying', 'sweet', 'warm', 'horror', 'oppressive', 'other'] as const;
+const RHYTHM_ROLES = ['setup', 'escalate', 'turn', 'payoff', 'aftermath'] as const;
+export function emptyStyle(): StyleProfile {
+  return {chapterId: null, chapterRevision: null, targetSentence: null, dialogueRatio: null,
+    viewpoint: '', tense: '', diction: '', avoid: '', anchors: []};
+}
+/** The writing requirement is optional: a project without one is not invalid. */
+export function validateStyle(value: unknown, code = 'INVALID_INPUT', novel?: StoryNovel): asserts value is StyleProfile {
+  fields(value, ['chapterId', 'chapterRevision', 'targetSentence', 'dialogueRatio', ...STYLE_TEXT_FIELDS, 'anchors'], 'style', code);
+  // The style dossier may cite an anchor chapter; it must be a real one when given.
+  if (value.chapterId !== null) {if (novel) chapter(novel, value.chapterId, code, false); else validId(value.chapterId, 'style.chapterId', code); revision(value.chapterRevision, 'style.chapterRevision', code);}
+  else if (value.chapterRevision !== null) fail(code, 'style.chapterRevision 必须与 style.chapterId 同时为空');
+  for (const key of ['targetSentence', 'dialogueRatio'] as const) {
+    const item = value[key];
+    if (item !== null && (typeof item !== 'number' || !Number.isFinite(item) || item < 0 || item > (key === 'targetSentence' ? 400 : 100))) fail(code, `style.${key}超出允许范围`);
+  }
+  for (const key of STYLE_TEXT_FIELDS) string(value[key], `style.${key}`, 4000, false, code);
+  strings(value.anchors, 'style.anchors', 20, 2000, code);
+}
+export function validateStoryLine(value: unknown, code = 'INVALID_INPUT'): asserts value is StoryLine {
+  fields(value, ['id', 'title', 'kind', 'driver', 'junction', 'canCarryChapter'], 'storyline', code);
+  validId(value.id, 'storyline.id', code);
+  string(value.title, 'storyline.title', 300, true, code);
+  oneOf(value.kind, ['main', 'subplot'], 'storyline.kind', code);
+  oneOf(value.canCarryChapter, ['yes', 'half', 'no'], 'storyline.canCarryChapter', code);
+  for (const key of ['driver', 'junction'] as const) string(value[key], `storyline.${key}`, 2000, false, code);
+}
+export function validateStoryUnit(value: unknown, novel: StoryNovel, storylines: Record<string, StoryLine>, code = 'INVALID_INPUT', live = false): asserts value is StoryUnit {
+  fields(value, ['id', 'title', 'volumeId', 'order', 'promise', 'emotionEngine', 'causeEntry', 'blocker', 'choice', 'payoff', 'hook', 'lineIds', 'chapterIds', 'contractRisk', 'retired'], 'unit', code);
+  validId(value.id, 'unit.id', code);
+  string(value.title, 'unit.title', 300, true, code);
+  if (value.volumeId !== null) {
+    validId(value.volumeId, 'unit.volumeId', code);
+    const volumes = novel.volumes || {};
+    if (!own(volumes, value.volumeId) || (live && (volumes as Record<string, {deleted?: boolean}>)[value.volumeId].deleted)) fail(code, `卷不存在：${value.volumeId}`);
+  }
+  if (typeof value.order !== 'number' && typeof value.order !== 'string') fail(code, 'unit.order 必须是数字或文本');
+  if (typeof value.order === 'string' && value.order.length > 40) fail(code, 'unit.order 文本最多 40 个字符');
+  for (const key of ['promise', 'emotionEngine', 'causeEntry', 'blocker', 'choice', 'payoff', 'hook'] as const) string(value[key], `unit.${key}`, 4000, false, code);
+  oneOf(value.contractRisk, ['', 'safe', 'reinforce', 'broken'], 'unit.contractRisk', code);
+  strings(value.lineIds, 'unit.lineIds', 20, 200, code);
+  for (const id of value.lineIds) if (!own(storylines, id)) fail(code, `故事线不存在：${id}`);
+  strings(value.chapterIds, 'unit.chapterIds', 200, 200, code);
+  for (const id of value.chapterIds) chapter(novel, id, code, live);
+  if (value.retired !== undefined && typeof value.retired !== 'boolean') fail(code, 'unit.retired 必须是布尔值');
+}
+export function validateRhythm(value: unknown, novel: StoryNovel, code = 'INVALID_INPUT', live = false): asserts value is ChapterRhythm {
+  fields(value, ['chapterId', 'chapterRevision', 'tone', 'role', 'note'], 'rhythm', code);
+  chapterVersion(novel, value.chapterId, value.chapterRevision, code, live);
+  oneOf(value.tone, RHYTHM_TONES, 'rhythm.tone', code);
+  if (value.role !== '') oneOf(value.role, RHYTHM_ROLES, 'rhythm.role', code);
+  string(value.note, 'rhythm.note', 2000, false, code);
+}
 
 export function validateOutline(value: unknown, novel: StoryNovel, code = 'INVALID_INPUT', live = false): asserts value is StoryOutline {
   fields(value, ['chapterId', 'intent', 'beats', 'endingHook', 'minWords', 'maxWords'], 'outline', code);
@@ -58,7 +113,7 @@ export function validateOutline(value: unknown, novel: StoryNovel, code = 'INVAL
   if (value.minWords !== undefined && value.maxWords !== undefined && (value.minWords as number) > (value.maxWords as number)) fail(code, 'minWords 不能大于 maxWords');
 }
 export function validateTracking(value: unknown, novel: StoryNovel, code = 'INVALID_INPUT', live = false): asserts value is StoryTracking {
-  fields(value, ['chapterId', 'chapterRevision', 'summary', 'storyTime', 'location', 'activeCharacterIds', 'commitments', 'risks'], 'tracking', code);
+  fields(value, ['chapterId', 'chapterRevision', 'summary', 'storyTime', 'location', 'activeCharacterIds', 'commitments', 'risks', 'authorTruth', 'readerKnown'], 'tracking', code);
   chapterVersion(novel, value.chapterId, value.chapterRevision, code, live);
   string(value.summary, 'tracking.summary', 6000, true, code); string(value.storyTime, 'tracking.storyTime', 1000, false, code); string(value.location, 'tracking.location', 1000, false, code);
   strings(value.activeCharacterIds, 'tracking.activeCharacterIds', 100, 200, code);
@@ -68,6 +123,8 @@ export function validateTracking(value: unknown, novel: StoryNovel, code = 'INVA
     if (!own(novel.nodes, id) || novel.nodes[id].type !== 'character_card' || (live && novel.nodes[id].deleted)) fail(code, `角色卡不存在：${id}`);
   }
   strings(value.commitments, 'tracking.commitments', 40, 1000, code); strings(value.risks, 'tracking.risks', 40, 1000, code);
+  strings(value.authorTruth, 'tracking.authorTruth', 40, 1000, code);
+  strings(value.readerKnown, 'tracking.readerKnown', 40, 1000, code);
 }
 export function validateThread(value: unknown, novel: StoryNovel, code = 'INVALID_INPUT', live = false): asserts value is StoryThread {
   fields(value, ['id', 'kind', 'title', 'detail', 'status', 'sourceChapterId', 'sourceRevision', 'dueChapterId'], 'thread', code);
@@ -88,7 +145,7 @@ export function validateReview(value: unknown, novel: StoryNovel, code = 'INVALI
   for (const key of ['location', 'evidence', 'issue', 'suggestion']) string(value[key], `review.${key}`, key === 'location' ? 1000 : 4000, true, code);
 }
 export function validateStory(value: unknown, novel: StoryNovel, code = 'INVALID_STORY'): asserts value is StoryState {
-  fields(value, ['schemaVersion', 'revision', 'mode', 'stage', 'brief', 'outlines', 'tracking', 'threads', 'reviews'], 'story', code);
+  fields(value, ['schemaVersion', 'revision', 'mode', 'stage', 'brief', 'outlines', 'tracking', 'threads', 'reviews', 'units', 'storylines', 'rhythms', 'style'], 'story', code);
   if (value.schemaVersion !== 1) fail(code, '不支持的故事流程版本');
   revision(value.revision, 'story.revision', code, 0);
   oneOf(value.mode, ['long', 'short'], 'story.mode', code); oneOf(value.stage, ['idea', 'design', 'outline', 'draft', 'review', 'ready'], 'story.stage', code);
@@ -103,11 +160,104 @@ export function validateStory(value: unknown, novel: StoryNovel, code = 'INVALID
       if ((name === 'outlines' || name === 'tracking' ? (entry as StoryOutline).chapterId : (entry as StoryThread | StoryReview).id) !== id) fail(code, `story.${name} ID 与条目不一致`);
     }
   }
+  const storylines = value.storylines, units = value.units, rhythms = value.rhythms;
+  if (!isObject(storylines) || Object.keys(storylines).length > 999) fail(code, 'story.storylines必须是最多 999 项的对象');
+  for (const [id, item] of Object.entries(storylines)) {
+    validId(id, 'story.storylines ID', code); validateStoryLine(item, code);
+    if ((item as StoryLine).id !== id) fail(code, 'story.storylines ID 与条目不一致');
+  }
+  if (!isObject(units) || Object.keys(units).length > 2000) fail(code, 'story.units必须是最多 2000 项的对象');
+  for (const [id, item] of Object.entries(units)) {
+    validId(id, 'story.units ID', code); validateStoryUnit(item, novel, storylines as Record<string, StoryLine>, code);
+    if ((item as StoryUnit).id !== id) fail(code, 'story.units ID 与条目不一致');
+  }
+  if (!isObject(rhythms) || Object.keys(rhythms).length > 10000) fail(code, 'story.rhythms必须是最多 10000 项的对象');
+  for (const [id, item] of Object.entries(rhythms)) {
+    validId(id, 'story.rhythms ID', code); validateRhythm(item, novel, code);
+    if ((item as ChapterRhythm).chapterId !== id) fail(code, 'story.rhythms ID 与条目不一致');
+  }
+  validateStyle(value.style, code, novel);
   if (JSON.stringify(value).length > 2000000) fail(code, '单部作品的故事流程数据最多 2000000 个字符');
+}
+/** Story fields added after a release are optional on disk; normalize before validating.
+ * This keeps old projects readable without a destructive migration. */
+export function normalizeStory(value: unknown, novel: StoryNovel, code = 'INVALID_STORY'): StoryState {
+  if (!isObject(value)) fail(code, '故事流程数据必须是对象');
+  const raw = copy(value) as Record<string, any>;
+  for (const key of ['units', 'storylines', 'rhythms'] as const) if (!isObject(raw[key])) raw[key] = {};
+  if (!isObject(raw.style)) raw.style = emptyStyle();
+  if (isObject(raw.tracking)) for (const item of Object.values(raw.tracking) as Record<string, any>[]) {
+    if (!Array.isArray(item.authorTruth)) item.authorTruth = [];
+    if (!Array.isArray(item.readerKnown)) item.readerKnown = [];
+  }
+  validateStory(raw, novel, code);
+  return raw as StoryState;
 }
 export function readStory(novel: StoryNovel): StoryState {
   if (novel.story === undefined) return defaultStory();
-  validateStory(novel.story, novel); return copy(novel.story);
+  return normalizeStory(novel.story, novel);
+}
+const countParagraphs = (text: string) => text.split(/\r?\n/).filter(line => line.trim()).length;
+/** Empty prose has no sentences; a body the store did not load is reported as
+ * zero samples so the board can say "未测量" instead of inventing a number. */
+function proseMeasure(item: {content?: string; textCount?: number}, loaded: boolean) {
+  if (!loaded || typeof item.content !== 'string') return {sentences: 0, avgSentenceLength: 0, dialogueRatio: 0, paragraphs: 0};
+  return proseMetrics(item.content);
+}
+/** Deterministic prose measurement. Manuscript facts never guess at rhythm from prose. */
+export function proseMetrics(content: string) {
+  const text = content || '', quoted = text.match(/[“"][^”"]*[”"]/g) || [];
+  const quotedChars = quoted.reduce((sum, item) => sum + item.length, 0);
+  // Empty text has no sentences. A floor of 1 would make "no prose" look like
+  // "one long sentence" and poison every style average.
+  const sentences = text.trim() ? Math.max(1, text.split(/[。！？!?…]+/).filter(item => item.trim()).length) : 0;
+  // 平均句长按可见字数（不含空白）算，和 targetSentence 的「字」同一单位。
+  const visible = text.replace(/\s/g, '').length;
+  return {sentences, avgSentenceLength: sentences ? Math.round(visible / sentences * 10) / 10 : 0,
+    dialogueRatio: text.length ? Math.min(100, Math.round(quotedChars / text.length * 100)) : 0, paragraphs: countParagraphs(text)};
+}
+/** Read-only projection: the writing requirement is compared with real prose. */
+export function styleComparison(novel: StoryNovel, story: StoryState): StyleComparison {
+  const chapters = orderedChapters(novel).filter(item => chapterCounts(item as {content: string}).textCount > 0);
+  const samples: StyleSample[] = chapters.map(item => {
+    const body = (item as {content?: string}).content;
+    return {chapterId: item.id, chapterRevision: item.revision, ...(typeof body === 'string' ? proseMetrics(body) : {sentences: 0, avgSentenceLength: 0, dialogueRatio: 0, paragraphs: 0})};
+  });
+  const usable = samples.filter(item => item.sentences > 3);
+  const average = (pick: (item: StyleSample) => number) => usable.length ? Math.round(usable.reduce((sum, item) => sum + pick(item), 0) / usable.length) : null;
+  // targetSentence is a length target in characters; comparing it against a
+  // sentence *count* would be a unit error. Length is measured as chars/sentence.
+  const sentence = average(item => item.avgSentenceLength);
+  const dialogue = average(item => item.dialogueRatio);
+  const profile = story.style;
+  // The deviation is reported against the chapter count really measured; a
+  // requirement without a sample is "not measured", never "matched".
+  return {samples, chapterIds: usable.map(item => item.chapterId), revision: story.revision,
+    deviation: {sentence: profile.targetSentence === null || sentence === null ? null : sentence - profile.targetSentence,
+      dialogue: profile.dialogueRatio === null || dialogue === null ? null : dialogue - profile.dialogueRatio}};
+}
+export function storySnapshot(novel: StoryNovel, story = readStory(novel)): StorySnapshot {
+  const volumes: StoryVolume[] = Object.values(novel.volumes || {}).filter(item => !item.deleted)
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .map(item => ({id: item.id, title: item.title || item.name || '未命名卷', order: item.order, chapterIds: orderedChapters(novel).filter(chapter => chapter.volumeId === item.id).map(chapter => chapter.id)}));
+  // Bodies are loaded for reads that measure prose; story.apply answers with the
+  // plan it wrote and must not claim a prose read it never did.
+  return {novelId: novel.id, story: copy(story), volumes, ...snapshotBody(novel, story, true)};
+}
+export function storySnapshotWrite(novel: StoryNovel, story: StoryState): StorySnapshot {
+  const volumes: StoryVolume[] = Object.values(novel.volumes || {}).filter(item => !item.deleted)
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .map(item => ({id: item.id, title: item.title || item.name || '未命名卷', order: item.order, chapterIds: orderedChapters(novel).filter(chapter => chapter.volumeId === item.id).map(chapter => chapter.id)}));
+  return {novelId: novel.id, story: copy(story), volumes, ...snapshotBody(novel, story, false)};
+}
+/** Bodies are read from the caller's novel, never from the copied plan state.
+ * story.apply writes a plan; it must not answer with a prose read it did not do.
+ * A metadata-only row has no body, so its measurements are "unknown", not zero. */
+function snapshotBody(novel: StoryNovel, story: StoryState, prose = true) {
+  return {
+    chapters: orderedChapters(novel).map(item => ({id: item.id, title: item.title, revision: item.revision, order: item.order, volumeId: item.volumeId ?? null, ...chapterCounts(item as {content: string}), ...proseMeasure(item as {content?: string; textCount?: number}, prose)})),
+    characters: Object.values(novel.nodes).filter(item => !item.deleted && item.type === 'character_card').map(item => ({id: item.id, name: item.name, type: 'character_card' as const, status: item.status, summary: item.summary || ''})),
+    diagnostics: diagnostics(novel, story), style: styleComparison(novel, story)};
 }
 export function orderedChapters(novel: StoryNovel, includeDeleted = false) {
   const volumes = Object.values(novel.volumes || {}).filter(item => !item.deleted).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
@@ -127,11 +277,11 @@ export function diagnostics(novel: StoryNovel, story: StoryState): StoryDiagnost
     staleThreadIds: Object.values(story.threads).filter(item => threadStale(novel, item)).map(item => item.id),
     dueThreadIds: Object.values(story.threads).filter(item => ['open', 'progressing'].includes(item.status) && item.dueChapterId !== undefined && (ranks.get(item.dueChapterId) ?? Infinity) <= lastWritten).map(item => item.id),
     blockingReviewIds: Object.values(story.reviews).filter(item => item.severity === 'blocking' && item.status === 'open' && !sourceStale(novel, item.chapterId, item.chapterRevision)).map(item => item.id),
+    overdueUnitIds: unitOverdue(novel, story, lastWritten, ranks),
   };
 }
-export function storySnapshot(novel: StoryNovel, story = readStory(novel)): StorySnapshot {
-  return {novelId: novel.id, story: copy(story),
-    chapters: orderedChapters(novel).map(item => ({id: item.id, title: item.title, revision: item.revision, order: item.order, volumeId: item.volumeId ?? null, ...chapterCounts(item as {content: string})})),
-    characters: Object.values(novel.nodes).filter(item => !item.deleted && item.type === 'character_card').map(item => ({id: item.id, name: item.name, type: 'character_card', status: item.status, summary: item.summary || ''})),
-    diagnostics: diagnostics(novel, story)};
+/** A unit is overdue when its whole chapter range is already written and it is still open. */
+function unitOverdue(novel: StoryNovel, story: StoryState, lastWritten: number, ranks: Map<string, number>) {
+  return Object.values(story.units).filter(unit => !unit.retired && unit.chapterIds.length > 0
+    && unit.chapterIds.every(id => (ranks.get(id) ?? Infinity) <= lastWritten) && unit.contractRisk !== 'safe').map(unit => unit.id);
 }

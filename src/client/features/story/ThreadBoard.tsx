@@ -3,6 +3,7 @@ import type {StorySnapshot, StoryThread} from '../../../contracts/story.ts';
 import {useWorkspacePreference} from '../../shared/workspace-state.ts';
 import {saveShortcut} from '../../shared/ui.jsx';
 import {Badge, ChapterSelect, DraftFooter, useStoryDraft} from './shared.tsx';
+import {ThreadTimeline} from './ThreadTimeline.tsx';
 import {chapterTitle, isThreadStale, threadKinds, threadStatuses} from './model.ts';
 import type {StoryActions} from './useStoryWorkspace.ts';
 
@@ -20,7 +21,7 @@ export function ThreadBoard(props:Props) {
   };
   return <section className="story-thread-workspace" aria-label="故事线索看板">
     <div className="story-section-heading"><div><h2>让铺垫有去处，让承诺有交代</h2><p>按伏笔、下章承诺、长期期待与设定约束整理。</p></div><label className="story-inline-field">线索状态<select value={status} onChange={event=>setStatus(event.target.value)}><option value="active">待推进与推进中</option><option value="">全部状态</option>{Object.entries(threadStatuses).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label></div>
-    {editing?<ThreadEditor key={editing.id||`new:${editing.kind}`} {...props} item={editing.id?snapshot.story.threads[editing.id]:undefined} kind={editing.kind} onClose={()=>setEditing(null)}/>:<div className="story-thread-board">{Object.entries(threadKinds).map(([kind,title])=>{const items=visible.filter(thread=>thread.kind===kind);return <section className="story-thread-column" aria-label={`${title}分组`} key={kind}>
+    {editing?<ThreadEditor key={editing.id||`new:${editing.kind}`} {...props} item={editing.id?snapshot.story.threads[editing.id]:undefined} kind={editing.kind} onClose={()=>setEditing(null)}/>:<><ThreadTimeline snapshot={snapshot} onChapter={onChapter}/><div className="story-thread-board">{Object.entries(threadKinds).map(([kind,title])=>{const items=visible.filter(thread=>thread.kind===kind);return <section className="story-thread-column" aria-label={`${title}分组`} key={kind}>
       <header><h3>{title}<span>{items.length}</span></h3><p>{kindDescriptions[kind as StoryThread['kind']]}</p><button disabled={busy} onClick={()=>setEditing({kind:kind as StoryThread['kind']})}>＋ 新增{title}</button></header>
       <div className="story-thread-cards">{items.length?items.map(thread=>{const stale=isThreadStale(snapshot,thread),due=snapshot.diagnostics.dueThreadIds.includes(thread.id),canResolve=!!thread.sourceChapterId&&!stale;return <article className="story-thread-card" key={thread.id}>
         <div className="story-card-flags"><Badge tone={thread.status==='resolved'&&!stale?'success':thread.status==='retired'?'idle':'brand'}>{threadStatuses[thread.status]}</Badge>{due&&<Badge tone="warning">到期待核对</Badge>}{stale&&<Badge tone="warning">来源已变化</Badge>}</div>
@@ -29,7 +30,7 @@ export function ThreadBoard(props:Props) {
         <label className="story-card-status">处理状态<select aria-label={`处理「${thread.title}」状态`} value={thread.status} disabled={busy} onChange={event=>changeStatus(thread,event.target.value as StoryThread['status'])}>{Object.entries(threadStatuses).map(([id,name])=><option value={id} key={id} disabled={id==='resolved'&&!canResolve&&thread.status!=='resolved'}>{name}</option>)}</select></label>
         {!canResolve&&thread.status!=='retired'&&<small className="story-muted">兑现前请在编辑中补充并核对当前正文来源。</small>}
       </article>;}):<p className="story-column-empty">当前筛选下没有{title}。</p>}</div>
-    </section>;})}</div>}
+    </section>;})}</div></>}
   </section>;
 }
 type ThreadDraft={revision:number;kind:StoryThread['kind'];title:string;detail:string;status:StoryThread['status'];sourceChapterId:string;sourceRevision:number;dueChapterId:string};

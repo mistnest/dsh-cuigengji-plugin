@@ -22,7 +22,44 @@ test('the story workbench is reachable from the book navigation and renders real
   assert.match(navigation, /story:'创作'/);
   const entry = await read('src/client/features/story/index.tsx');
   assert.match(entry, /call\('story\.get'|useStoryWorkspace/, 'the page must read the native story API');
-  assert.doesNotMatch(entry, /preview|mock|fixture/i, 'the page must not ship mock data');
+  assert.doesNotMatch(entry, /mock|fixture/i, 'the page must not ship mock data');
+  assert.match(entry, /story\.context\.get/, 'the context preview must read the host projection, not a local approximation');
+});
+
+test('the four visual additions read real data and never invent a score', async () => {
+  const entry = await read('src/client/features/story/index.tsx');
+  for (const [section, label] of [['units', '卷纲与单元'], ['detect', '去 AI 味体检'], ['rhythm', '节奏热力图'], ['truth', '双时间线'], ['style', '文风对照']]) {
+    assert.match(entry, new RegExp(`${section}:'${label}'`), `the ${label} section must be reachable`);
+  }
+  const detect = await read('src/client/features/story/DetectBoard.tsx');
+  // The board receives the loader from the page, which wraps story.detect.
+  assert.match(entry, /story\.detect/, 'the page must read the host scan');
+  assert.match(detect, /DetectorResult/, 'the board must render the host result type');
+  // The detector is a candidate list, not a score. A number out of 100 would be
+  // the one thing the upstream method forbids outright.
+  assert.doesNotMatch(detect, /AI\s*味\s*\d+\s*分/);
+  assert.match(detect, /不是评分|不是分数|候选/, 'the board must state that hits are candidates');
+  const units = await read('src/client/features/story/VolumeBoard.tsx');
+  assert.match(units, /unit\.upsert/, 'units must be writable through story.apply');
+  assert.match(units, /storyline\.upsert/);
+  assert.match(units, /canCarryChapter|能独立扛章/, 'the line matrix must show whether a line can carry a chapter');
+  const rhythm = await read('src/client/features/story/RhythmHeatmap.tsx');
+  assert.match(rhythm, /rhythm\.upsert/, 'a tone record must be writable');
+  assert.match(rhythm, /expectedChapterRevision/, 'a tone record must carry the prose version it describes');
+  const style = await read('src/client/features/story/StyleBoard.tsx');
+  assert.match(style, /style\.upsert/, 'the style dossier must be writable');
+  // An unset target and a missing sample both yield a null deviation; neither
+  // may be rendered as 0 or as "matched".
+  assert.match(style, /data-state=/, 'the three deviation states must be distinguishable in the DOM');
+  assert.match(style, /未设定目标/);
+  assert.match(style, /样本不足/);
+  const truth = await read('src/client/features/story/TimelineBoard.tsx');
+  assert.match(truth, /authorTruth/);
+  assert.match(truth, /readerKnown/);
+  assert.match(truth, /信息差/, 'the board must separate what the author knows from what the reader knows');
+  const review = await read('src/client/features/story/ReviewDesk.tsx');
+  assert.match(review, /ReviewMatrix/, 'review distribution must be part of the review page');
+  assert.match(await read('src/client/features/story/ReviewMatrix.tsx'), /categoryNames/);
 });
 
 test('story writes use the atomic apply path with a version and request identity', async () => {

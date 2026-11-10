@@ -72,8 +72,15 @@ export function storyContext(novel: StoryNovel, args: {chapterId?: unknown; maxC
     const body = item.content || '', tail = body.slice(-6000);
     add('facts', {kind: 'manuscript', id: item.id, chapterId: item.id, revision: item.revision, title: item.title + (tail.length < body.length ? ' · 正文末段' : ' · 正文'), content: tail, truncated: tail.length < body.length});
   }
-  const tracking = Object.values(story.tracking).sort((a, b) => (ranks.get(b.chapterId) ?? Infinity) - (ranks.get(a.chapterId) ?? Infinity));
-  for (const item of tracking) {
+  const currentUnit = current ? Object.values(story.units).find(unit => unit.chapterIds.includes(current.id)) : undefined;
+  if (currentUnit) add('plans', {kind: 'unit', id: currentUnit.id, title: currentUnit.title + ' · 剧情单元（计划）', truncated: false,
+    content: `单元承诺：${currentUnit.promise}\n因果入口：${currentUnit.causeEntry}\n核心阻碍：${currentUnit.blocker}\n关键选择：${currentUnit.choice}\n兑现与归属：${currentUnit.payoff}\n下一单元钩子：${currentUnit.hook}`});
+  const profile = story.style;
+  if (profile.viewpoint || profile.tense || profile.diction || profile.avoid) {
+    add('plans', {kind: 'style', id: novel.id, title: '文风要求（表达层）', truncated: false,
+      content: [['视角', profile.viewpoint], ['时态', profile.tense], ['用词', profile.diction], ['避免', profile.avoid]].filter(([, text]) => text).map(([label, text]) => `${label}：${text}`).join('\n')});
+  }
+  const tracking = Object.values(story.tracking).sort((a, b) => (ranks.get(b.chapterId) ?? Infinity) - (ranks.get(a.chapterId) ?? Infinity));  for (const item of tracking) {
     if (!allowed('tracking', item.chapterId, item.chapterId, item.chapterRevision)) continue;
     const title = novel.chapters[item.chapterId].title;
     add('facts', {kind: 'tracking', id: item.chapterId, chapterId: item.chapterId, revision: item.chapterRevision, title: title + ' · 已发生事实',

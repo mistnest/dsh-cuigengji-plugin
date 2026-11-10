@@ -23,7 +23,7 @@ import { memoryVersionFields, memoryHistory } from "../domain/memory/history.js"
 import { staleMemoryEntities } from "../domain/memory/invalidation.js";
 import { directoryKey, orderedDirectory, directorySnapshot, checkDirectorySnapshot, planDirectoryMove, validateDirectoryOrder } from "../domain/directory/order.js";
 import { findProse, replaceLiteral } from "../domain/chapters/find.js";
-import { storyAction, validateStory } from "../domain/story/index.js";
+import { normalizeStory, storyAction } from "../domain/story/index.js";
 class StoreError extends Error {
   constructor(code, message) {
     super(message);
@@ -857,7 +857,7 @@ class Store extends ProjectStore {
       Object.assign(edge, memoryFields(edge, n, true, true));
     }
     if (n.plan && (typeof n.plan.content !== "string" || !Number.isSafeInteger(n.plan.revision) || n.plan.revision < 1 || typeof n.plan.approved !== "boolean")) fail("INVALID_BACKUP", "\u89C4\u5212\u683C\u5F0F\u65E0\u6548");
-    if (n.story !== void 0) validateStory(n.story, n, "INVALID_BACKUP");
+    if (n.story !== void 0) normalizeStory(n.story, n, "INVALID_BACKUP");
     validateDirectoryOrder(n.directoryOrder);
     validateMemoryGroups(n);
     if (n.planning) validatePlanning(n.planning, n);

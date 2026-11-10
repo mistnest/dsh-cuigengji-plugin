@@ -93,6 +93,29 @@ ${outline.beats.map((beat, index) => `${index + 1}. ${beat}`).join("\n")}
     const body = item.content || "", tail = body.slice(-6e3);
     add("facts", { kind: "manuscript", id: item.id, chapterId: item.id, revision: item.revision, title: item.title + (tail.length < body.length ? " \xB7 \u6B63\u6587\u672B\u6BB5" : " \xB7 \u6B63\u6587"), content: tail, truncated: tail.length < body.length });
   }
+  const currentUnit = current ? Object.values(story.units).find((unit) => unit.chapterIds.includes(current.id)) : void 0;
+  if (currentUnit) add("plans", {
+    kind: "unit",
+    id: currentUnit.id,
+    title: currentUnit.title + " \xB7 \u5267\u60C5\u5355\u5143\uFF08\u8BA1\u5212\uFF09",
+    truncated: false,
+    content: `\u5355\u5143\u627F\u8BFA\uFF1A${currentUnit.promise}
+\u56E0\u679C\u5165\u53E3\uFF1A${currentUnit.causeEntry}
+\u6838\u5FC3\u963B\u788D\uFF1A${currentUnit.blocker}
+\u5173\u952E\u9009\u62E9\uFF1A${currentUnit.choice}
+\u5151\u73B0\u4E0E\u5F52\u5C5E\uFF1A${currentUnit.payoff}
+\u4E0B\u4E00\u5355\u5143\u94A9\u5B50\uFF1A${currentUnit.hook}`
+  });
+  const profile = story.style;
+  if (profile.viewpoint || profile.tense || profile.diction || profile.avoid) {
+    add("plans", {
+      kind: "style",
+      id: novel.id,
+      title: "\u6587\u98CE\u8981\u6C42\uFF08\u8868\u8FBE\u5C42\uFF09",
+      truncated: false,
+      content: [["\u89C6\u89D2", profile.viewpoint], ["\u65F6\u6001", profile.tense], ["\u7528\u8BCD", profile.diction], ["\u907F\u514D", profile.avoid]].filter(([, text]) => text).map(([label, text]) => `${label}\uFF1A${text}`).join("\n")
+    });
+  }
   const tracking = Object.values(story.tracking).sort((a, b) => (ranks.get(b.chapterId) ?? Infinity) - (ranks.get(a.chapterId) ?? Infinity));
   for (const item of tracking) {
     if (!allowed("tracking", item.chapterId, item.chapterId, item.chapterRevision)) continue;

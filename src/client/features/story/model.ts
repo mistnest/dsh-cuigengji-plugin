@@ -28,8 +28,8 @@ export function chapterProgress(snapshot:StorySnapshot,chapterId:string) {
 }
 export const isThreadStale = (snapshot:StorySnapshot,thread:StoryThread) => !!thread.sourceChapterId && thread.sourceRevision!==snapshot.chapters.find(chapter=>chapter.id===thread.sourceChapterId)?.revision;
 export const isReviewStale = (snapshot:StorySnapshot,review:StoryReview) => review.chapterRevision!==snapshot.chapters.find(chapter=>chapter.id===review.chapterId)?.revision;
-export function filterReviews(reviews:StoryReview[],filter:{severity:string;status:string;chapterId:string;staleOnly:boolean},snapshot:StorySnapshot) {
-  return reviews.filter(review=>(!filter.severity||review.severity===filter.severity)&&(!filter.status||review.status===filter.status)&&(!filter.chapterId||review.chapterId===filter.chapterId)&&(!filter.staleOnly||isReviewStale(snapshot,review)))
+export function filterReviews(reviews:StoryReview[],filter:{severity:string;status:string;chapterId:string;staleOnly:boolean;category?:string},snapshot:StorySnapshot) {
+  return reviews.filter(review=>(!filter.severity||review.severity===filter.severity)&&(!filter.status||review.status===filter.status)&&(!filter.chapterId||review.chapterId===filter.chapterId)&&(!filter.category||review.category===filter.category)&&(!filter.staleOnly||isReviewStale(snapshot,review)))
     .sort((a,b)=>({blocking:0,suggestion:1,note:2}[a.severity]-{blocking:0,suggestion:1,note:2}[b.severity]));
 }
 export interface ChapterBasis {chapterId:string; revision:number}

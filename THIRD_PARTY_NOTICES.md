@@ -6,6 +6,8 @@ The original Cuigengji software remains copyright (c) 2026 mistnest, under the M
 
 The writing methods in `skills/cuigengji-story/`, the related additions to the existing writing/revision Skills, and the workflow concepts implemented by the native story workbench are adapted and distilled from **@oh-story/dsh 0.1.21**. The integration uses Cuigengji's own chapter IDs, storage, version checks, and operations; it does not bundle or require the Oh Story runtime.
 
+`src/domain/story/detect/engine.js` is a port of the AI-flavor prose detector from `story-deslop`/`story-review` (`scripts/check-ai-patterns.js` and `scripts/style-whitelist.js`). The port keeps the detection rules and adds code-layer labels; it removes the command-line interface and never rewrites text. Findings are candidates for the author, not a quality score.
+
 Sources:
 
 - https://github.com/zenstory-ai/oh-story-dsh (package @oh-story/dsh, version 0.1.21)

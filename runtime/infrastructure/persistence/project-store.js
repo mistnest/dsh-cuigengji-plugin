@@ -585,6 +585,10 @@ class ProjectStore extends AtomicStore {
       const selected = chapters.slice(0, boundary + 1).filter((chapter) => chapterCounts(chapter).textCount > 0).slice(-3);
       for (const chapter of selected) await this.chapter(novel, book, view, chapter.id);
     }
+    if (["story.get", "story.detect", "story.detect.get"].includes(action)) {
+      const targets = action === "story.detect.get" ? args.chapterId ? [args.chapterId] : [] : Object.values(novel.chapters).filter((chapter) => !chapter.deleted).slice(0, 200).map((chapter) => chapter.id);
+      for (const chapterId of targets) if (own(novel.chapters, chapterId)) await this.chapter(novel, book, view, chapterId);
+    }
     const nodeIds = /* @__PURE__ */ new Set();
     if (action === "graph.workspace.ensure" && Object.keys(novel.memoryPages || {}).length) {
       for (const id2 of Object.keys(novel.nodes)) if (novel.nodes[id2].pageId) nodeIds.add(id2);

@@ -54,8 +54,76 @@ const defaultStory = () => ({
   outlines: {},
   tracking: {},
   threads: {},
-  reviews: {}
+  reviews: {},
+  units: {},
+  storylines: {},
+  rhythms: {},
+  style: emptyStyle()
 });
+const STYLE_TEXT_FIELDS = ["viewpoint", "tense", "diction", "avoid"];
+const RHYTHM_TONES = ["tense", "light", "sad", "hot", "satisfying", "sweet", "warm", "horror", "oppressive", "other"];
+const RHYTHM_ROLES = ["setup", "escalate", "turn", "payoff", "aftermath"];
+function emptyStyle() {
+  return {
+    chapterId: null,
+    chapterRevision: null,
+    targetSentence: null,
+    dialogueRatio: null,
+    viewpoint: "",
+    tense: "",
+    diction: "",
+    avoid: "",
+    anchors: []
+  };
+}
+function validateStyle(value, code = "INVALID_INPUT", novel) {
+  fields(value, ["chapterId", "chapterRevision", "targetSentence", "dialogueRatio", ...STYLE_TEXT_FIELDS, "anchors"], "style", code);
+  if (value.chapterId !== null) {
+    if (novel) chapter(novel, value.chapterId, code, false);
+    else validId(value.chapterId, "style.chapterId", code);
+    revision(value.chapterRevision, "style.chapterRevision", code);
+  } else if (value.chapterRevision !== null) fail(code, "style.chapterRevision \u5FC5\u987B\u4E0E style.chapterId \u540C\u65F6\u4E3A\u7A7A");
+  for (const key of ["targetSentence", "dialogueRatio"]) {
+    const item = value[key];
+    if (item !== null && (typeof item !== "number" || !Number.isFinite(item) || item < 0 || item > (key === "targetSentence" ? 400 : 100))) fail(code, `style.${key}\u8D85\u51FA\u5141\u8BB8\u8303\u56F4`);
+  }
+  for (const key of STYLE_TEXT_FIELDS) string(value[key], `style.${key}`, 4e3, false, code);
+  strings(value.anchors, "style.anchors", 20, 2e3, code);
+}
+function validateStoryLine(value, code = "INVALID_INPUT") {
+  fields(value, ["id", "title", "kind", "driver", "junction", "canCarryChapter"], "storyline", code);
+  validId(value.id, "storyline.id", code);
+  string(value.title, "storyline.title", 300, true, code);
+  oneOf(value.kind, ["main", "subplot"], "storyline.kind", code);
+  oneOf(value.canCarryChapter, ["yes", "half", "no"], "storyline.canCarryChapter", code);
+  for (const key of ["driver", "junction"]) string(value[key], `storyline.${key}`, 2e3, false, code);
+}
+function validateStoryUnit(value, novel, storylines, code = "INVALID_INPUT", live = false) {
+  fields(value, ["id", "title", "volumeId", "order", "promise", "emotionEngine", "causeEntry", "blocker", "choice", "payoff", "hook", "lineIds", "chapterIds", "contractRisk", "retired"], "unit", code);
+  validId(value.id, "unit.id", code);
+  string(value.title, "unit.title", 300, true, code);
+  if (value.volumeId !== null) {
+    validId(value.volumeId, "unit.volumeId", code);
+    const volumes = novel.volumes || {};
+    if (!own(volumes, value.volumeId) || live && volumes[value.volumeId].deleted) fail(code, `\u5377\u4E0D\u5B58\u5728\uFF1A${value.volumeId}`);
+  }
+  if (typeof value.order !== "number" && typeof value.order !== "string") fail(code, "unit.order \u5FC5\u987B\u662F\u6570\u5B57\u6216\u6587\u672C");
+  if (typeof value.order === "string" && value.order.length > 40) fail(code, "unit.order \u6587\u672C\u6700\u591A 40 \u4E2A\u5B57\u7B26");
+  for (const key of ["promise", "emotionEngine", "causeEntry", "blocker", "choice", "payoff", "hook"]) string(value[key], `unit.${key}`, 4e3, false, code);
+  oneOf(value.contractRisk, ["", "safe", "reinforce", "broken"], "unit.contractRisk", code);
+  strings(value.lineIds, "unit.lineIds", 20, 200, code);
+  for (const id of value.lineIds) if (!own(storylines, id)) fail(code, `\u6545\u4E8B\u7EBF\u4E0D\u5B58\u5728\uFF1A${id}`);
+  strings(value.chapterIds, "unit.chapterIds", 200, 200, code);
+  for (const id of value.chapterIds) chapter(novel, id, code, live);
+  if (value.retired !== void 0 && typeof value.retired !== "boolean") fail(code, "unit.retired \u5FC5\u987B\u662F\u5E03\u5C14\u503C");
+}
+function validateRhythm(value, novel, code = "INVALID_INPUT", live = false) {
+  fields(value, ["chapterId", "chapterRevision", "tone", "role", "note"], "rhythm", code);
+  chapterVersion(novel, value.chapterId, value.chapterRevision, code, live);
+  oneOf(value.tone, RHYTHM_TONES, "rhythm.tone", code);
+  if (value.role !== "") oneOf(value.role, RHYTHM_ROLES, "rhythm.role", code);
+  string(value.note, "rhythm.note", 2e3, false, code);
+}
 function validateOutline(value, novel, code = "INVALID_INPUT", live = false) {
   fields(value, ["chapterId", "intent", "beats", "endingHook", "minWords", "maxWords"], "outline", code);
   chapter(novel, value.chapterId, code, live);
@@ -66,7 +134,7 @@ function validateOutline(value, novel, code = "INVALID_INPUT", live = false) {
   if (value.minWords !== void 0 && value.maxWords !== void 0 && value.minWords > value.maxWords) fail(code, "minWords \u4E0D\u80FD\u5927\u4E8E maxWords");
 }
 function validateTracking(value, novel, code = "INVALID_INPUT", live = false) {
-  fields(value, ["chapterId", "chapterRevision", "summary", "storyTime", "location", "activeCharacterIds", "commitments", "risks"], "tracking", code);
+  fields(value, ["chapterId", "chapterRevision", "summary", "storyTime", "location", "activeCharacterIds", "commitments", "risks", "authorTruth", "readerKnown"], "tracking", code);
   chapterVersion(novel, value.chapterId, value.chapterRevision, code, live);
   string(value.summary, "tracking.summary", 6e3, true, code);
   string(value.storyTime, "tracking.storyTime", 1e3, false, code);
@@ -79,6 +147,8 @@ function validateTracking(value, novel, code = "INVALID_INPUT", live = false) {
   }
   strings(value.commitments, "tracking.commitments", 40, 1e3, code);
   strings(value.risks, "tracking.risks", 40, 1e3, code);
+  strings(value.authorTruth, "tracking.authorTruth", 40, 1e3, code);
+  strings(value.readerKnown, "tracking.readerKnown", 40, 1e3, code);
 }
 function validateThread(value, novel, code = "INVALID_INPUT", live = false) {
   fields(value, ["id", "kind", "title", "detail", "status", "sourceChapterId", "sourceRevision", "dueChapterId"], "thread", code);
@@ -102,7 +172,7 @@ function validateReview(value, novel, code = "INVALID_INPUT", live = false) {
   for (const key of ["location", "evidence", "issue", "suggestion"]) string(value[key], `review.${key}`, key === "location" ? 1e3 : 4e3, true, code);
 }
 function validateStory(value, novel, code = "INVALID_STORY") {
-  fields(value, ["schemaVersion", "revision", "mode", "stage", "brief", "outlines", "tracking", "threads", "reviews"], "story", code);
+  fields(value, ["schemaVersion", "revision", "mode", "stage", "brief", "outlines", "tracking", "threads", "reviews", "units", "storylines", "rhythms", "style"], "story", code);
   if (value.schemaVersion !== 1) fail(code, "\u4E0D\u652F\u6301\u7684\u6545\u4E8B\u6D41\u7A0B\u7248\u672C");
   revision(value.revision, "story.revision", code, 0);
   oneOf(value.mode, ["long", "short"], "story.mode", code);
@@ -119,12 +189,97 @@ function validateStory(value, novel, code = "INVALID_STORY") {
       if ((name === "outlines" || name === "tracking" ? entry.chapterId : entry.id) !== id) fail(code, `story.${name} ID \u4E0E\u6761\u76EE\u4E0D\u4E00\u81F4`);
     }
   }
+  const storylines = value.storylines, units = value.units, rhythms = value.rhythms;
+  if (!isObject(storylines) || Object.keys(storylines).length > 999) fail(code, "story.storylines\u5FC5\u987B\u662F\u6700\u591A 999 \u9879\u7684\u5BF9\u8C61");
+  for (const [id, item] of Object.entries(storylines)) {
+    validId(id, "story.storylines ID", code);
+    validateStoryLine(item, code);
+    if (item.id !== id) fail(code, "story.storylines ID \u4E0E\u6761\u76EE\u4E0D\u4E00\u81F4");
+  }
+  if (!isObject(units) || Object.keys(units).length > 2e3) fail(code, "story.units\u5FC5\u987B\u662F\u6700\u591A 2000 \u9879\u7684\u5BF9\u8C61");
+  for (const [id, item] of Object.entries(units)) {
+    validId(id, "story.units ID", code);
+    validateStoryUnit(item, novel, storylines, code);
+    if (item.id !== id) fail(code, "story.units ID \u4E0E\u6761\u76EE\u4E0D\u4E00\u81F4");
+  }
+  if (!isObject(rhythms) || Object.keys(rhythms).length > 1e4) fail(code, "story.rhythms\u5FC5\u987B\u662F\u6700\u591A 10000 \u9879\u7684\u5BF9\u8C61");
+  for (const [id, item] of Object.entries(rhythms)) {
+    validId(id, "story.rhythms ID", code);
+    validateRhythm(item, novel, code);
+    if (item.chapterId !== id) fail(code, "story.rhythms ID \u4E0E\u6761\u76EE\u4E0D\u4E00\u81F4");
+  }
+  validateStyle(value.style, code, novel);
   if (JSON.stringify(value).length > 2e6) fail(code, "\u5355\u90E8\u4F5C\u54C1\u7684\u6545\u4E8B\u6D41\u7A0B\u6570\u636E\u6700\u591A 2000000 \u4E2A\u5B57\u7B26");
+}
+function normalizeStory(value, novel, code = "INVALID_STORY") {
+  if (!isObject(value)) fail(code, "\u6545\u4E8B\u6D41\u7A0B\u6570\u636E\u5FC5\u987B\u662F\u5BF9\u8C61");
+  const raw = copy(value);
+  for (const key of ["units", "storylines", "rhythms"]) if (!isObject(raw[key])) raw[key] = {};
+  if (!isObject(raw.style)) raw.style = emptyStyle();
+  if (isObject(raw.tracking)) for (const item of Object.values(raw.tracking)) {
+    if (!Array.isArray(item.authorTruth)) item.authorTruth = [];
+    if (!Array.isArray(item.readerKnown)) item.readerKnown = [];
+  }
+  validateStory(raw, novel, code);
+  return raw;
 }
 function readStory(novel) {
   if (novel.story === void 0) return defaultStory();
-  validateStory(novel.story, novel);
-  return copy(novel.story);
+  return normalizeStory(novel.story, novel);
+}
+const countParagraphs = (text) => text.split(/\r?\n/).filter((line) => line.trim()).length;
+function proseMeasure(item, loaded) {
+  if (!loaded || typeof item.content !== "string") return { sentences: 0, avgSentenceLength: 0, dialogueRatio: 0, paragraphs: 0 };
+  return proseMetrics(item.content);
+}
+function proseMetrics(content) {
+  const text = content || "", quoted = text.match(/[“"][^”"]*[”"]/g) || [];
+  const quotedChars = quoted.reduce((sum, item) => sum + item.length, 0);
+  const sentences = text.trim() ? Math.max(1, text.split(/[。！？!?…]+/).filter((item) => item.trim()).length) : 0;
+  const visible = text.replace(/\s/g, "").length;
+  return {
+    sentences,
+    avgSentenceLength: sentences ? Math.round(visible / sentences * 10) / 10 : 0,
+    dialogueRatio: text.length ? Math.min(100, Math.round(quotedChars / text.length * 100)) : 0,
+    paragraphs: countParagraphs(text)
+  };
+}
+function styleComparison(novel, story) {
+  const chapters = orderedChapters(novel).filter((item) => chapterCounts(item).textCount > 0);
+  const samples = chapters.map((item) => {
+    const body = item.content;
+    return { chapterId: item.id, chapterRevision: item.revision, ...typeof body === "string" ? proseMetrics(body) : { sentences: 0, avgSentenceLength: 0, dialogueRatio: 0, paragraphs: 0 } };
+  });
+  const usable = samples.filter((item) => item.sentences > 3);
+  const average = (pick) => usable.length ? Math.round(usable.reduce((sum, item) => sum + pick(item), 0) / usable.length) : null;
+  const sentence = average((item) => item.avgSentenceLength);
+  const dialogue = average((item) => item.dialogueRatio);
+  const profile = story.style;
+  return {
+    samples,
+    chapterIds: usable.map((item) => item.chapterId),
+    revision: story.revision,
+    deviation: {
+      sentence: profile.targetSentence === null || sentence === null ? null : sentence - profile.targetSentence,
+      dialogue: profile.dialogueRatio === null || dialogue === null ? null : dialogue - profile.dialogueRatio
+    }
+  };
+}
+function storySnapshot(novel, story = readStory(novel)) {
+  const volumes = Object.values(novel.volumes || {}).filter((item) => !item.deleted).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)).map((item) => ({ id: item.id, title: item.title || item.name || "\u672A\u547D\u540D\u5377", order: item.order, chapterIds: orderedChapters(novel).filter((chapter2) => chapter2.volumeId === item.id).map((chapter2) => chapter2.id) }));
+  return { novelId: novel.id, story: copy(story), volumes, ...snapshotBody(novel, story, true) };
+}
+function storySnapshotWrite(novel, story) {
+  const volumes = Object.values(novel.volumes || {}).filter((item) => !item.deleted).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)).map((item) => ({ id: item.id, title: item.title || item.name || "\u672A\u547D\u540D\u5377", order: item.order, chapterIds: orderedChapters(novel).filter((chapter2) => chapter2.volumeId === item.id).map((chapter2) => chapter2.id) }));
+  return { novelId: novel.id, story: copy(story), volumes, ...snapshotBody(novel, story, false) };
+}
+function snapshotBody(novel, story, prose = true) {
+  return {
+    chapters: orderedChapters(novel).map((item) => ({ id: item.id, title: item.title, revision: item.revision, order: item.order, volumeId: item.volumeId ?? null, ...chapterCounts(item), ...proseMeasure(item, prose) })),
+    characters: Object.values(novel.nodes).filter((item) => !item.deleted && item.type === "character_card").map((item) => ({ id: item.id, name: item.name, type: "character_card", status: item.status, summary: item.summary || "" })),
+    diagnostics: diagnostics(novel, story),
+    style: styleComparison(novel, story)
+  };
 }
 function orderedChapters(novel, includeDeleted = false) {
   const volumes = Object.values(novel.volumes || {}).filter((item) => !item.deleted).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
@@ -143,17 +298,12 @@ function diagnostics(novel, story) {
     staleReviewIds: Object.values(story.reviews).filter((item) => sourceStale(novel, item.chapterId, item.chapterRevision)).map((item) => item.id),
     staleThreadIds: Object.values(story.threads).filter((item) => threadStale(novel, item)).map((item) => item.id),
     dueThreadIds: Object.values(story.threads).filter((item) => ["open", "progressing"].includes(item.status) && item.dueChapterId !== void 0 && (ranks.get(item.dueChapterId) ?? Infinity) <= lastWritten).map((item) => item.id),
-    blockingReviewIds: Object.values(story.reviews).filter((item) => item.severity === "blocking" && item.status === "open" && !sourceStale(novel, item.chapterId, item.chapterRevision)).map((item) => item.id)
+    blockingReviewIds: Object.values(story.reviews).filter((item) => item.severity === "blocking" && item.status === "open" && !sourceStale(novel, item.chapterId, item.chapterRevision)).map((item) => item.id),
+    overdueUnitIds: unitOverdue(novel, story, lastWritten, ranks)
   };
 }
-function storySnapshot(novel, story = readStory(novel)) {
-  return {
-    novelId: novel.id,
-    story: copy(story),
-    chapters: orderedChapters(novel).map((item) => ({ id: item.id, title: item.title, revision: item.revision, order: item.order, volumeId: item.volumeId ?? null, ...chapterCounts(item) })),
-    characters: Object.values(novel.nodes).filter((item) => !item.deleted && item.type === "character_card").map((item) => ({ id: item.id, name: item.name, type: "character_card", status: item.status, summary: item.summary || "" })),
-    diagnostics: diagnostics(novel, story)
-  };
+function unitOverdue(novel, story, lastWritten, ranks) {
+  return Object.values(story.units).filter((unit) => !unit.retired && unit.chapterIds.length > 0 && unit.chapterIds.every((id) => (ranks.get(id) ?? Infinity) <= lastWritten) && unit.contractRisk !== "safe").map((unit) => unit.id);
 }
 export {
   BRIEF_FIELDS,
@@ -162,24 +312,33 @@ export {
   copy,
   defaultStory,
   diagnostics,
+  emptyStyle,
   fail,
   fields,
   freshChapter,
   isObject,
+  normalizeStory,
   oneOf,
   orderedChapters,
   own,
+  proseMetrics,
   readStory,
   revision,
   sourceStale,
   storySnapshot,
+  storySnapshotWrite,
   string,
   strings,
+  styleComparison,
   threadStale,
   validId,
   validateOutline,
   validateReview,
+  validateRhythm,
   validateStory,
+  validateStoryLine,
+  validateStoryUnit,
+  validateStyle,
   validateThread,
   validateTracking
 };
