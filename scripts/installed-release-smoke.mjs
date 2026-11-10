@@ -15,7 +15,7 @@ const ctx = {tools:{register:tool=>registered.set(tool.name,tool)},skills:{regis
   on:(event,fn)=>listeners.set(event,[...(listeners.get(event)||[]),fn]),effect:fn=>effects.push(fn()),provide:(key,value)=>{ctx[key]=value;}};
 const emit=async(event,value)=>{for(const callback of listeners.get(event)||[])await callback(value);};
 try {
-  await apply(ctx,{dataRoot});
+  await apply(ctx,{dataRoot,usageRoot:join(dataRoot,'test-usage')});
   const execute = async (name,action,args={},session='synthetic-upgrade-author') => JSON.parse(await registered.get(name).execute({action,args},
     {agent:{id:session},callId:crypto.randomUUID(),signal:new AbortController().signal}));
   const status = await execute('cuigengji_maintenance','status'); assert.equal(status.status,'ready',JSON.stringify(status.error));

@@ -3,6 +3,7 @@ import {createServer} from 'node:http';
 import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
+import {createHash,randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
@@ -13,12 +14,24 @@ const root=resolve(import.meta.dirname,'..'),directory=await mkdtemp(join(tmpdir
 const shots=join(root,'test-results','writing-records');await mkdir(shots,{recursive:true});
 const store=new Store(directory),actor={kind:'human',sessionId:'records-ui'},books=[];
 for(const title of ['雾港来信','群星与远航'])books.push(await store.dispatch('novel.create',{title},actor));
+for(const book of books)await store.dispatch('chapter.create',{novelId:book.id,title:'写作记录正文',content:''},actor);
 const today=localDay(),state=await store.load();state.activity=emptyActivity();
+const hash=text=>createHash('sha256').update(text).digest('hex'),entries=[[],[]];
 function bucket(prose,setting){return {proseAdded:prose,settingAdded:setting,planningChanges:2,chaptersTouched:1,settingsTouched:1,byActor:{human:{proseAdded:prose,settingAdded:0,planningChanges:1,chaptersTouched:1,settingsTouched:0},agent:{proseAdded:0,settingAdded:setting,planningChanges:1,chaptersTouched:0,settingsTouched:1}}};}
 for(let i=0;i<35;i++){
  const date=new Date(today+'T12:00:00Z');date.setUTCDate(date.getUTCDate()-i);const key=date.toISOString().slice(0,10);
  state.activity.daily[key]={date:key,updatedAt:key+'T12:00:00Z',novels:{[books[0].id]:bucket(150+(i*199)%1800,40+(i*11)%150),[books[1].id]:bucket(70+(i*113)%900,30+(i*5)%90)},titles:{[books[0].id]:books[0].title,[books[1].id]:books[1].title}};
+ entries[0].unshift({date:key,words:150+(i*199)%1800});entries[1].unshift({date:key,words:70+(i*113)%900});
 }
+ // Manuscript totals come from saved chapters; dated net activity is independent.
+for(const [i,book] of books.entries()){
+ const c=Object.values(state.novels[book.id].chapters)[0],template=c.versions[0];let content='';
+ c.versions=entries[i].map((entry,index)=>{content+='文'.repeat(entry.words);return {...template,revision:index+1,content,contentHash:hash(content),timestamp:entry.date+'T12:00:00'};});
+ Object.assign(c,{content,contentHash:hash(content),revision:c.versions.length,createdAt:c.versions[0].timestamp,updatedAt:c.versions.at(-1).timestamp});
+}
+const old=structuredClone(Object.values(state.novels[books[0].id].chapters)[0]);
+Object.assign(old,{id:randomUUID(),title:'旧日正文',content:'旧'.repeat(420),revision:1,order:1,createdAt:'2024-03-12T12:00:00',updatedAt:'2024-03-12T12:00:00'});
+old.contentHash=hash(old.content);old.versions=[{...old.versions[0],revision:1,title:old.title,order:1,content:old.content,contentHash:old.contentHash,timestamp:old.createdAt}];state.novels[books[0].id].chapters[old.id]=old;
 state.activity.daily[today].novels['removed-book']=bucket(80,20);state.activity.daily[today].titles['removed-book']='旧日手稿';
 state.activity.daily['2024-03-12']={date:'2024-03-12',updatedAt:'2024-03-12T12:00:00Z',novels:{[books[0].id]:bucket(420,50)}};
 await store.save(state);
@@ -59,7 +72,7 @@ try{
  await modal.locator('.records-chart-day').click();await expect(modal.getByLabel('查看日期')).toHaveValue(today);
  await expect(modal.locator('.records-books h4')).toContainText(today);
  await modal.locator('.records-contributions summary').click();await expect(modal.getByRole('table',{name:'作者与 AI 的贡献'})).toContainText('AI');
- await modal.getByLabel('统计范围').selectOption('removed-book');await expect(metric).toContainText('80');await expect(modal.locator('.records-books')).toContainText('旧日手稿');
+ await modal.getByLabel('统计范围').selectOption('removed-book');await expect(metric.locator('strong')).toHaveText('80字');await expect(modal.locator('.records-books')).toContainText('旧日手稿');
  await modal.getByLabel('统计范围').selectOption('');
  await modal.getByRole('button',{name:'自选日期',exact:true}).click();await modal.getByLabel('开始日期').fill('2024-01-01');await modal.getByLabel('结束日期').fill('2024-12-31');await modal.getByRole('button',{name:'应用',exact:true}).click();
  await expect(metric).toContainText('420');await expect(modal.locator('.records-chart-day')).toHaveCount(12);await modal.getByLabel('查看日期').selectOption('2024-03-12');await expect(modal.locator('.records-books h4')).toContainText('2024-03-12');
@@ -71,6 +84,24 @@ try{
  await page.evaluate(()=>fixture.fail(true));await modal.getByRole('button',{name:'刷新写作记录'}).click();await expect(modal.getByRole('alert')).toContainText('记录暂时不可用');await expect(metric).toContainText(recent.stats.proseAdded.toLocaleString('zh-CN'));
  await modal.getByLabel('统计范围').selectOption(books[0].id);await expect(metric).toContainText('—');
  await page.evaluate(()=>fixture.fail(false));await modal.getByRole('button',{name:'重试',exact:true}).click();await expect(metric).not.toContainText('—');
+ // Removing old prose is charged to today. The signed value must appear in the
+ // metric, book/actor detail and below the chart's zero line, without altering
+ // earlier days. Restore adds back only to the operation day.
+ await modal.getByRole('button',{name:'今天',exact:true}).click();
+ const manuscript=modal.getByLabel('当前已采用正文'),current=await store.dispatch('activity.today',{novelId:books[0].id},actor);
+ await expect(manuscript).toContainText(current.manuscript.words.toLocaleString('zh-CN'));
+ const active=(await store.dispatch('chapter.list',{novelId:books[0].id},actor)).find(c=>c.title==='写作记录正文');
+ const frozen=await store.dispatch('activity.stats',{from:'2024-01-01',to:'2024-12-31',novelId:books[0].id},actor);
+ const removed=await store.dispatch('chapter.delete',{novelId:books[0].id,chapterId:active.id,expectedRevision:active.revision,confirm:true},actor);
+ const negative=current.stats.proseAdded-active.textCount;
+ await modal.getByRole('button',{name:'刷新写作记录'}).click();await expect(metric.locator('strong')).toHaveText(negative.toLocaleString('zh-CN')+'字');await expect(manuscript).toContainText('420 字 · 1 章');
+ await expect(modal.getByRole('table',{name:'作品写作明细'})).toContainText(negative.toLocaleString('zh-CN'));
+ await expect(modal.getByRole('table',{name:'作者与 AI 的贡献'})).toContainText(negative.toLocaleString('zh-CN'));
+ await expect(modal.locator('.records-bar-prose').first()).toHaveCSS('top','74px');
+ assert.deepEqual((await store.dispatch('activity.stats',{from:'2024-01-01',to:'2024-12-31',novelId:books[0].id},actor)).stats,frozen.stats);
+ await page.screenshot({path:join(shots,'records-net-negative.png'),animations:'disabled'});
+ await store.dispatch('chapter.restore',{novelId:books[0].id,chapterId:active.id,expectedRevision:removed.revision,targetRevision:active.revision},actor);
+ await modal.getByRole('button',{name:'刷新写作记录'}).click();await expect(metric.locator('strong')).toHaveText(current.stats.proseAdded.toLocaleString('zh-CN')+'字');await expect(manuscript).toContainText(current.manuscript.words.toLocaleString('zh-CN'));
  await page.setViewportSize({width:320,height:700});await page.screenshot({path:join(shots,'records-320.png'),animations:'disabled'});
  expect(await modal.evaluate(el=>el.scrollWidth<=el.clientWidth+1&&el.getBoundingClientRect().width<=innerWidth-16)).toBe(true);
  await page.keyboard.press('Tab');expect(await page.evaluate(()=>Boolean(document.activeElement.closest('.writing-records-modal')))).toBe(true);

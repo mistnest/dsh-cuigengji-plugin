@@ -11,6 +11,10 @@ import {settingsStyles} from './shared/settings/style.ts';
 import {canvasExportStyles} from './shared/canvas-export-style.ts';
 import {documentStyles} from './shared/document-style.ts';
 import {manuscriptSearchStyles} from './features/chapters/search-style.ts';
+import {chapterStudioStyles} from './features/chapters/studio-style.ts';
+import {proseDiffStyles} from './shared/prose-diff-style.ts';
+import {cardComparisonStyles} from './shared/card-comparison-style.ts';
+import {cleanupStyles} from './shared/cleanup-style.ts';
 export const styles = `
 .cuigengji { color:var(--dsw-alias-label-primary,#252936); font-family:var(--dsw-font-family,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif); font-size:13px; padding:14px; height:100%; overflow:auto; box-sizing:border-box; }
 .cuigengji * { box-sizing:border-box; }
@@ -106,7 +110,6 @@ export const styles = `
 .cuigengji .savebar button { white-space:nowrap; }
 .cuigengji .savebar span { font-size:12px; }
 .cuigengji .history { max-width:720px; margin:24px auto 0; border-top:1px solid var(--dsw-alias-border-l1,#8884); }
-.cuigengji .history-item { padding:12px 0; border-bottom:1px solid var(--dsw-alias-border-l1,#8883); }
 
 .cuigengji .card { border:0; border-bottom:1px solid var(--dsw-alias-border-l1,#8883); border-radius:0; padding:16px 0; margin:0 0 16px; }
 .cuigengji .list button { text-align:left; padding:12px 8px; border:0; border-bottom:1px solid var(--dsw-alias-border-l1,#8883); border-radius:0; background:transparent; overflow-wrap:anywhere; }
@@ -200,7 +203,7 @@ export const styles = `
 .cuigengji .icon-button { border:0; background:transparent; min-width:32px; padding:4px 8px; font-size:18px; }
 .cuigengji .directory-heading { flex-wrap:nowrap; }
 .cuigengji .directory-collapsed .chapter-directory { width:48px; padding-left:6px; padding-right:6px; }
-.cuigengji .directory-collapsed .chapter-directory > :not(.directory-heading) { display:none; }
+.cuigengji .directory-collapsed .chapter-directory > :not(.directory-header) { display:none; }
 .cuigengji .directory-collapsed .directory-heading h2 { display:none; }
 .cuigengji .directory-collapsed .directory-heading { display:flex; flex-direction:column; gap:4px; }
 .cuigengji .directory-collapsed .directory-heading .grow { display:none; }
@@ -254,7 +257,6 @@ export const styles = `
 .cuigengji .chapter-main .savebar > div > span {display:block;}
 .cuigengji .auto-savebar {padding-top:8px;padding-bottom:8px;}
 .cuigengji .auto-savebar > div {display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;}
-.cuigengji .history-session {border-bottom:1px solid var(--dsw-alias-border-l1,#dde0e6);}
 .cuigengji .flow-context {display:flex;align-items:flex-start;gap:8px;margin:16px 0 24px;padding:12px;background:var(--dsw-alias-bg-layer-1,#f6f7fa);border-radius:8px;}
 .cuigengji .flow-context > div {flex:1;min-width:0;}
 .cuigengji .flow-context small {display:block;color:var(--dsw-alias-label-secondary,#737780);margin-bottom:6px;}
@@ -272,11 +274,11 @@ export const styles = `
 @container(max-width:759px) {
  .cuigengji .chapter-directory .directory-heading > .icon-button {display:none;}
  .cuigengji .directory-collapsed.show-directory .chapter-directory {padding:16px;}
- .cuigengji .directory-collapsed.show-directory .chapter-directory > :not(.directory-heading) {display:block;}
+ .cuigengji .directory-collapsed.show-directory .chapter-directory > :not(.directory-header) {display:block;}
  .cuigengji .directory-collapsed.show-directory .directory-heading {flex-direction:row;}
  .cuigengji .directory-collapsed.show-directory .directory-heading h2,.cuigengji .directory-collapsed.show-directory .directory-heading > .primary {display:block;}
  .cuigengji .chapter-main .editor-scroll {padding:20px 12px;}
  .cuigengji .chapter-main .manuscript {padding-left:8px;padding-right:8px;}
  .cuigengji .chapter-toolbar {gap:8px;}
 }
-` + visualStyles + selectStyles + graphStyles + managementStyles + transferStyles + welcomeStyles + batchStyles + navigationStyles + organizedStyles + settingsStyles + canvasExportStyles + documentStyles + manuscriptSearchStyles;
+` + visualStyles + selectStyles + graphStyles + managementStyles + transferStyles + welcomeStyles + batchStyles + navigationStyles + organizedStyles + settingsStyles + canvasExportStyles + documentStyles + manuscriptSearchStyles + proseDiffStyles + chapterStudioStyles + cardComparisonStyles + cleanupStyles;

@@ -3,7 +3,7 @@ import {spawn} from 'node:child_process';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {chromium,expect} from '@playwright/test';
-import {showOrganization} from './helpers/navigation.mjs';
+import {showOrganization,clearCanvasSelection} from './helpers/navigation.mjs';
 import {clickWire} from './helpers/graph.mjs';
 const root=resolve(import.meta.dirname,'..'),shots=join(root,'test-results/canvas-junctions');
 await mkdir(shots,{recursive:true});
@@ -42,7 +42,7 @@ try{
   await button('清除目录搜索').click();await expect(page.getByRole('heading',{name:'批注搜索结果',exact:true})).toHaveCount(0);await expect(page.locator('.decoration-note')).toHaveCount(1);
   await expect.poll(coordinateSnapshot).toEqual(originalPositions);await expect(hub('split')).toHaveCount(1);await expect(hub('merge')).toHaveCount(1);
   checks.push('no permanent annotations folder; search finds body text, unfolds and selects note, double click edits, clear restores ordinary directory');
-  await button('取消画布选择').click();await button('适应视图').click();await button('导出图片').click();const exporter=page.getByRole('dialog',{name:'导出画布图片',exact:true});
+  await clearCanvasSelection(page);await button('适应视图').click();await button('导出图片').click();const exporter=page.getByRole('dialog',{name:'导出画布图片',exact:true});
   await expect.poll(()=>exporter.getByAltText('画布图片预览').evaluate(image=>image.naturalWidth)).toBeGreaterThan(0);
   const image=await exporter.getByAltText('画布图片预览').evaluate(image=>{const svg=decodeURIComponent(image.src.split(',').slice(1).join(',')),doc=new DOMParser().parseFromString(svg,'image/svg+xml');return {hubs:doc.querySelectorAll('circle').length,paths:[...doc.querySelectorAll('g[stroke-width="1.6"]>path')].map(path=>path.getAttribute('d')).sort(),svg};});
   const paths=await page.locator('.graph-line').evaluateAll(paths=>paths.map(path=>path.getAttribute('d')).sort());expect(image.hubs).toBe(2);expect(image.paths).toEqual(paths);await writeFile(join(shots,'planning-export.svg'),image.svg);await exporter.getByRole('button',{name:'关闭导出画布图片',exact:true}).click();

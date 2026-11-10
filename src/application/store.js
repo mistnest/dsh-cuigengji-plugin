@@ -13,17 +13,23 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { previewTavern } from '../infrastructure/migrations/tavern.js';
 import { checkDirectorySnapshot as checkChapterDirectorySnapshot, directorySnapshot as chapterDirectorySnapshot, planChapterMove } from '../domain/chapters/order.ts';
-import { compilePreset, importPreset, validatePreset } from '../domain/preset/index.js';
+import { compilePreset, validatePreset } from '../domain/preset/index.js';
+import { presetDocument, validatePresetCommand, importPresetDocument, updatePresetDocument } from '../domain/preset/maintenance.js';
+import {previewPresetInput} from './presets.js';
 import {applyNovelLifecycle, novelLifecycleActions} from './novels/lifecycle.ts';
 // Legacy collaboration metadata is retained only for lossless import/export.
 import {validateCollaboration, validateSharedPlans, portableNovel, retainSharedPlans, withoutSharedCache, validateProgress} from '../domain/collaboration/legacy.ts';
 import {isReadAction} from '../contracts/actions.js';
 import {layoutPlanning,layoutSettings} from './canvas/layout.ts';
-import {normalizeActivity, recordConversationInput, recordActivity, todayActivity, rangeActivity, tracksActivity} from './activity.ts';
+import {normalizeActivity, recordConversationInput, recordActivity, todayActivity, rangeActivity, tracksActivity,tracksProse} from './activity.ts';
+import {manuscriptProgress} from './manuscript-progress.ts';
 import {memoryVersionFields,memoryHistory} from '../domain/memory/history.ts';
+import {validateMemoryMutation,patchMemoryContent,memoryChangedFields} from '../domain/memory/edit.ts';
 import {staleMemoryEntities} from '../domain/memory/invalidation.ts';
 import {directoryKey,orderedDirectory,directorySnapshot,checkDirectorySnapshot,planDirectoryMove,validateDirectoryOrder} from '../domain/directory/order.ts';
 import {findProse,replaceLiteral} from '../domain/chapters/find.ts';
+import {variableAction,validateVariables} from '../domain/variables/index.ts';
+import {previewCleanup,prepareCleanup} from './cleanup.ts';
 
 export class StoreError extends Error {
   constructor(code, message) { super(message); this.name = 'StoreError'; this.code = code; }
@@ -47,6 +53,14 @@ function cas(entity, args) {
 }
 function touch(entity) { entity.revision++; entity.updatedAt = now(); }
 function record(fields) { return { id: randomUUID(), revision: 1, createdAt: now(), updatedAt: now(), ...fields }; }
+function savePreset(novel, value) {
+  const previous = novel.preset;
+  novel.preset = record({name:value.name, enabled:value.enabled, blocks:clone(value.blocks), raw:clone(value.raw ?? null),
+    warnings:clone(value.warnings ?? []), ...(value.importFormat ? {importFormat:value.importFormat} : {}),
+    ...(previous?.id ? {id:previous.id} : {}), ...(previous?.createdAt ? {createdAt:previous.createdAt} : {}), revision:(previous?.revision || 0)+1});
+  touch(novel);
+  return novel.preset;
+}
 function meta(chapter) { const { content, versions, ...metadata } = chapter; return { ...metadata, ...chapterCounts(chapter) }; }
 function source(actor) { return { kind: actor.kind === 'human' ? 'human' : 'agent', sessionId: actor.sessionId || null }; }
 function version(chapter, actor, reason) {
@@ -155,6 +169,7 @@ export class Store extends ProjectStore {
   async dispatch(action, args = {}, actor = {}, beforeExecute) {
     if (!args || typeof args !== 'object' || Array.isArray(args)) fail('INVALID_INPUT', '参数必须是对象');
     if (action === 'chapter.replace' && actor.kind !== 'human') fail('HUMAN_REQUIRED', '批量替换由作者在查找面板确认');
+    if (action.startsWith('cleanup.') && actor.kind !== 'human') fail('HUMAN_REQUIRED','永久清理由作者在面板确认');
     if (novelLifecycleActions.includes(action) && actor.kind !== 'human') fail('HUMAN_REQUIRED', '整部作品的回收、恢复与永久删除需要作者操作');
     if (action.startsWith('collaboration.') || action === 'binding.inherit') fail('FEATURE_RETIRED','实验性多agent协作已撤出；请使用 DSH 原生子 Agent 和普通作品工具');
     const release = await this.acquire();
@@ -168,6 +183,7 @@ export class Store extends ProjectStore {
       if (requestKey && own(state.requests, requestKey)) {
         const previous = state.requests[requestKey];
         if (previous.signature !== signature) fail('REQUEST_ID_REUSED', 'requestId 已用于其他请求');
+        if (previous.cleaned) fail('REQUEST_EXPIRED','此操作的结果已随历史清理，请重新读取当前内容；旧请求不会重复执行');
         return clone(previous.result);
       }
       const currentBinding = state.bindings[hash(actor.sessionId||'')];
@@ -178,6 +194,9 @@ export class Store extends ProjectStore {
         await writeFile(join(this.root, `before-planning-${hash(migrationNovelId)}.json`), JSON.stringify({format:'cuigengji',schemaVersion:1,novel:migrationNovel}), {flag:'wx',mode:0o600}).catch(error=>{if(error.code!=='EEXIST')throw error;});
       }
       const beforeNovel = tracksActivity(action) && migrationNovelId && state.novels[migrationNovelId] ? clone(state.novels[migrationNovelId]) : null;
+      // Read lightweight index counts before cloning: structuredClone omits the
+      // non-enumerable count metadata of unhydrated chapters.
+      const beforeProse = tracksProse(action) ? manuscriptProgress(state,migrationNovelId).words : undefined;
       const before = JSON.stringify(state);
       // Activity is deliberately non-enumerable on the in-memory workspace so
       // existing callers that compare a Workspace snapshot do not suddenly
@@ -185,8 +204,13 @@ export class Store extends ProjectStore {
       // persisted activity ledger, otherwise a successful writing operation
       // would update only memory and disappear on restart.
       const activityBefore = JSON.stringify(state.activity || {});
-      const result = await this.execute(state, action, args, actor);
-      recordActivity(state, action, {...args, novelId: migrationNovelId || args.novelId}, actor, beforeNovel, result);
+      let result;
+      if(action==='cleanup.apply'){
+        const cleanup=prepareCleanup(state,args);result=cleanup.result;
+        for(const id of cleanup.affected)if(state.novels[id])this.validateProject(state.novels[id]);
+        if(args.scope==='novel-trash')validateSharedPlans(state);
+      }else result = await this.execute(state, action, args, actor);
+      recordActivity(state, action, {...args, novelId: migrationNovelId || args.novelId}, actor, beforeNovel, result,beforeProse);
       if (requestKey) state.requests[requestKey] = { signature, result: clone(result), timestamp: now(),
         ...((migrationNovelId || ['novel.create','novel.import'].includes(action)) ? {novelId: ['novel.create','novel.import'].includes(action) ? result.id : migrationNovelId} : {}) };
       const activityChanged = JSON.stringify(state.activity || {}) !== activityBefore;
@@ -199,6 +223,7 @@ export class Store extends ProjectStore {
   }
 
   execute(state, action, a, actor) {
+    if(action==='cleanup.preview')return previewCleanup(state,a);
     if (action === 'guidance.get' || action === 'guidance.set') {
       const key = hash(text(actor.sessionId, 'sessionId'));
       if (action === 'guidance.set') {
@@ -267,6 +292,7 @@ export class Store extends ProjectStore {
     if (!novelId) fail('NOVEL_REQUIRED', '此操作需要目标作品；请提供 novelId 或用 novel.focus 选择当前作品');
     const n = get(state.novels, novelId, '小说');
     if (n.archived && !(actor.kind === 'human' && ['novel.get','novel.export',...novelLifecycleActions].includes(action))) fail('NOVEL_RECYCLED', '作品已在回收站，请先恢复作品');
+    if(action.startsWith('variables.'))return variableAction(n,action,a,actor);
     if (novelLifecycleActions.includes(action)) {
       cas(n, a);
       if (action === 'novel.purge' && n.archived && a.confirm === true) retainSharedPlans(state,n);
@@ -428,7 +454,11 @@ export class Store extends ProjectStore {
         if (!Number.isSafeInteger(start) || start < 0 || !Number.isSafeInteger(maxChars) || maxChars < 1 || maxChars > 200000) fail('INVALID_INPUT', '读取窗口无效');
         return { ...meta(c), content: c.content.slice(start, start + maxChars), start, nextStart: start + maxChars < c.content.length ? start + maxChars : null };
       }
-      if (action === 'chapter.history') return c.versions.map(({ content, ...v }) => ({ ...v, ...(a.includeContent ? { content } : {}) }));
+      if (action === 'chapter.history') {
+        if (a.revision !== undefined && (!Number.isSafeInteger(a.revision) || a.revision < 1)) fail('INVALID_INPUT', 'revision 必须是有效的历史版本号');
+        if (a.revision !== undefined && !c.versions.some(v => v.revision === a.revision)) fail('NOT_FOUND', '历史章节版本不存在');
+        return c.versions.filter(v => a.revision === undefined || v.revision === a.revision).map(({ content, ...v }) => ({ ...v, ...(a.includeContent ? { content } : {}) }));
+      }
       if (!['chapter.update', 'chapter.delete', 'chapter.restore'].includes(action)) fail('UNKNOWN_ACTION', action);
       cas(c, a);
       if (action === 'chapter.delete') {
@@ -473,7 +503,13 @@ export class Store extends ProjectStore {
       if (['graph.move','graph.group.create','graph.group.delete'].includes(action)) for (const node of Object.values(n.nodes)) if (node.revision !== before.get(node.id)) appendMemoryVersion(node, actor, action === 'graph.move' ? '调整设定归属' : action==='graph.group.create'?'收纳到文件夹':'删除设定分组');
       return result;
     }
-    if (action === 'graph.get') return memoryResult(get(n.nodes, a.nodeId, '节点'));
+    if (action === 'graph.get') {
+      const result=memoryResult(get(n.nodes,a.nodeId,'节点'));
+      if(n.variables?.enabled&&(actor.kind==='agent'||a.resolveVariables===true)){
+        const rendered=variableAction(n,'variables.render',{text:result.content,...(a.chapterId?{chapterId:a.chapterId,chapterRevision:a.chapterRevision,position:a.position||'start'}:{}),characterName:result.type==='character_card'?result.name:a.characterName},actor);
+        return {...result,renderedContent:rendered.content,variableSnapshot:{id:rendered.snapshotId,revision:rendered.revision},variableWarnings:rendered.warnings};
+      }return result;
+    }
     if (action === 'graph.history') {
       if (a.revision !== undefined && (!Number.isSafeInteger(a.revision) || a.revision < 1)) fail('INVALID_INPUT', 'revision 必须是有效的历史版本号');
       if (a.includeContent === true && a.revision === undefined) fail('INVALID_INPUT', '读取历史正文需指定 revision；先用 graph.history 查看版本摘要');
@@ -523,16 +559,18 @@ export class Store extends ProjectStore {
     }
     if (action === 'graph.update' || action === 'graph.delete' || action === 'graph.restore') {
       const v = get(n.nodes, a.nodeId, '节点'); cas(v, a);
-      // A legacy entry's first edit must retain the pre-edit content as its baseline.
-      ensureMemoryVersions(v, actor);
+      if(action!=='graph.restore')validateMemoryMutation(action,a);
+      const previous=clone(v),previousRevision=v.revision,deletedEdgeIds=[];
       if (action === 'graph.delete') {
         if (a.confirm !== true) fail('CONFIRM_REQUIRED', '删除需要 confirm:true');
         v.deleted = true;
-        for (const e of Object.values(n.edges)) if (!e.deleted && (e.from === v.id || e.to === v.id)) { e.deleted = true; touch(e); }
+        for (const e of Object.values(n.edges)) if (!e.deleted && (e.from === v.id || e.to === v.id)) { e.deleted = true; touch(e); deletedEdgeIds.push(e.id); }
       } else if (action === 'graph.restore') {
+        if(a.restoreScope!==undefined&&!['all','content'].includes(a.restoreScope))fail('INVALID_INPUT','restoreScope 必须是 all 或 content');
+        if(a.restoreScope==='content'&&v.deleted)fail('DELETED','设定已删除，请先恢复此设定');
         const target = v.versions?.find(item => item.revision === a.targetRevision);
         if (!target) fail('NOT_FOUND', '历史设定版本不存在');
-        for (const field of memoryVersionFields) if (target[field] !== undefined) v[field] = clone(target[field]);
+        for (const field of memoryVersionFields) if (!(a.restoreScope==='content'&&['groupId','pageId','deleted'].includes(field))&&target[field] !== undefined) v[field] = clone(target[field]);
         v.deleted = false;
         // Group removal is permanent; restoring a snapshot must not resurrect
         // a dangling group ID. Old evidence stays old and requires review.
@@ -549,10 +587,21 @@ export class Store extends ProjectStore {
         const pageId=a.pageId===undefined?(a.groupId!==undefined&&targetGroup?n.memoryGroups[targetGroup].pageId??null:v.pageId??null):memoryPageId(n,a.pageId);
         if(targetGroup&&(n.memoryGroups[targetGroup].pageId??null)!==pageId){if(a.groupId!==undefined)fail('INVALID_INPUT','设定与文件夹须在同一画布');v.groupId=null;}else v.groupId=targetGroup;
         if(a.pageId!==undefined||a.groupId!==undefined)v.pageId=pageId;
-        Object.assign(v, memoryFields(a, n), nodePosition(a));
+        const fields=memoryFields(a,n);
+        if(a.type!==undefined){if(!kinds.has(a.type))fail('INVALID_INPUT','type 必须是 character_card、world_entry 或 world_book');fields.type=a.type;}
+        if(a.patch!==undefined)fields.content=patchMemoryContent(v.content,a.patch);
+        Object.assign(v,fields,nodePosition(a));
         this.checkMemorySources(n, v);
       }
-      touch(v); v.versions.push(memoryVersion(v, actor, a.reason || (action === 'graph.restore' ? `恢复设定 v${a.targetRevision}` : action === 'graph.delete' ? '删除设定' : '更新设定'))); touch(n); return memoryResult(v);
+      const changedFields=memoryChangedFields(previous,v);
+      const changed=action==='graph.restore'||changedFields.length>0||deletedEdgeIds.length>0;
+      if(changed){
+        // A legacy entry's first edit must retain its pre-edit baseline, never
+        // fabricate that baseline from the already patched body.
+        ensureMemoryVersions(previous,actor);v.versions=previous.versions;
+        touch(v);v.versions.push(memoryVersion(v,actor,a.reason||(action==='graph.restore'?`恢复设定 v${a.targetRevision}`:action==='graph.delete'?'删除设定':'更新设定')));touch(n);
+      }
+      return {...memoryResult(v),changed,changedFields,previousRevision,...(action==='graph.delete'?{deletedEdgeIds}:{})};
     }
     if (action === 'graph.duplicate') {
       if (!Array.isArray(a.members) || !a.members.length || a.members.length > 200 || new Set(a.members.map(v=>v.id)).size!==a.members.length) fail('INVALID_INPUT', '请选择 1–200 个不同的节点');
@@ -565,7 +614,7 @@ export class Store extends ProjectStore {
       if (a.confirm !== true) fail('CONFIRM_REQUIRED', '删除需要 confirm:true');
       if (!Array.isArray(a.members) || !a.members.length || a.members.length > 200 || new Set(a.members.map(v=>v.id)).size!==a.members.length) fail('INVALID_INPUT', '请选择 1–200 个不同的节点');
       for (const item of a.members) { const node=get(n.nodes,item.id,'节点');cas(node,item);if(node.deleted)fail('DELETED','节点已删除'); }
-      return a.members.map(item=>this.execute(state,'graph.delete',{novelId:n.id,nodeId:item.id,expectedRevision:item.expectedRevision,confirm:true},actor));
+      return a.members.map(item=>this.execute(state,'graph.delete',{novelId:n.id,nodeId:item.id,expectedRevision:item.expectedRevision,confirm:true,reason:a.reason},actor));
     }
     if (action === 'edge.disconnect') {
       if (a.confirm !== true) fail('CONFIRM_REQUIRED', '断开需要 confirm:true');
@@ -593,27 +642,59 @@ export class Store extends ProjectStore {
       this.checkMemorySources(n, e);
       touch(n); return e;
     }
-    if (action === 'preset.get') return n.preset || null;
-    if (action === 'preset.read') return {
-      enabled: Boolean(n.preset?.enabled),
-      name: n.preset?.name || '',
-      revision: n.preset?.revision || 0,
-      content: compilePreset(n.preset),
-    };
-    if (action === 'preset.preview' || action === 'preset.set') {
-      if (actor.kind !== 'human') fail('HUMAN_REQUIRED', '预设只能由作者配置');
-      if (action === 'preset.preview') return importPreset(a.input, a.orderId);
+    if (action === 'preset.get') return actor.kind === 'human' && a.identifier === undefined
+      ? n.preset || null : {novelId:n.id, ...presetDocument(n.preset, a.identifier)};
+    if (action === 'preset.read') {
+      const focusedChapter = (binding?.activeNovelId || binding?.novelId) === n.id ? binding.chapterId : null;
+      return this.readPreset(state, n, a, actor, a.chapterId || focusedChapter);
+    }
+    if (action === 'preset.preview') {
+      const preset = previewPresetInput(a);
+      return actor.kind === 'human' ? preset : {novelId:n.id, ...presetDocument({...preset, revision:n.preset?.revision || 0})};
+    }
+    if (action === 'preset.import' || action === 'preset.update') {
+      validatePresetCommand(action, a);
+      cas(n.preset || {revision:0}, a);
+      const previous = n.preset;
+      const result = action === 'preset.import' ? importPresetDocument(previous, a, previewPresetInput(a)) : {preset:updatePresetDocument(previous, a)};
+      const fields = ['name','enabled','blocks','raw','warnings','importFormat'];
+      const changedFields = fields.filter(field => !isDeepStrictEqual(previous?.[field], result.preset[field]));
+      const saved = changedFields.length ? savePreset(n, result.preset) : previous;
+      return {novelId:n.id, ...presetDocument(saved), changed:changedFields.length > 0, changedFields,
+        previousRevision:previous?.revision || 0, ...(result.mapping ? {mapping:result.mapping} : {})};
+    }
+    if (action === 'preset.set') {
+      if (actor.kind !== 'human') fail('HUMAN_REQUIRED', '整套预设保存由作者页面使用；AI 请用 preset.import 或 preset.update 维护');
       if (n.preset) cas(n.preset,a);
       else if (a.expectedRevision !== 0) fail('CONFLICT','预设版本不匹配，请重新读取');
       const value=validatePreset(a.preset);
-      n.preset=record({name:value.name,enabled:value.enabled,blocks:clone(value.blocks),raw:clone(value.raw ?? null),warnings:clone(value.warnings ?? []),...(value.importFormat?{importFormat:value.importFormat}:{}),revision:(n.preset?.revision||0)+1});
-      touch(n);return n.preset;
+      return savePreset(n, value);
     }
     if (action === 'context.get') return {
       ...this.context(n, { ...a, chapterId: a.chapterId || (a.includeChapters === true ? binding?.chapterId : null) }),
       task: binding ? { stage: binding.stage, goal: binding.goal, chapterId: binding.chapterId } : null,
     };
     fail('UNKNOWN_ACTION', `未知操作：${action}`);
+  }
+
+  async readPreset(state, novel, args, actor, chapterId) {
+    const sessionId = actor.kind === 'agent' ? actor.sessionId : undefined;
+    const {preset, snapshot, capturePath} = await this.loadPresetForRead(state, novel.id, sessionId);
+    const effective = snapshot ?? {
+      enabled: Boolean(preset?.enabled),
+      name: preset?.name || '',
+      revision: preset?.revision || 0,
+      content: compilePreset(preset),
+    };
+    const rendered = novel.variables?.enabled ? variableAction(novel, 'variables.render', {
+      text: effective.content,
+      ...(chapterId ? {chapterId, chapterRevision:args.chapterRevision, position:args.position || 'start'} : {}),
+    }, actor) : null;
+    // Dispatch holds the store lock. Capture the template only after a
+    // successful read, and resolve its variables against current story state.
+    if (capturePath) await this.transaction.commit(new Map([[capturePath, JSON.stringify(effective)]]));
+    return rendered ? {...effective, content:rendered.content,
+      variableSnapshot:{id:rendered.snapshotId, revision:rendered.revision}, warnings:rendered.warnings} : effective;
   }
 
   context(n, a) {
@@ -699,6 +780,7 @@ export class Store extends ProjectStore {
     if (n.preset) { validatePreset(n.preset); if (!Number.isSafeInteger(n.preset.revision) || n.preset.revision < 1) fail('INVALID_BACKUP','预设版本无效'); }
     validateCollaboration(n);
     validateProgress(n);
+    if(n.variables)validateVariables(n.variables);
     if (own(state.novels, n.id)) {
       const comparable = value => {
         const copy = clone(withoutSharedCache(value));

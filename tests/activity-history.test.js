@@ -29,7 +29,7 @@ async function seedOld(root,activity){
  await writeFile(join(root,'activity.json'),JSON.stringify(activity));
 }
 
-test('legacy daily counters migrate automatically across years without pruning or fabricating history',async t=>{
+test('legacy settled daily counters migrate losslessly and are not recalculated',async t=>{
  const {root,store,novel}=await fixture(t),activity=oldActivity(novel.id);
  await new UpgradeCoordinator(store).start(); // same-version completed report
  await seedOld(root,activity);
@@ -42,6 +42,7 @@ test('legacy daily counters migrate automatically across years without pruning o
  assert.equal(result.activeDays,420);assert.equal(result.stats.proseAdded,420*421/2);assert.equal(result.stats.settingAdded,840);
  assert.equal(result.novels[0].title,novel.title);
  const state=await migrated.load();
+ assert.equal(Object.values(state.activity.daily).reduce((sum,day)=>sum+day.novels[novel.id].proseAdded,0),420*421/2,'original counters remain lossless');
  recordActivity(state,'chapter.create',{novelId:novel.id,content:'新'},human,null,{});
  assert.equal(Object.keys(state.activity.daily).length,421,'a new save never drops old days');
  await migrated.save(state);
@@ -51,7 +52,7 @@ test('legacy daily counters migrate automatically across years without pruning o
  assert.equal(await readFile(join(root,'backups',backupDir,'activity.json'),'utf8'),JSON.stringify(activity));
 });
 
-test('ordinary writing reads and rewrites only the current year; range queries read no novel bodies',async t=>{
+test('ordinary writing rewrites only the current year; queries need no chapter bodies or histories',async t=>{
  const {root,store,novel}=await fixture(t);await seedOld(root,oldActivity(novel.id));await new UpgradeCoordinator(store).start();
  class TrackedStore extends Store{reads=[];async readText(path){this.reads.push(path);return super.readText(path);}}
  const tracked=new TrackedStore(root),before=await stat(join(root,'activity/2022.json'));
@@ -61,12 +62,14 @@ test('ordinary writing reads and rewrites only the current year; range queries r
  tracked.reads=[];
  const result=await tracked.dispatch('activity.stats',{from:'2022-01-01',to:'2022-12-31'},human);
  assert.ok(result.activeDays>0);assert.ok(tracked.reads.includes('activity/2022.json'));assert.ok(!tracked.reads.includes('activity/2023.json'));
- assert.ok(!tracked.reads.some(path=>path.startsWith('novels/')));
+ assert.ok(!tracked.reads.some(path=>path.includes('/chapters/')&&!path.includes('/history/')&&!path.endsWith('/index.json')));
+ tracked.reads=[];await tracked.dispatch('activity.stats',{from:'2022-01-01',to:'2022-12-31'},human);
+ assert.ok(!tracked.reads.some(path=>path.includes('/history/chapters/')));
  const current=JSON.parse(await readFile(join(root,'activity',localDay().slice(0,4)+'.json'),'utf8'));
  assert.equal(current.daily[localDay()].novels[novel.id].proseAdded,6);
 });
 
-test('chapter deletion and work purge preserve dated totals and the last known title',async t=>{
+test('same-day chapter deletion cancels its net growth; later purge preserves dated records and title',async t=>{
  const {store,novel}=await fixture(t);
  const chapter=await store.dispatch('chapter.create',{novelId:novel.id,title:'一',content:'保留写作记录。'},human);
  const before=await store.dispatch('activity.today',{},human);
@@ -75,8 +78,11 @@ test('chapter deletion and work purge preserve dated totals and the last known t
  const recycled=await store.dispatch('novel.archive',{novelId:novel.id,expectedRevision:book.revision,confirm:true},human);
  await store.dispatch('novel.purge',{novelId:novel.id,expectedRevision:recycled.revision,confirm:true},human);
  const result=await store.dispatch('activity.stats',{from:before.date,to:before.date,novelId:novel.id},human);
- assert.deepEqual(result.stats,before.stats);assert.equal(result.novels[0].title,novel.title);assert.equal(result.novels[0].removed,true);
- assert.deepEqual((await store.dispatch('activity.today',{},human)).stats,before.stats);
+ const expected=structuredClone(before.stats);expected.proseAdded=expected.byActor.human.proseAdded=0;
+ expected.chaptersTouched=expected.byActor.human.chaptersTouched=2;
+ assert.deepEqual(result.stats,expected);assert.equal(result.novels[0].title,novel.title);assert.equal(result.novels[0].removed,true);
+ assert.deepEqual((await store.dispatch('activity.today',{},human)).stats,expected);
+ assert.equal((await store.load()).activity.daily[before.date].novels[novel.id].proseAdded,0);
 });
 
 test('whole-workspace backup roundtrips all years and old canonical archives without duplicate counters',async t=>{
@@ -91,6 +97,7 @@ test('whole-workspace backup roundtrips all years and old canonical archives wit
  const state=await destination.load();state.activity.daily['2021-01-01']={date:'2021-01-01',updatedAt:'2021-01-01T00:00:00Z',novels:{[novel.id]:bucket(5)}};await destination.save(state);
  await data.import(backup);
  assert.equal((await destination.dispatch('activity.stats',{from:'2021-01-01',to:'2024-12-31'},human)).stats.proseAdded,before.stats.proseAdded+5);
+ assert.equal((await destination.load()).activity.daily['2021-01-01'].novels[novel.id].proseAdded,5);
 });
 
 test('an interrupted annual/session migration recovers against its exact permitted metadata result',async t=>{

@@ -17,16 +17,17 @@ function failure(error) {
 }
 
 export function registerRpcRoute(ctx, services) {
-  const {dispatch,workData,transfer,maintenance,desktopPet,libraries}=services;
+  const {dispatch,workData,transfer,maintenance,desktopPet,libraries,usage}=services;
   const ensureReady = () => maintenance?.ensureReady();
   const dispatchRpc = async (payload, signal, admitted=false) => {
-    if(libraries&&!admitted&&!String(payload?.action).startsWith('library.'))return libraries.use(()=>dispatchRpc(payload,signal,true)).catch(failure);
+    if(libraries&&!admitted&&!String(payload?.action).startsWith('library.')&&!String(payload?.action).startsWith('usage.'))return libraries.use(()=>dispatchRpc(payload,signal,true)).catch(failure);
     try {
       signal.throwIfAborted();
       if (!record(payload) || !HUMAN_ACTIONS.includes(payload.action)) throw invalid('无效的催更姬操作');
       const { action, args:input = {}, sessionId } = payload;
       const args=record(input)?{...input}:input;
       if (!record(args)) throw invalid('args 必须是对象');
+      if(action.startsWith('usage.')){if(!usage)throw invalid('记账服务尚未就绪');delete args.__libraryRoot;return {ok:true,value:await usage.dispatch(action,args)};}
       if(args.__libraryRoot&&args.__libraryRoot!==services.dataRoot)throw Object.assign(new Error('作品库已切换，旧页面的编辑已保留，请刷新后继续'),{code:'LIBRARY_CHANGED'});
       delete args.__libraryRoot;
       if (sessionId !== undefined && (typeof sessionId !== 'string' || !sessionId.trim() || sessionId.length > 512)) {

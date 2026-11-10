@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import {directoryKey,orderedDirectory} from '../directory/order.ts';
 import {groupMatches,groupTrail} from '../directory/groups.ts';
 import {linkedResources} from './resources.ts';
+import {planningNodeVersions,planningContentFields} from './history.ts';
 const fail=(code:string,message:string):never=>{throw Object.assign(new Error(message),{code});};
 const copy=<T>(v:T):T=>structuredClone(v);
 const own=(map:object,id:string)=>Object.prototype.hasOwnProperty.call(map,id);
@@ -55,6 +56,22 @@ export function planningAction(novel:PlanningNovel,action:string,args:PlanningAr
     if(!Number.isSafeInteger(offset)||offset<0)fail('INVALID_INPUT','资源摘要分页无效');
     return {node,edges,neighbors,resources:linkedResources(node.memoryRefs,novel.nodes,offset,12,novel.id),flow:{previous:neighbors.filter(n=>edges.some(e=>e.from===n.id&&e.to===node.id)),next:neighbors.filter(n=>edges.some(e=>e.from===node.id&&e.to===n.id))},children:Object.values(board.nodes).filter(n=>!n.deleted&&n.parentId===node.id).map(({content,...n})=>n),sequence:board.sequence};
   }
+  if(action==='planning.node.history'){
+    if(args.revision!==undefined&&(!Number.isSafeInteger(args.revision)||args.revision<1))fail('INVALID_INPUT','revision 必须是有效的历史版本号');
+    if(args.includeContent===true&&args.revision===undefined)fail('INVALID_INPUT','读取历史正文需指定 revision；先用 planning.node.history 查看版本摘要');
+    let versions=planningNodeVersions(board,entity(board.nodes,args.nodeId));
+    if(args.revision!==undefined){versions=versions.filter(v=>v.revision===args.revision);if(!versions.length)fail('NOT_FOUND','历史规划版本不存在');}
+    return {...page(versions.reverse().map(({content,...version})=>({...version,...(args.includeContent===true?{content}:{})})),args),sequence:board.sequence};
+  }
+  if(action==='planning.node.restore'){
+    const current=entity(board.nodes,args.nodeId);check(current,args.expectedRevision);
+    if(current.deleted)fail('DELETED','规划已删除，请在整批修改记录中撤销删除');
+    const target=planningNodeVersions(board,current).find(v=>v.revision===args.targetRevision);
+    if(!target)return fail('NOT_FOUND','历史规划版本不存在');
+    const value=Object.fromEntries(planningContentFields.map(key=>[key,copy(target[key])]));
+    const result=planningAction(novel,'planning.apply',{...args,reason:args.reason||`恢复规划 v${args.targetRevision}`,operations:[{op:'node.update',id:current.id,expectedRevision:current.revision,value}]},actor) as {transactionId:string;sequence:number};
+    return {node:novel.planning!.nodes[current.id],...result};
+  }
   if(action==='planning.changes'||action==='planning.history'){
     const values=board.transactions.filter(t=>(args.after===undefined||t.sequence>args.after)&&(!args.nodeId||t.changes.some(c=>c.id===args.nodeId)));
     return {...page(action==='planning.history'?values.reverse():values,args),sequence:board.sequence};
@@ -70,7 +87,8 @@ export function planningAction(novel:PlanningNovel,action:string,args:PlanningAr
   const resolve=(id:string|null|undefined):string=>id&&(own(mapping,id)?mapping[id]:id)||'';
   if(action==='planning.revert'){
     const transaction=board.transactions.find(t=>t.id===args.transactionId);if(!transaction)fail('NOT_FOUND','变更记录不存在');
-    for(const change of transaction!.changes){const current=entity<PlanningEntity>(draft[change.collection],change.id);check(current,change.after.revision);update(change.collection,change.id,change.before||{...current,deleted:true},true);}
+    if(transaction!.changes.some(c=>c.before&&'pruned'in c.before||'pruned'in c.after))fail('HISTORY_CLEANED','这批记录包含已清理的版本，不能整批撤销；其他卡片仍可从各自的改动对比恢复');
+    for(const change of transaction!.changes){const current=entity<PlanningEntity>(draft[change.collection],change.id);check(current,change.after.revision);update(change.collection,change.id,(change.before as PlanningEntity|null)||{...current,deleted:true},true);}
   }else{
     for(const op of normalizePlanningOperations(args.operations)){
       if(op.op==='page.create'){

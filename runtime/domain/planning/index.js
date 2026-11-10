@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { directoryKey, orderedDirectory } from "../directory/order.js";
 import { groupMatches, groupTrail } from "../directory/groups.js";
 import { linkedResources } from "./resources.js";
+import { planningNodeVersions, planningContentFields } from "./history.js";
 const fail = (code, message) => {
   throw Object.assign(new Error(message), { code });
 };
@@ -67,6 +68,26 @@ ${n.summary}`.toLowerCase().includes(q))).map(({ content, ...n }) => n);
     if (!Number.isSafeInteger(offset) || offset < 0) fail("INVALID_INPUT", "\u8D44\u6E90\u6458\u8981\u5206\u9875\u65E0\u6548");
     return { node, edges, neighbors, resources: linkedResources(node.memoryRefs, novel.nodes, offset, 12, novel.id), flow: { previous: neighbors.filter((n) => edges.some((e) => e.from === n.id && e.to === node.id)), next: neighbors.filter((n) => edges.some((e) => e.from === node.id && e.to === n.id)) }, children: Object.values(board.nodes).filter((n) => !n.deleted && n.parentId === node.id).map(({ content, ...n }) => n), sequence: board.sequence };
   }
+  if (action === "planning.node.history") {
+    if (args.revision !== void 0 && (!Number.isSafeInteger(args.revision) || args.revision < 1)) fail("INVALID_INPUT", "revision \u5FC5\u987B\u662F\u6709\u6548\u7684\u5386\u53F2\u7248\u672C\u53F7");
+    if (args.includeContent === true && args.revision === void 0) fail("INVALID_INPUT", "\u8BFB\u53D6\u5386\u53F2\u6B63\u6587\u9700\u6307\u5B9A revision\uFF1B\u5148\u7528 planning.node.history \u67E5\u770B\u7248\u672C\u6458\u8981");
+    let versions = planningNodeVersions(board, entity(board.nodes, args.nodeId));
+    if (args.revision !== void 0) {
+      versions = versions.filter((v) => v.revision === args.revision);
+      if (!versions.length) fail("NOT_FOUND", "\u5386\u53F2\u89C4\u5212\u7248\u672C\u4E0D\u5B58\u5728");
+    }
+    return { ...page(versions.reverse().map(({ content, ...version }) => ({ ...version, ...args.includeContent === true ? { content } : {} })), args), sequence: board.sequence };
+  }
+  if (action === "planning.node.restore") {
+    const current = entity(board.nodes, args.nodeId);
+    check(current, args.expectedRevision);
+    if (current.deleted) fail("DELETED", "\u89C4\u5212\u5DF2\u5220\u9664\uFF0C\u8BF7\u5728\u6574\u6279\u4FEE\u6539\u8BB0\u5F55\u4E2D\u64A4\u9500\u5220\u9664");
+    const target = planningNodeVersions(board, current).find((v) => v.revision === args.targetRevision);
+    if (!target) return fail("NOT_FOUND", "\u5386\u53F2\u89C4\u5212\u7248\u672C\u4E0D\u5B58\u5728");
+    const value = Object.fromEntries(planningContentFields.map((key) => [key, copy(target[key])]));
+    const result = planningAction(novel, "planning.apply", { ...args, reason: args.reason || `\u6062\u590D\u89C4\u5212 v${args.targetRevision}`, operations: [{ op: "node.update", id: current.id, expectedRevision: current.revision, value }] }, actor);
+    return { node: novel.planning.nodes[current.id], ...result };
+  }
   if (action === "planning.changes" || action === "planning.history") {
     const values = board.transactions.filter((t) => (args.after === void 0 || t.sequence > args.after) && (!args.nodeId || t.changes.some((c) => c.id === args.nodeId)));
     return { ...page(action === "planning.history" ? values.reverse() : values, args), sequence: board.sequence };
@@ -91,6 +112,7 @@ ${n.summary}`.toLowerCase().includes(q))).map(({ content, ...n }) => n);
   if (action === "planning.revert") {
     const transaction2 = board.transactions.find((t) => t.id === args.transactionId);
     if (!transaction2) fail("NOT_FOUND", "\u53D8\u66F4\u8BB0\u5F55\u4E0D\u5B58\u5728");
+    if (transaction2.changes.some((c) => c.before && "pruned" in c.before || "pruned" in c.after)) fail("HISTORY_CLEANED", "\u8FD9\u6279\u8BB0\u5F55\u5305\u542B\u5DF2\u6E05\u7406\u7684\u7248\u672C\uFF0C\u4E0D\u80FD\u6574\u6279\u64A4\u9500\uFF1B\u5176\u4ED6\u5361\u7247\u4ECD\u53EF\u4ECE\u5404\u81EA\u7684\u6539\u52A8\u5BF9\u6BD4\u6062\u590D");
     for (const change of transaction2.changes) {
       const current = entity(draft[change.collection], change.id);
       check(current, change.after.revision);

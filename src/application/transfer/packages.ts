@@ -65,6 +65,8 @@ export function selectProjects(source: Novel[], selection: Selection): Slice {
   for (const id of nodes) if (!initialNodes.has(id)) dependencies.push({kind: '设定', title: n.nodes[id].name});
   const result: Novel = {...copy(n), volumes: {}, chapters: pick(n.chapters, chapters), nodes: pick(n.nodes, nodes), edges: {}, memoryGroups: {},memoryPages:{},plan: null};
   delete result.planning; delete result.preset; delete result.tavernSources; delete result.collaboration; delete result.collaborationProgress;
+  delete result.variables;
+  if(n.variables?.enabled)warnings.push('局部数据包不携带整本书的剧情变量和会话草稿；含取值宏的文本保留原文，可在目标作品初始化变量。完整作品备份会保留变量轨迹。');
   const volumes = new Set<string>();
   for (const ch of Object.values(result.chapters)) {
     if (ch.volumeId) volumes.add(ch.volumeId);

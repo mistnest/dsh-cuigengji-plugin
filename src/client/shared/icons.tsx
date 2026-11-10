@@ -1,7 +1,8 @@
 import React from 'react';
 
-export type IconName = 'folder' | 'folderPlus' | 'pagePlus' | 'collapseAll' | 'home' | 'refresh' | 'settings' | 'filter' | 'edit' | 'about' | 'person' | 'world' | 'trash' | 'restore' | 'sidebar' | 'search' | 'expand' | 'collapse' | 'plan' | 'book' | 'star';
+export type IconName = 'folder' | 'folderPlus' | 'pagePlus' | 'collapseAll' | 'home' | 'refresh' | 'settings' | 'filter' | 'edit' | 'about' | 'person' | 'world' | 'trash' | 'restore' | 'sidebar' | 'search' | 'expand' | 'collapse' | 'plan' | 'book' | 'star' | 'download';
 const paths: Record<IconName, React.ReactNode> = {
+  download:<><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></>,
   folderPlus:<><path d="M13 20H3V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v4"/><path d="M15 17h8M19 13v8"/></>,
   pagePlus:<><path d="M13 21H5V3h10l4 4v5M14 3v5h5M15 17h8M19 13v8"/></>,
   collapseAll:<><path d="M8 3h13v13"/><rect x="3" y="8" width="13" height="13" rx="1"/><path d="M6 14.5h7"/></>,

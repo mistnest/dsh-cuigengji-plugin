@@ -13,16 +13,22 @@ import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { previewTavern } from "../infrastructure/migrations/tavern.js";
 import { checkDirectorySnapshot as checkChapterDirectorySnapshot, directorySnapshot as chapterDirectorySnapshot, planChapterMove } from "../domain/chapters/order.js";
-import { compilePreset, importPreset, validatePreset } from "../domain/preset/index.js";
+import { compilePreset, validatePreset } from "../domain/preset/index.js";
+import { presetDocument, validatePresetCommand, importPresetDocument, updatePresetDocument } from "../domain/preset/maintenance.js";
+import { previewPresetInput } from "./presets.js";
 import { applyNovelLifecycle, novelLifecycleActions } from "./novels/lifecycle.js";
 import { validateCollaboration, validateSharedPlans, portableNovel, retainSharedPlans, withoutSharedCache, validateProgress } from "../domain/collaboration/legacy.js";
 import { isReadAction } from "../contracts/actions.js";
 import { layoutPlanning, layoutSettings } from "./canvas/layout.js";
-import { normalizeActivity, recordConversationInput, recordActivity, todayActivity, rangeActivity, tracksActivity } from "./activity.js";
+import { normalizeActivity, recordConversationInput, recordActivity, todayActivity, rangeActivity, tracksActivity, tracksProse } from "./activity.js";
+import { manuscriptProgress } from "./manuscript-progress.js";
 import { memoryVersionFields, memoryHistory } from "../domain/memory/history.js";
+import { validateMemoryMutation, patchMemoryContent, memoryChangedFields } from "../domain/memory/edit.js";
 import { staleMemoryEntities } from "../domain/memory/invalidation.js";
 import { directoryKey, orderedDirectory, directorySnapshot, checkDirectorySnapshot, planDirectoryMove, validateDirectoryOrder } from "../domain/directory/order.js";
 import { findProse, replaceLiteral } from "../domain/chapters/find.js";
+import { variableAction, validateVariables } from "../domain/variables/index.js";
+import { previewCleanup, prepareCleanup } from "./cleanup.js";
 class StoreError extends Error {
   constructor(code, message) {
     super(message);
@@ -55,6 +61,22 @@ function touch(entity) {
 }
 function record(fields) {
   return { id: randomUUID(), revision: 1, createdAt: now(), updatedAt: now(), ...fields };
+}
+function savePreset(novel, value) {
+  const previous = novel.preset;
+  novel.preset = record({
+    name: value.name,
+    enabled: value.enabled,
+    blocks: clone(value.blocks),
+    raw: clone(value.raw ?? null),
+    warnings: clone(value.warnings ?? []),
+    ...value.importFormat ? { importFormat: value.importFormat } : {},
+    ...previous?.id ? { id: previous.id } : {},
+    ...previous?.createdAt ? { createdAt: previous.createdAt } : {},
+    revision: (previous?.revision || 0) + 1
+  });
+  touch(novel);
+  return novel.preset;
 }
 function meta(chapter) {
   const { content, versions, ...metadata } = chapter;
@@ -173,6 +195,7 @@ class Store extends ProjectStore {
   async dispatch(action, args = {}, actor = {}, beforeExecute) {
     if (!args || typeof args !== "object" || Array.isArray(args)) fail("INVALID_INPUT", "\u53C2\u6570\u5FC5\u987B\u662F\u5BF9\u8C61");
     if (action === "chapter.replace" && actor.kind !== "human") fail("HUMAN_REQUIRED", "\u6279\u91CF\u66FF\u6362\u7531\u4F5C\u8005\u5728\u67E5\u627E\u9762\u677F\u786E\u8BA4");
+    if (action.startsWith("cleanup.") && actor.kind !== "human") fail("HUMAN_REQUIRED", "\u6C38\u4E45\u6E05\u7406\u7531\u4F5C\u8005\u5728\u9762\u677F\u786E\u8BA4");
     if (novelLifecycleActions.includes(action) && actor.kind !== "human") fail("HUMAN_REQUIRED", "\u6574\u90E8\u4F5C\u54C1\u7684\u56DE\u6536\u3001\u6062\u590D\u4E0E\u6C38\u4E45\u5220\u9664\u9700\u8981\u4F5C\u8005\u64CD\u4F5C");
     if (action.startsWith("collaboration.") || action === "binding.inherit") fail("FEATURE_RETIRED", "\u5B9E\u9A8C\u6027\u591Aagent\u534F\u4F5C\u5DF2\u64A4\u51FA\uFF1B\u8BF7\u4F7F\u7528 DSH \u539F\u751F\u5B50 Agent \u548C\u666E\u901A\u4F5C\u54C1\u5DE5\u5177");
     const release = await this.acquire();
@@ -184,6 +207,7 @@ class Store extends ProjectStore {
       if (requestKey && own(state.requests, requestKey)) {
         const previous = state.requests[requestKey];
         if (previous.signature !== signature) fail("REQUEST_ID_REUSED", "requestId \u5DF2\u7528\u4E8E\u5176\u4ED6\u8BF7\u6C42");
+        if (previous.cleaned) fail("REQUEST_EXPIRED", "\u6B64\u64CD\u4F5C\u7684\u7ED3\u679C\u5DF2\u968F\u5386\u53F2\u6E05\u7406\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6\u5F53\u524D\u5185\u5BB9\uFF1B\u65E7\u8BF7\u6C42\u4E0D\u4F1A\u91CD\u590D\u6267\u884C");
         return clone(previous.result);
       }
       const currentBinding = state.bindings[hash(actor.sessionId || "")];
@@ -196,10 +220,17 @@ class Store extends ProjectStore {
         });
       }
       const beforeNovel = tracksActivity(action) && migrationNovelId && state.novels[migrationNovelId] ? clone(state.novels[migrationNovelId]) : null;
+      const beforeProse = tracksProse(action) ? manuscriptProgress(state, migrationNovelId).words : void 0;
       const before = JSON.stringify(state);
       const activityBefore = JSON.stringify(state.activity || {});
-      const result = await this.execute(state, action, args, actor);
-      recordActivity(state, action, { ...args, novelId: migrationNovelId || args.novelId }, actor, beforeNovel, result);
+      let result;
+      if (action === "cleanup.apply") {
+        const cleanup = prepareCleanup(state, args);
+        result = cleanup.result;
+        for (const id of cleanup.affected) if (state.novels[id]) this.validateProject(state.novels[id]);
+        if (args.scope === "novel-trash") validateSharedPlans(state);
+      } else result = await this.execute(state, action, args, actor);
+      recordActivity(state, action, { ...args, novelId: migrationNovelId || args.novelId }, actor, beforeNovel, result, beforeProse);
       if (requestKey) state.requests[requestKey] = {
         signature,
         result: clone(result),
@@ -217,6 +248,7 @@ class Store extends ProjectStore {
     }
   }
   execute(state, action, a, actor) {
+    if (action === "cleanup.preview") return previewCleanup(state, a);
     if (action === "guidance.get" || action === "guidance.set") {
       const key = hash(text(actor.sessionId, "sessionId"));
       if (action === "guidance.set") {
@@ -309,6 +341,7 @@ class Store extends ProjectStore {
     if (!novelId) fail("NOVEL_REQUIRED", "\u6B64\u64CD\u4F5C\u9700\u8981\u76EE\u6807\u4F5C\u54C1\uFF1B\u8BF7\u63D0\u4F9B novelId \u6216\u7528 novel.focus \u9009\u62E9\u5F53\u524D\u4F5C\u54C1");
     const n = get(state.novels, novelId, "\u5C0F\u8BF4");
     if (n.archived && !(actor.kind === "human" && ["novel.get", "novel.export", ...novelLifecycleActions].includes(action))) fail("NOVEL_RECYCLED", "\u4F5C\u54C1\u5DF2\u5728\u56DE\u6536\u7AD9\uFF0C\u8BF7\u5148\u6062\u590D\u4F5C\u54C1");
+    if (action.startsWith("variables.")) return variableAction(n, action, a, actor);
     if (novelLifecycleActions.includes(action)) {
       cas(n, a);
       if (action === "novel.purge" && n.archived && a.confirm === true) retainSharedPlans(state, n);
@@ -509,7 +542,11 @@ class Store extends ProjectStore {
         if (!Number.isSafeInteger(start) || start < 0 || !Number.isSafeInteger(maxChars) || maxChars < 1 || maxChars > 2e5) fail("INVALID_INPUT", "\u8BFB\u53D6\u7A97\u53E3\u65E0\u6548");
         return { ...meta(c), content: c.content.slice(start, start + maxChars), start, nextStart: start + maxChars < c.content.length ? start + maxChars : null };
       }
-      if (action === "chapter.history") return c.versions.map(({ content, ...v }) => ({ ...v, ...a.includeContent ? { content } : {} }));
+      if (action === "chapter.history") {
+        if (a.revision !== void 0 && (!Number.isSafeInteger(a.revision) || a.revision < 1)) fail("INVALID_INPUT", "revision \u5FC5\u987B\u662F\u6709\u6548\u7684\u5386\u53F2\u7248\u672C\u53F7");
+        if (a.revision !== void 0 && !c.versions.some((v) => v.revision === a.revision)) fail("NOT_FOUND", "\u5386\u53F2\u7AE0\u8282\u7248\u672C\u4E0D\u5B58\u5728");
+        return c.versions.filter((v) => a.revision === void 0 || v.revision === a.revision).map(({ content, ...v }) => ({ ...v, ...a.includeContent ? { content } : {} }));
+      }
       if (!["chapter.update", "chapter.delete", "chapter.restore"].includes(action)) fail("UNKNOWN_ACTION", action);
       cas(c, a);
       if (action === "chapter.delete") {
@@ -565,7 +602,14 @@ class Store extends ProjectStore {
       }
       return result;
     }
-    if (action === "graph.get") return memoryResult(get(n.nodes, a.nodeId, "\u8282\u70B9"));
+    if (action === "graph.get") {
+      const result = memoryResult(get(n.nodes, a.nodeId, "\u8282\u70B9"));
+      if (n.variables?.enabled && (actor.kind === "agent" || a.resolveVariables === true)) {
+        const rendered = variableAction(n, "variables.render", { text: result.content, ...a.chapterId ? { chapterId: a.chapterId, chapterRevision: a.chapterRevision, position: a.position || "start" } : {}, characterName: result.type === "character_card" ? result.name : a.characterName }, actor);
+        return { ...result, renderedContent: rendered.content, variableSnapshot: { id: rendered.snapshotId, revision: rendered.revision }, variableWarnings: rendered.warnings };
+      }
+      return result;
+    }
     if (action === "graph.history") {
       if (a.revision !== void 0 && (!Number.isSafeInteger(a.revision) || a.revision < 1)) fail("INVALID_INPUT", "revision \u5FC5\u987B\u662F\u6709\u6548\u7684\u5386\u53F2\u7248\u672C\u53F7");
       if (a.includeContent === true && a.revision === void 0) fail("INVALID_INPUT", "\u8BFB\u53D6\u5386\u53F2\u6B63\u6587\u9700\u6307\u5B9A revision\uFF1B\u5148\u7528 graph.history \u67E5\u770B\u7248\u672C\u6458\u8981");
@@ -636,18 +680,22 @@ class Store extends ProjectStore {
     if (action === "graph.update" || action === "graph.delete" || action === "graph.restore") {
       const v = get(n.nodes, a.nodeId, "\u8282\u70B9");
       cas(v, a);
-      ensureMemoryVersions(v, actor);
+      if (action !== "graph.restore") validateMemoryMutation(action, a);
+      const previous = clone(v), previousRevision = v.revision, deletedEdgeIds = [];
       if (action === "graph.delete") {
         if (a.confirm !== true) fail("CONFIRM_REQUIRED", "\u5220\u9664\u9700\u8981 confirm:true");
         v.deleted = true;
         for (const e of Object.values(n.edges)) if (!e.deleted && (e.from === v.id || e.to === v.id)) {
           e.deleted = true;
           touch(e);
+          deletedEdgeIds.push(e.id);
         }
       } else if (action === "graph.restore") {
+        if (a.restoreScope !== void 0 && !["all", "content"].includes(a.restoreScope)) fail("INVALID_INPUT", "restoreScope \u5FC5\u987B\u662F all \u6216 content");
+        if (a.restoreScope === "content" && v.deleted) fail("DELETED", "\u8BBE\u5B9A\u5DF2\u5220\u9664\uFF0C\u8BF7\u5148\u6062\u590D\u6B64\u8BBE\u5B9A");
         const target = v.versions?.find((item) => item.revision === a.targetRevision);
         if (!target) fail("NOT_FOUND", "\u5386\u53F2\u8BBE\u5B9A\u7248\u672C\u4E0D\u5B58\u5728");
-        for (const field of memoryVersionFields) if (target[field] !== void 0) v[field] = clone(target[field]);
+        for (const field of memoryVersionFields) if (!(a.restoreScope === "content" && ["groupId", "pageId", "deleted"].includes(field)) && target[field] !== void 0) v[field] = clone(target[field]);
         v.deleted = false;
         if (v.groupId && !own(n.memoryGroups || {}, v.groupId)) v.groupId = null;
         if (v.pageId && n.memoryPageFolders?.[v.pageId]) {
@@ -674,13 +722,25 @@ class Store extends ProjectStore {
           v.groupId = null;
         } else v.groupId = targetGroup;
         if (a.pageId !== void 0 || a.groupId !== void 0) v.pageId = pageId;
-        Object.assign(v, memoryFields(a, n), nodePosition(a));
+        const fields = memoryFields(a, n);
+        if (a.type !== void 0) {
+          if (!kinds.has(a.type)) fail("INVALID_INPUT", "type \u5FC5\u987B\u662F character_card\u3001world_entry \u6216 world_book");
+          fields.type = a.type;
+        }
+        if (a.patch !== void 0) fields.content = patchMemoryContent(v.content, a.patch);
+        Object.assign(v, fields, nodePosition(a));
         this.checkMemorySources(n, v);
       }
-      touch(v);
-      v.versions.push(memoryVersion(v, actor, a.reason || (action === "graph.restore" ? `\u6062\u590D\u8BBE\u5B9A v${a.targetRevision}` : action === "graph.delete" ? "\u5220\u9664\u8BBE\u5B9A" : "\u66F4\u65B0\u8BBE\u5B9A")));
-      touch(n);
-      return memoryResult(v);
+      const changedFields = memoryChangedFields(previous, v);
+      const changed = action === "graph.restore" || changedFields.length > 0 || deletedEdgeIds.length > 0;
+      if (changed) {
+        ensureMemoryVersions(previous, actor);
+        v.versions = previous.versions;
+        touch(v);
+        v.versions.push(memoryVersion(v, actor, a.reason || (action === "graph.restore" ? `\u6062\u590D\u8BBE\u5B9A v${a.targetRevision}` : action === "graph.delete" ? "\u5220\u9664\u8BBE\u5B9A" : "\u66F4\u65B0\u8BBE\u5B9A")));
+        touch(n);
+      }
+      return { ...memoryResult(v), changed, changedFields, previousRevision, ...action === "graph.delete" ? { deletedEdgeIds } : {} };
     }
     if (action === "graph.duplicate") {
       if (!Array.isArray(a.members) || !a.members.length || a.members.length > 200 || new Set(a.members.map((v) => v.id)).size !== a.members.length) fail("INVALID_INPUT", "\u8BF7\u9009\u62E9 1\u2013200 \u4E2A\u4E0D\u540C\u7684\u8282\u70B9");
@@ -706,7 +766,7 @@ class Store extends ProjectStore {
         cas(node, item);
         if (node.deleted) fail("DELETED", "\u8282\u70B9\u5DF2\u5220\u9664");
       }
-      return a.members.map((item) => this.execute(state, "graph.delete", { novelId: n.id, nodeId: item.id, expectedRevision: item.expectedRevision, confirm: true }, actor));
+      return a.members.map((item) => this.execute(state, "graph.delete", { novelId: n.id, nodeId: item.id, expectedRevision: item.expectedRevision, confirm: true, reason: a.reason }, actor));
     }
     if (action === "edge.disconnect") {
       if (a.confirm !== true) fail("CONFIRM_REQUIRED", "\u65AD\u5F00\u9700\u8981 confirm:true");
@@ -749,28 +809,65 @@ class Store extends ProjectStore {
       touch(n);
       return e;
     }
-    if (action === "preset.get") return n.preset || null;
-    if (action === "preset.read") return {
-      enabled: Boolean(n.preset?.enabled),
-      name: n.preset?.name || "",
-      revision: n.preset?.revision || 0,
-      content: compilePreset(n.preset)
-    };
-    if (action === "preset.preview" || action === "preset.set") {
-      if (actor.kind !== "human") fail("HUMAN_REQUIRED", "\u9884\u8BBE\u53EA\u80FD\u7531\u4F5C\u8005\u914D\u7F6E");
-      if (action === "preset.preview") return importPreset(a.input, a.orderId);
+    if (action === "preset.get") return actor.kind === "human" && a.identifier === void 0 ? n.preset || null : { novelId: n.id, ...presetDocument(n.preset, a.identifier) };
+    if (action === "preset.read") {
+      const focusedChapter = (binding?.activeNovelId || binding?.novelId) === n.id ? binding.chapterId : null;
+      return this.readPreset(state, n, a, actor, a.chapterId || focusedChapter);
+    }
+    if (action === "preset.preview") {
+      const preset = previewPresetInput(a);
+      return actor.kind === "human" ? preset : { novelId: n.id, ...presetDocument({ ...preset, revision: n.preset?.revision || 0 }) };
+    }
+    if (action === "preset.import" || action === "preset.update") {
+      validatePresetCommand(action, a);
+      cas(n.preset || { revision: 0 }, a);
+      const previous = n.preset;
+      const result = action === "preset.import" ? importPresetDocument(previous, a, previewPresetInput(a)) : { preset: updatePresetDocument(previous, a) };
+      const fields = ["name", "enabled", "blocks", "raw", "warnings", "importFormat"];
+      const changedFields = fields.filter((field) => !isDeepStrictEqual(previous?.[field], result.preset[field]));
+      const saved = changedFields.length ? savePreset(n, result.preset) : previous;
+      return {
+        novelId: n.id,
+        ...presetDocument(saved),
+        changed: changedFields.length > 0,
+        changedFields,
+        previousRevision: previous?.revision || 0,
+        ...result.mapping ? { mapping: result.mapping } : {}
+      };
+    }
+    if (action === "preset.set") {
+      if (actor.kind !== "human") fail("HUMAN_REQUIRED", "\u6574\u5957\u9884\u8BBE\u4FDD\u5B58\u7531\u4F5C\u8005\u9875\u9762\u4F7F\u7528\uFF1BAI \u8BF7\u7528 preset.import \u6216 preset.update \u7EF4\u62A4");
       if (n.preset) cas(n.preset, a);
       else if (a.expectedRevision !== 0) fail("CONFLICT", "\u9884\u8BBE\u7248\u672C\u4E0D\u5339\u914D\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6");
       const value = validatePreset(a.preset);
-      n.preset = record({ name: value.name, enabled: value.enabled, blocks: clone(value.blocks), raw: clone(value.raw ?? null), warnings: clone(value.warnings ?? []), ...value.importFormat ? { importFormat: value.importFormat } : {}, revision: (n.preset?.revision || 0) + 1 });
-      touch(n);
-      return n.preset;
+      return savePreset(n, value);
     }
     if (action === "context.get") return {
       ...this.context(n, { ...a, chapterId: a.chapterId || (a.includeChapters === true ? binding?.chapterId : null) }),
       task: binding ? { stage: binding.stage, goal: binding.goal, chapterId: binding.chapterId } : null
     };
     fail("UNKNOWN_ACTION", `\u672A\u77E5\u64CD\u4F5C\uFF1A${action}`);
+  }
+  async readPreset(state, novel, args, actor, chapterId) {
+    const sessionId = actor.kind === "agent" ? actor.sessionId : void 0;
+    const { preset, snapshot, capturePath } = await this.loadPresetForRead(state, novel.id, sessionId);
+    const effective = snapshot ?? {
+      enabled: Boolean(preset?.enabled),
+      name: preset?.name || "",
+      revision: preset?.revision || 0,
+      content: compilePreset(preset)
+    };
+    const rendered = novel.variables?.enabled ? variableAction(novel, "variables.render", {
+      text: effective.content,
+      ...chapterId ? { chapterId, chapterRevision: args.chapterRevision, position: args.position || "start" } : {}
+    }, actor) : null;
+    if (capturePath) await this.transaction.commit(/* @__PURE__ */ new Map([[capturePath, JSON.stringify(effective)]]));
+    return rendered ? {
+      ...effective,
+      content: rendered.content,
+      variableSnapshot: { id: rendered.snapshotId, revision: rendered.revision },
+      warnings: rendered.warnings
+    } : effective;
   }
   context(n, a) {
     if (a.chapterId) get(n.chapters, a.chapterId, "\u7AE0\u8282");
@@ -859,6 +956,7 @@ class Store extends ProjectStore {
     }
     validateCollaboration(n);
     validateProgress(n);
+    if (n.variables) validateVariables(n.variables);
     if (own(state.novels, n.id)) {
       const comparable = (value) => {
         const copy = clone(withoutSharedCache(value));

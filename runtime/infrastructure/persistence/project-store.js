@@ -28,7 +28,7 @@ import {
 } from "./project-layout.js";
 import { normalizePlanningOperations } from "../../domain/planning/operations.js";
 import { projectCollaboration } from "../../domain/collaboration/projection.js";
-import { normalizeActivity, emptyActivity, activityRange, localDay, tracksActivity } from "../../application/activity.js";
+import { normalizeActivity, emptyActivity, activityRange, localDay, tracksActivity, tracksProse } from "../../application/activity.js";
 import { ordinaryBindings } from "../../application/bindings/state.js";
 import { sharedPlanRefs } from "../../domain/collaboration/legacy.js";
 import { staleMemoryEntities } from "../../domain/memory/invalidation.js";
@@ -336,6 +336,21 @@ class ProjectStore extends AtomicStore {
     else delete novel[field];
     book.loaded.add(field);
   }
+  // Keep session snapshots with the book so renames and permanent removal
+  // carry them along. Portable exports only include the saved preset.
+  async loadPresetForRead(state, novelId, sessionId) {
+    const view = this.views.get(state);
+    const base = bookPath(novelId, view.library.directories);
+    const capturePath = sessionId ? `${base}/runtime/presets/${digest(sessionId)}.json` : void 0;
+    const snapshot = capturePath ? await this.json(capturePath, void 0, true) : void 0;
+    if (snapshot !== void 0) {
+      if (!object(snapshot) || typeof snapshot.enabled !== "boolean" || typeof snapshot.name !== "string" || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0 || typeof snapshot.content !== "string") corrupt("\u4F1A\u8BDD\u9884\u8BBE\u5FEB\u7167\u65E0\u6548");
+      return { snapshot };
+    }
+    const book = view.books.get(novelId);
+    const preset = book.project.sections.includes("preset") ? await this.json(`${base}/preset.json`) : void 0;
+    return { preset, capturePath };
+  }
   async board(novel, book, view) {
     if (book.loaded.has("planning")) return;
     if (book.project.sections.includes("planning")) {
@@ -423,7 +438,7 @@ class ProjectStore extends AtomicStore {
       await this.memoryIndex(novel, book, view);
       for (const id2 of Object.keys(novel.chapters)) await this.chapter(novel, book, view, id2, true);
       for (const id2 of Object.keys(novel.nodes)) await this.nodeHistory(novel, book, view, id2, false);
-      for (const [field, path] of [["edges", "settings/relations.json"], ["memoryGroups", "settings/groups.json"], ["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"], ["collaboration", "collaboration.json"], ["collaborationProgress", "collaboration-progress.json"]]) await this.section(novel, book, view, field, path);
+      for (const [field, path] of [["edges", "settings/relations.json"], ["memoryGroups", "settings/groups.json"], ["variables", "variables.json"], ["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"], ["collaboration", "collaboration.json"], ["collaborationProgress", "collaboration-progress.json"]]) await this.section(novel, book, view, field, path);
       await this.board(novel, book, view);
       if (book.planning) {
         if (book.planning.hasLegacy) {
@@ -465,6 +480,14 @@ class ProjectStore extends AtomicStore {
       view.activityYears.add(year);
     }
   }
+  /** Current totals use chapter indexes. Daily net changes are already saved in
+   * the activity ledger; statistics never need to inspect prose or old versions. */
+  async loadManuscriptCounts(state, view, novelId) {
+    for (const [id, novel] of Object.entries(state.novels)) if (!novel.archived && (!novelId || novelId === id)) {
+      const book = await this.book(state, view, id);
+      await this.chapterIndex(state.novels[id], book, view);
+    }
+  }
   activityFiles(state, view) {
     const activity = normalizeActivity(state.activity), files = /* @__PURE__ */ new Map(), groups = /* @__PURE__ */ new Map();
     for (const [date, day] of Object.entries(activity.daily)) {
@@ -503,6 +526,7 @@ class ProjectStore extends AtomicStore {
   }
   async loadForAction(action, args, actor) {
     const { state, view } = await this.begin();
+    if (action === "activity.stats" || action === "activity.today") await this.loadManuscriptCounts(state, view, args.novelId);
     if (action === "activity.stats") {
       const { from, to } = activityRange(args);
       await this.loadActivity(state, view, view.activityIndex.filter((year) => year >= from.slice(0, 4) && year <= to.slice(0, 4)));
@@ -520,6 +544,7 @@ class ProjectStore extends AtomicStore {
         return state;
       }
     }
+    if (action.startsWith("cleanup.") && args.scope === "novel-trash") return this.loadWorkspace(view.library);
     if (action === "activity.input") {
       if (!Number.isSafeInteger(args.time) || args.time < 0 || !Number.isFinite(new Date(args.time).getTime())) throw Object.assign(new Error("\u804A\u5929\u6D88\u606F\u65F6\u95F4\u65E0\u6548"), { code: "INVALID_INPUT" });
       const year = localDay(new Date(args.time)).slice(0, 4);
@@ -531,6 +556,16 @@ class ProjectStore extends AtomicStore {
     const id = action === "novel.import" ? args.backup?.novel?.id : args.novelId || binding?.novelId;
     if (!id || !own(state.novels, id)) return state;
     const book = await this.book(state, view, id), novel = state.novels[id];
+    if (action.startsWith("cleanup.")) {
+      await this.fullBook(state, view, book);
+      await this.loadRequests(state, view);
+      for (const ref of sharedPlanRefs(novel)) if (own(state.novels, ref.sourceNovelId)) {
+        const source = await this.book(state, view, ref.sourceNovelId);
+        await this.section(state.novels[ref.sourceNovelId], source, view, "collaboration", "collaboration.json");
+      }
+      return state;
+    }
+    if (tracksProse(action)) await this.chapterIndex(novel, book, view);
     if (novel.archived && !(actor.kind === "human" && ["novel.get", "novel.export", "novel.archive", "novel.restore", "novel.purge"].includes(action))) throw Object.assign(new Error("\u4F5C\u54C1\u5DF2\u5728\u56DE\u6536\u7AD9\uFF0C\u8BF7\u5148\u6062\u590D\u4F5C\u54C1"), { code: "NOVEL_RECYCLED" });
     if (action === "novel.purge") {
       await this.fullBook(state, view, book);
@@ -553,13 +588,14 @@ class ProjectStore extends AtomicStore {
     }
     const preset = action.startsWith("preset.");
     const directory = !preset && !["novel.update", "novel.archive", "novel.restore", "volume.list", "volume.create", "volume.update"].includes(action);
-    if (directory) await this.chapterIndex(novel, book, view);
+    if (directory || action === "preset.read") await this.chapterIndex(novel, book, view);
     if (action === "volume.update") await this.chapterIndex(novel, book, view);
     const memory = action.startsWith("graph.") || action.startsWith("edge.") || action.startsWith("planning.") || ["novel.get", "novel.handoff", "context.get", "chapter.update", "chapter.replace", "chapter.restore", "chapter.delete", "volume.delete", "tavern.import"].includes(action);
-    if (memory) await this.memoryIndex(novel, book, view);
+    if (memory || action.startsWith("variables.")) await this.memoryIndex(novel, book, view);
     if (action.startsWith("graph.") || action.startsWith("edge.") || ["novel.get", "context.get", "chapter.update", "chapter.replace", "chapter.restore", "chapter.delete", "volume.delete"].includes(action)) await this.section(novel, book, view, "edges", "settings/relations.json");
     if (action.startsWith("graph.") || action === "novel.get" || action === "tavern.import") await this.section(novel, book, view, "memoryGroups", "settings/groups.json");
-    if (preset || action === "novel.get") await this.section(novel, book, view, "preset", "preset.json");
+    if (action.startsWith("variables.") || action === "preset.read" || action === "graph.get") await this.section(novel, book, view, "variables", "variables.json");
+    if (preset && action !== "preset.read" || action === "novel.get") await this.section(novel, book, view, "preset", "preset.json");
     if (action === "tavern.import") await this.section(novel, book, view, "tavernSources", "imports/originals.json");
     if (["chapter.get", "chapter.update", "chapter.delete", "chapter.restore", "chapter.history"].includes(action)) await this.chapter(novel, book, view, args.chapterId, action !== "chapter.get");
     if (action === "chapter.move" || action === "volume.delete" || action === "chapter.search") {
@@ -604,7 +640,7 @@ class ProjectStore extends AtomicStore {
     if (action === "graph.arrange" && !Array.isArray(args.members)) for (const id2 of Object.keys(novel.nodes)) nodeIds.add(id2);
     if (action === "graph.list" && args.query) for (const id2 of Object.keys(novel.nodes)) nodeIds.add(id2);
     for (const id2 of nodeIds) await this.node(novel, book, view, id2);
-    if (["graph.workspace.ensure", "graph.update", "graph.delete", "graph.restore", "graph.history", "graph.layout", "graph.arrange", "graph.move", "graph.directory.move", "graph.group.create", "graph.group.delete", "chapter.update", "chapter.replace", "chapter.restore", "chapter.delete", "volume.delete"].includes(action)) for (const id2 of nodeIds) await this.nodeHistory(novel, book, view, id2);
+    if (["graph.workspace.ensure", "graph.update", "graph.delete", "graph.remove", "graph.restore", "graph.history", "graph.layout", "graph.arrange", "graph.move", "graph.directory.move", "graph.group.create", "graph.group.delete", "chapter.update", "chapter.replace", "chapter.restore", "chapter.delete", "volume.delete"].includes(action)) for (const id2 of nodeIds) await this.nodeHistory(novel, book, view, id2);
     if (action.startsWith("planning.") || ["novel.get", "novel.handoff"].includes(action)) {
       await this.board(novel, book, view);
       if (!novel.planning && action.startsWith("planning.")) await this.section(novel, book, view, "plan", "planning/legacy.json");
@@ -613,7 +649,7 @@ class ProjectStore extends AtomicStore {
         const value = novel.planning?.[collection]?.[id2];
         if (value) pages.add(collection === "edges" ? novel.planning.nodes[value.from]?.pageId ?? null : value.pageId ?? null);
       };
-      if (action === "planning.get" || action === "planning.continue") add("nodes", args.nodeId);
+      if (["planning.get", "planning.continue", "planning.node.history", "planning.node.restore"].includes(action)) add("nodes", args.nodeId);
       if (["planning.layout", "planning.layout.get", "planning.directory.move"].includes(action)) pages.add(args.pageId ?? null);
       if (action === "planning.decorations") {
         for (const pageId of book.planning?.pageIds || []) if (args.pageId === void 0 || args.pageId === pageId) pages.add(pageId);
@@ -645,6 +681,10 @@ class ProjectStore extends AtomicStore {
         const offset = Number.isSafeInteger(args.offset) ? args.offset : 0, limit = Number.isSafeInteger(args.limit) ? args.limit : 50;
         for (const transaction of matches.slice(offset, offset + limit)) await this.planningTransaction(novel, book, view, transaction.id);
       }
+      if (["planning.node.history", "planning.node.restore"].includes(action) && novel.planning) {
+        const matches = novel.planning.transactions.filter((transaction) => transaction.changes.some((change) => change.collection === "nodes" && change.id === args.nodeId));
+        for (const transaction of matches) await this.planningTransaction(novel, book, view, transaction.id);
+      }
       if (action === "planning.revert") {
         await this.planningTransaction(novel, book, view, args.transactionId);
         const transaction = novel.planning?.transactions.find((transaction2) => transaction2.id === args.transactionId);
@@ -666,7 +706,7 @@ class ProjectStore extends AtomicStore {
     await this.memoryIndex(novel, book, view);
     for (const id of Object.keys(novel.chapters)) await this.chapter(novel, book, view, id, true);
     for (const id of Object.keys(novel.nodes)) await this.nodeHistory(novel, book, view, id, includeHistory);
-    for (const [field, path] of [["edges", "settings/relations.json"], ["memoryGroups", "settings/groups.json"], ["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"], ["collaboration", "collaboration.json"], ["collaborationProgress", "collaboration-progress.json"]]) await this.section(novel, book, view, field, path);
+    for (const [field, path] of [["edges", "settings/relations.json"], ["memoryGroups", "settings/groups.json"], ["variables", "variables.json"], ["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"], ["collaboration", "collaboration.json"], ["collaborationProgress", "collaboration-progress.json"]]) await this.section(novel, book, view, field, path);
     await this.board(novel, book, view);
     if (book.planning) {
       if (book.planning.hasLegacy) {
@@ -724,7 +764,10 @@ class ProjectStore extends AtomicStore {
           if (oldFile !== file && own(book.chapters, id2)) changes.set(`${sourceBase === base ? sourceBase : base}/chapters/${oldFile}`, null);
           if (book.chapterHistories.has(id2) || !own(book.chapters, id2)) await put(`${base}/history/chapters/${fileId(id2)}.json`, chapter.versions);
         }
-        for (const id2 of Object.keys(book.chapters)) if (!own(novel.chapters, id2)) changes.set(`${sourceBase === base ? sourceBase : base}/chapters/${storedChapterFile(book.chapters[id2], id2, view.library.storageVersion)}`, null);
+        for (const id2 of Object.keys(book.chapters)) if (!own(novel.chapters, id2)) {
+          changes.set(`${sourceBase === base ? sourceBase : base}/chapters/${storedChapterFile(book.chapters[id2], id2, view.library.storageVersion)}`, null);
+          changes.set(`${sourceBase === base ? sourceBase : base}/history/chapters/${fileId(id2)}.json`, null);
+        }
         await put(`${base}/chapters/index.json`, index);
       }
       if (book.loaded.has("nodes")) {
@@ -748,7 +791,7 @@ class ProjectStore extends AtomicStore {
         }
         await put(`${base}/settings/index.json`, index);
       }
-      for (const [field, path] of [["edges", "settings/relations.json"], ["memoryGroups", "settings/groups.json"], ["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"], ["collaboration", "collaboration.json"], ["collaborationProgress", "collaboration-progress.json"]]) if (book.loaded.has(field)) {
+      for (const [field, path] of [["edges", "settings/relations.json"], ["memoryGroups", "settings/groups.json"], ["variables", "variables.json"], ["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"], ["collaboration", "collaboration.json"], ["collaborationProgress", "collaboration-progress.json"]]) if (book.loaded.has(field)) {
         if (own(novel, field)) await put(`${base}/${path}`, novel[field]);
         else if (book.project.sections.includes(field)) changes.set(`${base}/${path}`, null);
       }

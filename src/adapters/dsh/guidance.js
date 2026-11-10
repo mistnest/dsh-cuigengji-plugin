@@ -13,6 +13,7 @@ const modules = Object.freeze({
   write: module('write','正文写作规则'),
   plan: module('plan','规划与共享画布规则'),
   memory: module('memory','人物与世界设定规则'),
+  variables:module('variables','可选剧情变量与状态维护'),
   revise: module('revise','审阅与修订规则'),
 });
 const sections = new Set([...Object.keys(modules), 'preset', 'all']);

@@ -22,10 +22,10 @@ for(const optionalServices of [false,true])test(`native Cordis activates the bac
       ctx.provide('configEditor',{entries:()=>[entry],edit:async(_entry,change)=>edits.push(change({dataRoot:root}))});
       ctx.provide('directoryPicker',{capability:()=>({kind:'native',pick:async()=>join(parent,'selected')})});
     }
-    const boot=ctx.plugin(plugin,{dataRoot:root});
+    const boot=ctx.plugin(plugin,{dataRoot:root,usageRoot:join(parent,'usage')});
     await Promise.race([Promise.resolve(boot),delay(2500).then(()=>{throw new Error('Backend never activated through the native dependency resolver');})]);
     const service=ctx.get('cuigengji');assert.ok(service,'the real service must be available after activation');
-    assert.equal(routes.length,1);assert.ok(tools.some(tool=>tool.name==='cuigengji_project'));assert.equal(skills.length,6);
+    assert.equal(routes.length,1);assert.ok(tools.some(tool=>tool.name==='cuigengji_project'));assert.ok(tools.some(tool=>tool.name==='cuigengji_variables'));assert.equal(skills.length,7);
     const call=async(action,args={})=>{
       const response=await routes[0].fetch(new Request('http://localhost/api/cuigengji/dispatch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',method:'cuigengji/dispatch',rpcId:action,payload:{action,args}})}));
       assert.equal(response.status,200);const result=(await response.json()).result;assert.equal(result.ok,true,JSON.stringify(result));return result.value;
@@ -56,7 +56,7 @@ test('RPC is available during startup; project reads wait for the verified migra
   // Hold a real Store lock to reproduce a slow backup/migration without
   // slowing the filesystem or writing anything to an actual user profile.
   let release = await new Store(root).acquire();
-  const boot = apply(ctx, {dataRoot: root});
+  const boot = apply(ctx, {dataRoot: root,usageRoot:join(parent,'usage')});
   try {
     assert.equal(routes.length, 1, 'the frontend can open before migration finishes; its route must already exist');
     const call = async (action, args = {}) => {

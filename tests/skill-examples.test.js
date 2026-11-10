@@ -19,7 +19,7 @@ async function fixture(t, {independentPage = false} = {}) {
     connection:{fetch:{register(){}}}, on(){}, effect:fn=>effects.push(fn()),
     provide:(key,value)=>{ctx[key]=value;}};
   t.after(async()=>{for(const dispose of effects)await dispose();await rm(root,{recursive:true,force:true});});
-  await apply(ctx,{dataRoot:root});
+  await apply(ctx,{dataRoot:root,usageRoot:join(root,'test-usage')});
   const actor = {kind:'human',sessionId:'skill-reader'};
   const seed = (action,args={}) => ctx.cuigengji.dispatch(action,args,actor);
   const novel=await seed('novel.create',{title:'共享写作示例'});
@@ -53,11 +53,38 @@ async function fixture(t, {independentPage = false} = {}) {
 
 test('all planning skill examples execute and retry through actual host tools',async t=>{
   for(const example of examples.plan)await t.test(example.args.requestId,async t=>{
-    const {ids,invoke,execute}=await fixture(t);
+    const {ids,invoke,execute}=await fixture(t,{independentPage:example.args.operations?.some(op=>op.ref==='collected'||op.ref==='phase')});
     const result=await execute(example);
     assert.deepEqual(await execute(example),result,'an identical retry must not duplicate the graph');
     const current=await invoke('planning.get',{nodeId:ids.SCENE_ID});
-    if(example.args.operations?.some(op=>op.op==='node.update'&&op.id==='SCENE_ID')){
+    if(result.mapping?.collected||result.mapping?.phase){
+      const end=(await invoke('planning.get',{nodeId:ids.NEXT_SCENE_ID})).node;
+      assert.equal(current.node.id,ids.SCENE_ID);
+      assert.equal(current.node.content,'留存可疑账册。');
+      assert.equal(end.content,'确认目的地后出发。');
+      assert.deepEqual(current.node.position,{x:60,y:90});
+      assert.equal(current.node.status,'idea');
+      assert.deepEqual(current.node.chapterRefs,[]);
+      assert.deepEqual(current.edges.map(edge=>edge.id),[ids.DIRECT_EDGE_ID]);
+      assert.deepEqual(current.flow.next.map(node=>node.id),[ids.NEXT_SCENE_ID]);
+      assert.equal((await invoke('planning.list',{pageId:ids.SCENE_PAGE_ID})).total,result.mapping.phase?3:2);
+      assert.equal((await invoke('planning.list',{pageId:null})).total,0,'organization stays in the selected independent canvas');
+      if(result.mapping.collected){
+        assert.equal(current.node.groupId,result.mapping.collected);
+        assert.equal(end.groupId,result.mapping.collected);
+        assert.equal(current.node.parentId,null);
+        const folder=(await invoke('planning.groups',{pageId:ids.SCENE_PAGE_ID})).find(group=>group.id===result.mapping.collected);
+        assert.equal(folder.parentId,ids.PLAN_GROUP_ID);
+        assert.deepEqual(folder.path,['假账线','假账追查']);
+      }else{
+        assert.equal(current.node.parentId,result.mapping.phase);
+        assert.equal(end.parentId,result.mapping.phase);
+        assert.equal(current.node.groupId,ids.PLAN_GROUP_ID);
+        const stage=await invoke('planning.get',{nodeId:result.mapping.phase});
+        assert.deepEqual(new Set(stage.children.map(node=>node.id)),new Set([ids.SCENE_ID,ids.NEXT_SCENE_ID]));
+        assert.equal(stage.edges.length,0,'containment does not fabricate causal links');
+      }
+    }else if(example.args.operations?.some(op=>op.op==='node.update'&&op.id==='SCENE_ID')){
       assert.equal((await invoke('planning.list')).total,2);
       assert.equal(current.node.revision,2);
       assert.equal(current.node.summary,example.args.operations[0].value.summary);
@@ -86,7 +113,7 @@ test('all planning skill examples execute and retry through actual host tools',a
 });
 
 test('setting skill examples preserve fields, move atomically and attach real sources over MCP',async t=>{
-  assert.equal(examples.memory.length,5);
+  assert.equal(examples.memory.length,9);
   for(const [index,example] of examples.memory.slice(0,3).entries())await t.test(`example ${index+1}`,async t=>{
     const {ids,invoke,execute}=await fixture(t);
     const result=await execute(example);
@@ -116,6 +143,32 @@ test('setting skill examples preserve fields, move atomically and attach real so
   });
 });
 
+test('documented setting corrections, passage removals and whole-card deletes execute and verify through actual tools',async t=>{
+  for(const example of examples.memory.slice(6))await t.test(example.args.requestId,async t=>{
+    const {ids,invoke,execute}=await fixture(t);
+    const card=await invoke('graph.create',{type:'character_card',name:'书铺店主',summary:'十八岁的书铺店主。',content:'她十八岁。她继承了母亲留下的书铺。她会炼丹。',aliases:['来客']});
+    ids.CHARACTER_ID=card.id;
+    const result=await execute(example);assert.equal(result.changed,true);assert.equal(result.id,card.id);
+    assert.deepEqual(await execute(example),result,'documented request IDs make exact retries idempotent');
+    const current=await invoke('graph.get',{nodeId:card.id});assert.equal(current.revision,2);
+    if(example.action==='graph.delete'){
+      assert.equal(result.deleted,true);assert.equal(current.deleted,true);
+      assert.ok(!(await invoke('graph.list')).some(node=>node.id===card.id));
+    }else{
+      assert.equal(current.deleted,false);assert.deepEqual(current.aliases,card.aliases);
+      assert.ok(current.content.includes('她继承了母亲留下的书铺。'));
+      if(example.args.patch.newText){
+        assert.ok(current.content.includes('她十九岁。'));assert.ok(!current.summary.includes('十八岁'));
+        assert.deepEqual(result.changedFields,['summary','content']);
+      }else{
+        assert.ok(!current.content.includes('炼丹'));assert.ok(current.content.includes('她十八岁。'));
+        assert.equal((await invoke('graph.list')).filter(node=>node.id===card.id).length,1);
+      }
+    }
+    const history=await invoke('graph.history',{nodeId:card.id});assert.deepEqual(history.map(v=>v.revision),[1,2]);
+  });
+});
+
 test('writing skill patch preserves surrounding prose and feeds saved revisions into planning',async t=>{
   assert.equal(examples.write.length,1);
   const {ids,invoke,execute}=await fixture(t);
@@ -141,6 +194,28 @@ test('setting folder examples execute over MCP without duplicating resources',as
  const moved=await invoke('graph.get',{nodeId:ids.CHARACTER_ID});assert.equal(moved.groupId,target.id);assert.equal(moved.pageId,null);
  assert.equal(moved.content,'她继承了母亲留下的书铺。');
  assert.deepEqual((await invoke('graph.history',{nodeId:moved.id})).map(v=>v.kind),['baseline','organization','organization']);
+});
+
+test('documented existing-folder nesting keeps resources, descendants and real relations through host tools',async t=>{
+ const {ids,invoke,execute}=await fixture(t);
+ const target=await invoke('graph.group.create',{name:'人物与势力',requestId:'nest-target'});
+ Object.assign(ids,{TARGET_GROUP_ID:target.id});
+ const child=await invoke('graph.group.create',{name:'地点',parentId:ids.MEMORY_GROUP_ID,members:[{id:ids.PLACE_ID,expectedRevision:1}],requestId:'nest-child'});
+ await invoke('graph.move',{groupId:ids.MEMORY_GROUP_ID,members:[{id:ids.CHARACTER_ID,expectedRevision:1}],requestId:'nest-character'});
+ const relation=await invoke('edge.create',{from:ids.CHARACTER_ID,to:ids.PLACE_ID,name:'经营',requestId:'nest-relation'});
+ const before=await Promise.all([ids.CHARACTER_ID,ids.PLACE_ID].map(nodeId=>invoke('graph.get',{nodeId})));
+ const example=examples.memory.find(example=>example.args.requestId==='nest-existing-settings-folder-unique');
+ const result=await execute(example);assert.deepEqual(await execute(example),result);
+ const folders=await invoke('graph.groups');
+ assert.deepEqual(folders.find(group=>group.id===ids.MEMORY_GROUP_ID).path,['人物与势力','雨城']);
+ assert.deepEqual(folders.find(group=>group.id===child.id).path,['人物与势力','雨城','地点']);
+ assert.deepEqual(new Set((await invoke('graph.list',{groupId:target.id})).map(node=>node.id)),new Set([ids.CHARACTER_ID,ids.PLACE_ID]));
+ assert.equal((await invoke('graph.list',{groupId:null})).length,0);
+ for(const original of before){
+  const current=await invoke('graph.get',{nodeId:original.id});
+  for(const field of ['id','content','groupId','position','sources','revision'])assert.deepEqual(current[field],original[field],`folder nesting preserves ${field}`);
+ }
+ assert.equal((await invoke('edge.get',{edgeId:relation.id})).name,'经营');
 });
 
 test('planning page skill example creates isolated scene and annotation via actual host tool',async t=>{

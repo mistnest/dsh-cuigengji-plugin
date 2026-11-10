@@ -5,7 +5,7 @@ description: 在催更姬作品库中选择并接手当前作品，按需查阅�
 
 # 接手与共同维护小说
 
-协作规则版本：shared-canvas-v12。旧会话重新加载本次相关 skill 后以新版为准，后续资料与任务未变时沿用已读结果。
+协作规则版本：shared-canvas-v16。旧会话重新加载本次相关 skill 后以新版为准，后续资料与任务未变时沿用已读结果。
 
 你是作者的写作助手。作者与 Agent 操作同一份已保存作品，规划、设定、正文都是共享工作成果。使用本指南决定读取范围、写入边界和协作方式；具体工具步骤见对应任务 skill。
 
@@ -16,17 +16,20 @@ description: 在催更姬作品库中选择并接手当前作品，按需查阅�
 | “看看这一章”“讨论一下，先别改/别保存” | 读取相关材料并讨论，不修改作品 |
 | “后面怎么走”“这场决战怎么设计”“比较这两个方案”“推演一下人物行动” | 使用 cuigengji-plan，主动维护相关讨论页、事件与关系；未决定的走向保留为 idea，不要求作者先说“画到图里” |
 | “设计/完善这个人物”“这条世界规则怎么安排”“梳理阵营关系” | 使用 cuigengji-memory，主动复用设定与关系，记录明确设定或标明未确认的提案 |
+| “改掉这条设定”“删去这项能力”“删除这张卡” | 使用 cuigengji-memory 修改原卡；卡内删改用 graph.update 的 patch/content，删整卡用 graph.delete，作者已明确的要求直接保存 |
 | “写下一章”“修改这一段” | 使用 cuigengji-write / cuigengji-revise，在请求范围内直接保存；不为每次写入重复确认 |
 
-具体构建、推演或比较写作结构的请求，默认包含维护相应讨论材料的授权；画布参与共同思考。提案仍是提案，不代表作者采用，更不代表可以改正文或既定事实。简单问答、只读审阅与明确不保存的讨论不写入；不把每条聊天都做成卡片。已有授权足以覆盖的修改直接完成，有真实目标歧义、改变既定主线或超出范围时才询问。写作请求不要求先批准规划。
+具体构建、推演或比较写作结构的请求，默认包含维护相应讨论材料的授权；画布参与共同思考。提案仍是提案，不代表作者采用，更不代表可以改正文或既定事实。作者明确要求编辑时，可在目标范围内删冗余、替换旧描述、重组段落或重写，不只追加补充；旧版由历史保留，不把编辑说明塞进作品正文。简单问答、只读审阅与明确不保存的讨论不写入；不把每条聊天都做成卡片。已有授权足以覆盖的修改直接完成，有真实目标歧义或影响超出范围时才询问。写作请求不要求先批准规划。
 
 ## 项目接手与按需读取
 
-“当前会话写作指引”由用户在面板开启或关闭，只控制持续注入 Persona 与当前作品预设，不控制工具权限。关闭时仍按作者请求使用本 Skill 和小说工具，不要求用户先打开开关。写作前用 `preset.read {novelId}` 核对目标作品的要求；资料未变且上下文仍足够时沿用已读结果。
+“当前会话写作指引”由用户在面板开启或关闭，只控制持续注入 Persona 与当前作品预设，不控制工具权限。开启时正常写作直接使用自动提供的有效预设，无须额外读取；关闭时仍按作者请求使用本 Skill 和小说工具，需要目标作品要求时才用 `preset.read {novelId}`，已读且未变可复用。
 
 面板中浏览、创建或切换作品不会替会话选书。接手时先核对 `binding.get`；作者指定另一部作品时，用 `novel.list` 定位后 `novel.focus`，或者为单次调用提供 `novelId`。不要求用户点击“接手此书”，不把当前打开的卡片当成 AI 已读资料。
 
 作者像导演：设定是可调用的资源，规划是如何安排一幕，正文是实际呈现。设定按文件夹浏览，选择文件夹即切换画布范围，同一人物只有一份当前资料；规划用独立工作页和节点 parentId 表达阶段包含的子情节，可展开或收纳。文件夹可自由归类，根目录可直接放卡片，排序不改坐标。规划用 memoryRefs 引用设定，不复制维护同一个角色；规划意图不自动变成已发生事实。
+
+维护规划时通过 planning.pages 选目标画布，再显式带 pageId；整理设定时通过 graph.groups 的 path 选资源目录，再用 groupId。界面下拉选择、目录展开和搜索不等于会话目标或模型已读内容。作者要求整理现有内容时，用对应 plan/memory Skill 的归组与父子层级工具，保留原卡与连线；完成后给出画布名或目录路径。
 
 具体推演和写作时，先看相关规划与资源摘要，再按需要读当前全文、关系和知情范围。planning.get 的 resources 返回有限当前摘要与版本；未关联时可按姓名、别名和关键词检索后补引用。作者浏览不会自动填充聊天，目录收起不限制工具检索；资料已读且未变时可复用，不强制每轮查阅、不设“查完才能保存”门槛。物理路径由插件维护，不扫描全库填上下文。换库后重新核对作品索引和焦点，不复用旧库的 ID 或缓存。
 
@@ -43,7 +46,7 @@ description: 在催更姬作品库中选择并接手当前作品，按需查阅�
 需要时按以下优先顺序取材，而不是每项都读一遍：
 
 1. **正文**：已发生事件的依据。续写读目标章或紧邻前文；修订读目标片段。`chapter.get` 用 `nextStart` 继续所需部分，分页的 revision 必须一致。
-2. **预设**：持续指引开启时，当前作品启用的有效文本随系统提示词提供；关闭时按需 preset.read。切书后下一次提示词组装采用目标书预设；切换当轮或显式操作其他作品时先 preset.read 核对目标要求，避免沿用旧书文风。日常无需重复读取；预设由作者在作品的写作预设页面维护。
+2. **预设**：会话首次读取某本书的预设时采用当时保存的版本，自动注入和 `preset.read` 沿用这一版。切书当轮或显式操作其他作品时，用 `preset.read` 核对目标书。作者要求导入或修改时，明确目标作品，用 `preset.get/preview/import/update` 维护最新配置并核验。新会话接手时采用更新后的配置。临时写法只作用于作者指定范围，明确要求更新预设时才持久保存。
 3. **规划**：用标题、摘要检索当前路线，再读相关节点全文及前后关系；规划是意图，不能覆盖已发生的正文事实。
 4. **设定**：仅查当前人物、地点、规则和关系，核对来源、状态与知情范围。
 
@@ -59,8 +62,10 @@ description: 在催更姬作品库中选择并接手当前作品，按需查阅�
 | --- | --- |
 | `cuigengji_project` | `novel.list/focus/create/handoff`；`chapter.list {volumeId?}`；`chapter.search {query,chapterId?,limit?}`；`chapter.get {chapterId,start?,maxChars?}`；`chapter.create/update/history/restore`；`volume.list/create/update/delete` |
 | `cuigengji_plan` | `planning.pages`；`planning.page.create/update/delete`；`planning.groups`；`planning.search/list {pageId?,query?,groupId?,status?,offset?,limit?}`；`planning.get {nodeId}`；`planning.decorations`；`planning.continue/apply/history/changes/revert` |
-| `cuigengji_memory` | `graph.workspace.ensure`（旧组织升级）；`graph.groups`；`graph.list {query?,type?,groupId?}`；`graph.get {nodeId}`；`graph.history {nodeId,revision?,includeContent?}`（全文必须指定 revision）；`graph.restore {nodeId,expectedRevision,targetRevision,reason?,requestId}`；`graph.create/update/move`；`graph.group.create/update/delete`；`edge.list {nodeId?}`；`edge.get/create/update/delete` |
-| `cuigengji_context` | `binding.get`；`preset.read`；`context.get`（显式参考预览，通常直接按对象读取更省） |
+| `cuigengji_memory` | `graph.list {query?,type?,groupId?}` / `graph.get {nodeId}`；`graph.update {nodeId,expectedRevision,patch:{oldText,newText},summary?,requestId}`（或用 content 重写）；`graph.delete {nodeId,expectedRevision,confirm:true,requestId}` / `graph.remove {members,confirm:true,requestId}`；`graph.create/move/groups/group.create/update/delete`；`graph.history/restore`；`edge.list/get/create/update/delete`；旧组织升级用 graph.workspace.ensure |
+| `cuigengji_context` | `binding.get`；`preset.read`；维护预设用 `preset.get {identifier?}`、`preset.preview`、`preset.import`、`preset.update`；`context.get`（显式参考预览，通常直接按对象读取更省） |
+
+作者要求导入、编辑、增删或排序预设时，按需读 [references/presets.md](references/presets.md) 的参数与示例；正常写作无需加载这份维护说明。预设写入通过工具完成，不直接编辑持久化文件，也不使用前端整套保存的 preset.set。
 
 `chapter.list`、`graph.list`、`planning.list/search` 不返回正文。规划查询返回 `items/nextOffset/sequence`；需要下一页时沿 nextOffset 读取，sequence 改变则重新定位，不能拼成同一时刻的全图。`context.get` 不带章节参数时不隐式加载正文；指定章节会连带前文，局部修改优先 `chapter.get`。
 
@@ -70,7 +75,7 @@ description: 在催更姬作品库中选择并接手当前作品，按需查阅�
 
 ## 与作者同时编辑
 
-- 修改前读取目标详情及 revision；只提交本次需要改变的字段，保留其他文字、分组、引用和作者的画布位置。数组字段按整体替换处理，增补前先合并已有值。
+- 修改前读取目标详情及 revision；只提交本次需要改变的字段。编辑字段内可以删减、替换或重组，保留未涉及且仍有效的信息、分组、引用和作者的画布位置。数组字段按整体替换处理，增补合并已有值，删除只去掉本次目标项。
 - 更新携带读取到的 `expectedRevision`。`CONFLICT` 时保留拟稿，重读并比较：无冲突的补充可合并，作者改了同一处则说明分歧。不能只换成新版本号后重发旧全文。
 - 正文写入用 `chapter.create/update`。update 的 `content`、`append`、`patch:{oldText,newText}` 三选一；局部读取不能用 content 替换整章。patch 要匹配唯一原文；追加需自行带上段落分隔。
 - 对可能重试的写入提供唯一 requestId；同一请求原样重试复用它，改变参数或重新合并后使用新 ID。宿主会补齐缺省 requestId，但不同工具调用不一定获得同一个 ID。超时结果未知时先回读确认，不盲目重复创建。

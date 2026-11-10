@@ -26,6 +26,9 @@ try {
   const plans=(await call('planning.list',{novelId})).items;
   browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE||undefined});
   page=await browser.newPage({viewport:{width:1400,height:1000},reducedMotion:'reduce'});
+  // This regression suite retains the existing mouse-wheel zoom workflow.
+  // Default scroll/pinch behavior is exercised separately in ui-canvas-input.
+  await page.addInitScript(()=>localStorage.setItem('cuigengji:workbench:preferences:v1',JSON.stringify({canvasScrollAction:'zoom'})));
   const errors=[],writes=[];page.on('pageerror',e=>errors.push(e.message));
   page.on('request',r=>{if(r.url().endsWith('/dispatch')&&r.method()==='POST'){const data=r.postDataJSON();if(['graph.update','graph.layout','edge.create','edge.disconnect','planning.apply'].includes(data.action))writes.push(data);}});
   await page.goto(url);
@@ -57,7 +60,7 @@ try {
     await readableCard();
     // Unmodified wheel down zooms out; the existing view buttons remain usable.
     const wheelCanvas=page.locator('.planning-canvas-scroll'),wheelBox=await wheelCanvas.boundingBox();
-    await page.mouse.move(wheelBox.x+wheelBox.width-40,wheelBox.y+wheelBox.height-50);
+    await page.mouse.move(wheelBox.x+wheelBox.width-40,wheelBox.y+wheelBox.height-90);
     await page.mouse.wheel(0,120);
     await expect.poll(async()=>(await camera()).zoom).toBeLessThan(1);
     await readableCard();
@@ -97,7 +100,7 @@ try {
     await port(names[1],'in').focus();await page.keyboard.press('Enter');await port(names[0],'out').focus();await page.keyboard.press('Enter');
     await expect(page.locator('.edge-hit')).toHaveCount(1);await waitIdle();
     // Pointer zoom and a translated viewport still use world coordinates.
-    await page.mouse.move(wheelBox.x+wheelBox.width-40,wheelBox.y+wheelBox.height-50);await page.mouse.wheel(0,-120);
+    await page.mouse.move(wheelBox.x+wheelBox.width-40,wheelBox.y+wheelBox.height-90);await page.mouse.wheel(0,-120);
     await expect.poll(async()=>(await camera()).zoom).toBeGreaterThan(1);const zoomedScale=(await camera()).zoom;
     await readableCard();
     const zoomed=await read(names[1]);await drag(card(names[1]).locator('p'),50*zoomedScale,30*zoomedScale);
@@ -187,5 +190,5 @@ try {
   await expect(page.locator('.planning-canvas')).toHaveCSS('transform',transform);
   expect(errors).toEqual([]);
   console.log(JSON.stringify({ok:true,checks:['both graphs: card/title drag auto-save','Escape, blank drop, pointercancel','port preview and valid targets','duplicate and planning cycle rejection','reverse keyboard connect and edge deletion','zoomed world coordinates','pseudo-infinite right-drag pan','detail and reload preserve layout','failed save retry/discard','concurrent agent edit conflicts safely','optional inline relationship labels','overview at 55/35 percent: long titles, visible identity, selected cards, aligned ports, drag and connect','wide/narrow/dark screenshots'],writes:writes.length}));
-}catch(error){if(page)await page.screenshot({path:join(shots,'failure.png')}).catch(()=>{});throw error;}
+}catch(error){if(page){await page.screenshot({path:join(shots,'failure.png')}).catch(()=>{});console.error(await page.evaluate(()=>({preferences:localStorage.getItem('cuigengji:workbench:preferences:v1'),help:document.querySelector('.graph-help')?.textContent})).catch(()=>({})));}throw error;}
 finally{await browser?.close();preview.kill();}

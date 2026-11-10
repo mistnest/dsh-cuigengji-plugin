@@ -70,7 +70,7 @@ export class TransferService {
     } else {
       warnings.push('导入设定需要重新确认；写作预设整体停用，核对后再启用。');
       if (slice.projects.some(n => n.planning || n.plan)) warnings.push('规划会加入为独立画布，保留节点、连线、讨论框和便签。');
-      if (options.targetId && slice.projects.some(n => n.preset) && state.novels[options.targetId].preset) warnings.push(options.presetPolicy === 'replace' ? '当前预设将被替换，旧内容保留在导入前备份中。' : '提示词将追加到当前预设末尾，原有条目保留。');
+      if (options.targetId && slice.projects.some(n => n.preset) && state.novels[options.targetId].preset) warnings.push(options.presetPolicy === 'replace' ? '当前预设将被替换，旧内容保留在导入前备份中。' : '提示词将追加到当前预设末尾，保留原有条目和开关。');
       if (!options.targetId) target += `：${options.title || slice.projects.map(n => n.title).join('、')}`;
       try {
         if (options.targetId) {const candidate = copy(state.novels[options.targetId]); for (const n of slice.projects) copyInto(n, candidate, options); this.store.validateProject(candidate);}
@@ -104,10 +104,11 @@ export class TransferService {
       const requestKey = hash(requestId), receiptKey = hash(`transfer:${recognized.fingerprint}:${JSON.stringify(normalized)}`);
       if (own(state.requests, requestKey)) {
         if (state.requests[requestKey].signature !== signature) fail('requestId 已用于其他请求', 'REQUEST_ID_REUSED');
+        if (state.requests[requestKey].cleaned) fail('此导入结果已随清理移除，请重新预览后发起新的导入', 'REQUEST_EXPIRED');
         return {...copy(state.requests[requestKey].result as ImportResult), repeated: true};
       }
       // A repeated click or re-selected file cannot accidentally duplicate copied content.
-      if (normalized.mode === 'copy' && own(state.requests, receiptKey)) return {...copy(state.requests[receiptKey].result as ImportResult), repeated: true};
+      if (normalized.mode === 'copy' && own(state.requests, receiptKey) && !state.requests[receiptKey].cleaned) return {...copy(state.requests[receiptKey].result as ImportResult), repeated: true};
       const plan = await this.plan(state, file, options);
       if (!plan.preview.valid) fail('存在冲突，未导入：' + plan.preview.conflicts.join('；'), 'IMPORT_CONFLICT');
       if (proof !== plan.preview.proof) fail('预览后内容或目标作品已变化，请重新核对导入预览', 'CONFLICT');

@@ -6,7 +6,6 @@ import {useDialog} from '../../dialog.tsx';
 import {groupMatches,groupDescendants} from '../../../domain/directory/groups.ts';
 import type {Point} from '../../../contracts/planning.ts';
 import type {SettingIndex,SettingDocument,SettingEdge} from './model.ts';
-import {kind} from './model.ts';
 import type {QuickCardValue} from '../../shared/QuickCardDraft.tsx';
 export interface SettingCreation {key:string;type:'character_card'|'world_entry';position:Point;groupId:string|null;connection?:{id:string;side:'in'|'out';expectedRevision?:number}}
 export function useSettingsWorkspace({call,novelId,tick,run,busy}:FeatureServices) {
@@ -40,9 +39,7 @@ export function useSettingsWorkspace({call,novelId,tick,run,busy}:FeatureService
    await resource.reload();setCreating(null);setFocused((result.node||result).id);setQuery('');
  });
  const saved=(n:SettingDocument|null)=>{if(n)trail.visit(n.id);else trail.clear();setNode(n);setSelected(n?.id||null);};
- const directoryNodes=nodes.filter(n=>!query||`${n.name} ${n.summary}`.toLowerCase().includes(query.toLowerCase()));
- const openDirectory=(id:string,details=true)=>{if(!visible.some(n=>n.id===id))switchFolder(nodes.find(n=>n.id===id)?.groupId||null);setFocused(id);setHighlighted([id]);if(details)void open(id);else{request.current++;trail.clear();setNode(null);setSelected(null);setEdge(null);}};
- const batchItems=visible.filter(n=>!query||`${n.name} ${n.summary}`.toLowerCase().includes(query.toLowerCase())).map(n=>({id:n.id,title:n.name,summary:n.summary,meta:[kind(n),groups.find(g=>g.id===n.groupId)?.name].filter(Boolean).join(' · ')}));
+ const openDirectory=(id:string,details=true)=>{if(!visible.some(n=>n.id===id)){switchFolder(nodes.find(n=>n.id===id)?.groupId||null);setQuery(query);}setFocused(id);setHighlighted([id]);if(details)void open(id);else{request.current++;trail.clear();setNode(null);setSelected(null);setEdge(null);}};
  const beginBatch=()=>{request.current++;trail.clear();setNode(null);setSelected(null);setBatch(true);setChecked([]);};
  const endBatch=()=>{setBatch(false);setChecked([]);};
  const connect=(from:string,to:string)=>setEdge({from,to,name:'',content:''});
@@ -54,5 +51,5 @@ export function useSettingsWorkspace({call,novelId,tick,run,busy}:FeatureService
  const duplicateNodes=(ids:string[],points:Record<string,Point>={})=>run(()=>call('graph.duplicate',{novelId,requestId:crypto.randomUUID(),members:ids.map(id=>({id,expectedRevision:nodes.find(n=>n.id===id)?.revision,...(points[id]?{position:points[id]}:{})}))}));
  const moveNodes=(ids:string[],groupId:string|null)=>run(()=>call('graph.move',{novelId,requestId:crypto.randomUUID(),pageId:null,groupId,members:ids.map(id=>({id,expectedRevision:nodes.find(n=>n.id===id)?.revision}))}));
  const createFolder=async(ids:string[],position?:Point)=>{const name=await ask('文件夹名称');if(!name?.trim())return;const members=nodes.filter(n=>ids.includes(n.id)),parentId=members.length&&members.every(n=>(n.groupId??null)===(members[0].groupId??null))?members[0].groupId??folderId:folderId;await run(async()=>{const group=await call('graph.group.create',{novelId,requestId:crypto.randomUUID(),name,parentId,pageId:null,position:position||canvas.current?.()||{x:40,y:60},members:members.map(n=>({id:n.id,expectedRevision:n.revision}))});await resource.reload();setFocused(group.id);});};
- return {batch,focused,setFocused,highlighted,setHighlighted,directoryNodes,openDirectory,creating,setCreating,saveCreation,node,edge,setEdge,query,setQuery,checked,setChecked,error,canvas,trail,resource,nodes,edges,groups,canvasGroups,folderId,pageReady,switchFolder,open,create,saved,allNodes:nodes,related:edges.filter(e=>e.from===node?.id||e.to===node?.id),visible,batchItems,beginBatch,endBatch,clear:()=>setQuery(''),close,connect,connectDirect,saveLayout,arrangeLayout,disconnect,removeNodes,duplicateNodes,moveNodes,createFolder};
+ return {batch,focused,setFocused,highlighted,setHighlighted,openDirectory,creating,setCreating,saveCreation,node,edge,setEdge,query,setQuery,checked,setChecked,error,canvas,trail,resource,nodes,edges,groups,canvasGroups,folderId,pageReady,switchFolder,open,create,saved,allNodes:nodes,related:edges.filter(e=>e.from===node?.id||e.to===node?.id),visible,beginBatch,endBatch,clear:()=>setQuery(''),close,connect,connectDirect,saveLayout,arrangeLayout,disconnect,removeNodes,duplicateNodes,moveNodes,createFolder};
 }

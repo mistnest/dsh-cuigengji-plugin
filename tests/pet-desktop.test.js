@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter, once } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DesktopPet } from '../src/application/pet/desktop.ts';
@@ -118,6 +118,16 @@ test('launcher failure stays bounded and an explicit retry recovers', async t =>
   assert.equal((await pet.sync({ ...input, restart: true })).available, true); assert.equal(starts, 2);
 });
 
+test('a late usage presentation cannot replace the current conversation in the native companion',async t=>{
+  const root=await fixture(t);let child,release;
+  const gate=new Promise(resolve=>release=resolve),usage={subscribe:()=>()=>{},presentation:async args=>{if(args.sessionId==='author-a')await gate;return {sessionId:args.sessionId};}};
+  const pet=new DesktopPet(root,fakeDispatch,{supported:true,usage,launch:()=>child=fakeChild()});t.after(()=>pet.close());
+  await pet.sync(input);await tick();await pet.sync({...input,initial:false,sessionId:'author-b'});release();
+  for(let i=0;i<40&&!child.messages.some(v=>v.presentation?.sessionId==='author-b');i++)await new Promise(resolve=>setTimeout(resolve,5));
+  assert.ok(child.messages.some(v=>v.presentation?.sessionId==='author-b'));
+  assert.ok(!child.messages.some(v=>v.presentation?.sessionId==='author-a'));
+});
+
 test('large library progress stays inside the native pipe limit and does not send per-book details', async t => {
   const root = await fixture(t); let child;
   const pet = new DesktopPet(root, async (action, args, actor) => action === 'binding.get' ? null : {
@@ -167,6 +177,8 @@ test('desktop pet RPC waits for migration, supports no conversation and uses the
 
 test('real Windows companion compiles, renders and exchanges UTF-8 updates over pipes', { skip: process.platform !== 'win32' }, async t => {
   const root = await fixture(t), script = resolve('src/desktop/pet.ps1'), assets = resolve('src/client/assets/pets');
+  await copyFile(resolve('tests/fixtures/pet-disposal.gif'),join(root,'test-animation.gif'));
+  await copyFile(resolve('tests/fixtures/pet-disposal.json'),join(root,'test-animation.json'));
   const args = ['-NoLogo', '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', script, '-StateDirectory', root, '-AssetsDirectory', assets];
   const preview = spawn('powershell.exe', [...args, '-SelfTestOutput', join(root, 'renders')], { windowsHide: true });
   let rendered = '', diagnostics = ''; preview.stdout.on('data', data => rendered += data); preview.stderr.on('data', data => diagnostics += data);

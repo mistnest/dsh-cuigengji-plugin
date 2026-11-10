@@ -62,7 +62,7 @@ try{
   checks.push('explicit root/folder targets override old filters; new items are visible; later manual folds and existing coordinates survive');
   // A planning page changes canvas membership, not folder identity or story contents.
   await button('新建画布').click();const pageDialog=page.getByRole('dialog',{name:'新建画布',exact:true});await pageDialog.getByLabel('画布名称').fill('独立沙盘');await pageDialog.getByRole('button',{name:'保存画布',exact:true}).click();await expect(pageDialog).toHaveCount(0);
-  const canvasPage=(await run('planning.pages')).find(p=>p.name==='独立沙盘');await expect(page.getByRole('listbox',{name:'规划画布',exact:true}).getByRole('option',{selected:true})).toHaveAttribute('data-page-id',canvasPage.id);
+  const canvasPage=(await run('planning.pages')).find(p=>p.name==='独立沙盘');await expect(page.getByRole('combobox',{name:'规划画布',exact:true})).toHaveValue(canvasPage.id);
   menu=await openRoot('规划');await menu.getByRole('button',{name:'新建情节',exact:true}).click();await createQuick('独立画布根事件','情节标题');const pageBeat=await named('planning.list','独立画布根事件','title');expect(pageBeat.pageId).toBe(canvasPage.id);expect(pageBeat.groupId??null).toBe(null);
   await selectPlanningPage(page,'');await expect(entry(rootBeat.id)).toBeVisible();await expect(entry(pageBeat.id)).toHaveCount(0);
   checks.push('independent planning canvases keep root creation in the selected canvas and preserve existing folder IDs');

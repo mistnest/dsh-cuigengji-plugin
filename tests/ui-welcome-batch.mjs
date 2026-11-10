@@ -1,4 +1,4 @@
-import {selectSettingsCategory} from './helpers/navigation.mjs';
+import {selectSettingsCategory,chooseBatchDestination,moveBatch,batchCommand} from './helpers/navigation.mjs';
 import {spawn} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
@@ -67,58 +67,57 @@ try {
   await page.getByRole('button',{name:'设定',exact:true}).click();
   await begin('设定');
   await expect(manager().getByRole('status')).toHaveText('已选 0 项');
-  await expect(manager().getByRole('button',{name:'移动',exact:true})).toBeDisabled();
+  await chooseBatchDestination(page);await expect(manager().getByRole('button',{name:'确认移动',exact:true})).toBeDisabled();
   await page.locator('.directory-entry').filter({hasText:'林序'}).getByRole('button').click();
   await expect(page.getByRole('checkbox',{name:'选择 林序',exact:true})).toBeChecked();
   await page.getByRole('checkbox',{name:'选择 雾港',exact:true}).check();
-  expect(await page.getByRole('checkbox',{name:'全选当前列表'}).evaluate(e=>e.indeterminate)).toBe(true);
-  await manager().getByLabel('批量移动目标').selectOption('group:'+group.id);
+  expect(await page.getByRole('checkbox',{name:'全选全书设定',exact:true}).evaluate(e=>e.indeterminate)).toBe(true);
+  await chooseBatchDestination(page,'group:'+group.id);
   await shot('batch-settings-1200');
   await page.getByRole('button',{name:'搜索设定',exact:true}).click();
   await page.getByRole('textbox',{name:'搜索设定',exact:true}).fill('林序');
   await expect(page.locator('.directory-entry')).toHaveCount(1);
-  await expect(manager().getByRole('status')).toHaveText('已选 1 项');
-  await manager().getByRole('button',{name:'移动',exact:true}).click();
+  await expect(manager().getByRole('status')).toHaveText('已选 2 项');
+  await moveBatch(page);
   await expect(manager().getByRole('status')).toHaveText('已选 0 项');
   expect((await call('graph.get',{novelId:book.id,nodeId:entries[0].id})).groupId).toBe(group.id);
-  expect((await call('graph.get',{novelId:book.id,nodeId:entries[1].id})).groupId).toBe(null);
+  expect((await call('graph.get',{novelId:book.id,nodeId:entries[1].id})).groupId).toBe(group.id);
   await manager().getByRole('button',{name:'完成',exact:true}).click();
   await expect(page.getByRole('button',{name:'列表',exact:true})).toHaveCount(0);
   await page.getByRole('textbox',{name:'搜索设定',exact:true}).fill('');
-  await begin('设定');await expect(page.locator('.directory-entry')).toHaveCount(14);await page.getByRole('checkbox',{name:'全选当前列表'}).check();
+  await begin('设定');await expect(page.locator('.directory-entry')).toHaveCount(14);await page.getByRole('checkbox',{name:'全选全书设定',exact:true}).check();
   await expect(manager().getByRole('status')).toHaveText('已选 14 项');
   await page.locator('.workspace-sidebar-scroll').evaluate(e=>{e.scrollTop=e.scrollHeight;});
   await expect(manager().getByRole('button',{name:'完成',exact:true})).toBeInViewport();
-  await manager().getByRole('button',{name:'清空选择',exact:true}).click();
+  await batchCommand(page,'清空选择');
   await expect(manager().getByRole('status')).toHaveText('已选 0 项');
   await manager().getByRole('button',{name:'完成',exact:true}).click();
   await page.getByRole('button',{name:'规划',exact:true}).click();await begin('规划');
   await page.getByRole('checkbox',{name:'选择 潜入仓库',exact:true}).check();
-  await manager().getByLabel('批量移动目标').selectOption('group:'+planGroup.id);
+  await chooseBatchDestination(page,'group:'+planGroup.id);
   // A failed save must retain both the author's selection and the current data.
   await page.route('**/dispatch',async route=>{const body=route.request().postDataJSON();if(body.action==='planning.apply'&&body.args.reason==='移动规划分组'){await route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:'模拟保存失败'})});return;}await route.continue();});
-  await manager().getByRole('button',{name:'移动',exact:true}).click();
+  await moveBatch(page);
   await expect(page.getByRole('alert')).toContainText('模拟保存失败');
   await expect(manager().getByRole('status')).toHaveText('已选 1 项');
   expect((await call('planning.get',{novelId:book.id,nodeId:plan.mapping.beat0})).node.groupId).toBe(null);
-  await page.unroute('**/dispatch');await manager().getByRole('button',{name:'移动',exact:true}).click();
+  await page.unroute('**/dispatch');await moveBatch(page);
   await expect(manager().getByRole('status')).toHaveText('已选 0 项');
   expect((await call('planning.get',{novelId:book.id,nodeId:plan.mapping.beat0})).node.groupId).toBe(planGroup.id);
   await page.getByRole('checkbox',{name:'选择 潜入仓库',exact:true}).check();
-  await manager().getByLabel('批量移动目标').selectOption('page:'+pageB.id);
-  await manager().getByRole('button',{name:'移动',exact:true}).click();
+  await moveBatch(page,'page:'+pageB.id);
   await expect(page.getByRole('dialog')).toContainText('断开 1 条跨页连线');
   await page.getByRole('button',{name:'取消',exact:true}).click();
   await expect(manager().getByRole('status')).toHaveText('已选 1 项');
   expect((await call('planning.get',{novelId:book.id,nodeId:plan.mapping.beat0})).node.pageId).toBe(null);
   await page.getByRole('checkbox',{name:'选择 守卫发现异样',exact:true}).check();
-  for(const width of [1200,560,360]){await page.setViewportSize({width,height:900});await shot('batch-planning-'+width);await expect(manager().getByRole('button',{name:'移动',exact:true})).toBeInViewport();}
+  for(const width of [1200,560,360]){await page.setViewportSize({width,height:900});await shot('batch-planning-'+width);await expect(manager().getByLabel('移动选中条目',{exact:true})).toBeInViewport();}
   await page.setViewportSize({width:1200,height:900});
   await page.evaluate(()=>{for(const [name,value] of Object.entries({'--dsw-alias-bg-base':'#181a20','--dsw-alias-label-primary':'#e9edf5','--dsw-alias-label-secondary':'#99a0ad','--dsw-alias-border-l1':'#353a46'}))document.documentElement.style.setProperty(name,value);});
   await shot('batch-planning-dark-1200');
-  await manager().getByRole('button',{name:'移动',exact:true}).click();
-  await expect(page.getByRole('listbox',{name:'规划画布',exact:true}).getByRole('option',{selected:true})).toHaveAttribute('data-page-id',pageB.id);
-  await expect(page.locator('.batch-manager')).toHaveCount(0);
+  await moveBatch(page);
+  await expect(page.getByRole('combobox',{name:'规划画布',exact:true})).toHaveValue(pageB.id);
+  await expect(page.locator('.batch-toolbar')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'列表',exact:true})).toHaveCount(0);
   const saved=await call('planning.list',{novelId:book.id,pageId:pageB.id});
   expect(saved.items.map(n=>n.id).sort()).toEqual([plan.mapping.beat0,plan.mapping.beat1].sort());expect(saved.edges).toHaveLength(1);
@@ -133,6 +132,6 @@ try {
   await expect(page.getByLabel('绑定小说',{exact:true})).toHaveCount(0);
   expect(await empty.call('binding.get')).toBe(null);
   expect(errors).toEqual([]);
-  console.log(JSON.stringify({ok:true,checks:['welcome image, recent works, search, new/open/import and return without changing the agent focus','batch full-row selection, all/indeterminate/clear and visible-only movement','failed move retains selection; page cancellation preserves data; connected scenes move together','fixed operations and scrolling lists at 360/560/1200px; light/dark screenshots'],screenshots:shots}));
+  console.log(JSON.stringify({ok:true,checks:['welcome image, recent works, search, new/open/import and return without changing the agent focus','compact batch toolbar, all/indeterminate/clear and selection retained through filtering','failed move retains selection; page cancellation preserves data; connected scenes move together','fixed operations and scrolling lists at 360/560/1200px; light/dark screenshots'],screenshots:shots}));
 } catch(error){if(page)await page.screenshot({path:join(shots,'failure.png')});throw error;}
 finally {await browser?.close();for(const child of hosts)child.kill();}

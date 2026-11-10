@@ -1,8 +1,20 @@
 # 更新与数据迁移
 
-当前正式版 **0.5.1**，最低宿主要求保持 DSH `>=0.2.0-rc.2`；本次实际验收 Windows 桌面版 **0.2.1-rc.5** 及 **0.2.2-alpha.2 官方标签源码构建桌面**。alpha.2 暂无官方 Windows 成品安装包；具体范围见[更新记录](CHANGELOG.md)。允许安装的范围和实际测试版本分开记录，未来宿主接口变化仍需具体排查。
+当前正式版 **0.6.0**，最低宿主要求保持 DSH `>=0.2.0-rc.2`；本次使用 Windows 桌面版 **0.2.1-rc.5** 内置运行时验收隔离安装、升级和工作台；具体范围见[更新记录](CHANGELOG.md)。允许安装的范围和实际测试版本分开记录，未来宿主接口变化仍需具体排查。
 
-安装或更新使用 `dsh-cuigengji-plugin@0.5.1`，也可使用 [Release 成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.5.1)。普通用户无需 Git、Node.js 或源码构建。将 [Agent 安装指南](agent-installation.md)交给负责更新的 AI，由它保留配置、重启并验收；已有作品无需重新导入。
+安装或更新使用 `dsh-cuigengji-plugin@0.6.0`，也可使用 [Release 成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.6.0)。普通用户无需 Git、Node.js 或源码构建。将 [Agent 安装指南](agent-installation.md)交给负责更新的 AI，由它保留配置、重启并验收；已有作品无需重新导入。
+
+## 0.5.1 升级到 0.6.0
+
+作品存储布局仍为版本 5。旧作品、正文历史、设定、规划、预设、回收站与原配置继续保留，无需重新导入。升级启动时仍会建立原始快照、恢复中断事务并核对完整逻辑工作库。
+
+- 用量与费用账本独立于作品库，默认保存在 `$DSH_HOME/cuigengji/usage`。关闭或隐藏桌宠仍可记录；凭据通过 DSH 引用，不复制到作品或账本导出中。
+- 剧情变量默认关闭，按作品启用；不开启就沿用原来的正文、规划和设定工作方式。
+- 正文日期统计从升级后按操作当天的净增量记录，删减可以为负；旧版已经结算的日期原样保留，不回算过去。
+- 新保存的预设供新会话采用。已有会话沿用首次接手该书时的版本，续聊和重启保持一致；会话写作指引开关仍可立即关闭。
+- 显式永久清理历史和回收站时不另存清理副本。需要额外备份请先主动导出；正常升级的完整快照仍保留。
+
+发布验收覆盖 0.5.1 同名升级及 0.4.1 旧包名迁移，使用合成作品核对正文、历史、回收站、规划、设定、预设、原配置和数据根。
 
 ## 0.5.0 升级到 0.5.1
 
@@ -40,7 +52,7 @@
 再使用更新前记下的实际目录与作品 ID：
 
 ```json
-{"action":"verify","args":{"expectedVersion":"0.5.1","expectedDataRoot":"C:\\Users\\用户\\AppData\\Local\\cuigengji","expectedNovelIds":[]}}
+{"action":"verify","args":{"expectedVersion":"0.6.0","expectedDataRoot":"C:\\Users\\用户\\AppData\\Local\\cuigengji","expectedNovelIds":[]}}
 ```
 
 只有 `status.status=ready` 且 `verify.verified=true`，实际版本、数据根和原作品均正确，才报告完成。安装器显示成功或磁盘包已更新，不能代替重启后的核对。

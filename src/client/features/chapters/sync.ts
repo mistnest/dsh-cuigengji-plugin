@@ -45,7 +45,7 @@ type State={base:Chapter;value:Chapter;phase:Phase;error:string;cacheError:strin
 type Storage=Pick<globalThis.Storage,'getItem'|'setItem'|'removeItem'>;
 type Options={key:string;initial:Chapter;storage:Storage;read:()=>Promise<Chapter>;write:(value:Chapter,base:Chapter,requestId:string)=>Promise<Partial<Chapter>>;onSaved:()=>void;delay?:number};
 
-/** One serialized save queue per chapter. It survives tab switches and keeps drafts durable. */
+/** One serialized save queue per chapter. It survives chapter switches and keeps drafts durable. */
 export class ChapterSync {
   state: State;
   private listeners=new Set<()=>void>();

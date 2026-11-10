@@ -59,42 +59,38 @@ try {
     expect(await page.evaluate(()=>window.pollDisabled)).toEqual([]);await page.evaluate(()=>window.entryWatch.disconnect());
     if(kind==='规划')await page.getByRole('button',{name:'‹ 返回规划',exact:true}).click();
   }
-  // Timeline initially requests summaries only. Four text revisions survive two organizing operations.
-  expect(historyReads).toHaveLength(0);await page.getByRole('button',{name:'修改轨迹',exact:true}).click();
-  const timeline=page.locator('.history-timeline');await expect(timeline.locator('>li')).toHaveCount(4);
-  expect(await timeline.locator('>li').evaluateAll(items=>items.map(el=>Number(el.dataset.version)))).toEqual([6,5,2,1]);
-  expect(historyReads.every(a=>!a.includeContent)).toBe(true);
-  await page.getByLabel('显示布局与分组操作',{exact:true}).check();await expect(timeline.locator('>li')).toHaveCount(6);await page.getByLabel('显示布局与分组操作',{exact:true}).uncheck();
-  failRevision=2;await page.getByRole('button',{name:'查看版本 v2',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'模拟单版读取失败'})).toBeVisible();
-  await page.getByRole('button',{name:'重试读取',exact:true}).click();await expect(page.locator('.history-version-panel .document-body')).toHaveText('第二版：她开始调查来信。');
-  expect(historyReads.filter(a=>a.includeContent).map(a=>a.revision)).toEqual([2,2]);
-  await page.getByRole('combobox',{name:'历史版本对照',exact:true}).selectOption('previous');await expect(page.locator('.diff-before').filter({hasText:'最初的约定'})).toBeVisible();
-  expect(historyReads.filter(a=>a.includeContent).map(a=>a.revision)).toEqual([2,2,1]);
-  await page.getByRole('combobox',{name:'历史版本对照',exact:true}).selectOption('current');await expect(page.locator('.diff-after').filter({hasText:'选择与代价'})).toBeVisible();
-  // Slow responses cannot show the wrong historical body or comparison under another revision.
-  delayRevision=2;await page.getByRole('button',{name:'查看版本 v2',exact:true}).click();await page.getByRole('button',{name:'查看版本 v2',exact:true}).click();
-  await expect.poll(()=>historyReads.filter(a=>a.includeContent&&a.revision===2).length).toBe(3);
-  await page.getByRole('button',{name:'查看版本 v5',exact:true}).click();await expect(page.locator('.history-version-panel .document-body')).toContainText('选择与代价');
-  await page.evaluate(()=>{window.wrongHistory=[];window.historyWatch=new MutationObserver(()=>{const panel=document.querySelector('[data-version="5"] .document-body');if(panel?.textContent.includes('第二版：'))window.wrongHistory.push(panel.textContent);});window.historyWatch.observe(document.querySelector('.setting-history'),{childList:true,subtree:true,characterData:true});});
+  // One comparison view requests summaries and only the explicitly selected body.
+  expect(historyReads).toHaveLength(0);await page.getByRole('button',{name:'改动对比',exact:true}).click();
+  const compare=page.getByRole('region',{name:'卡片改动对比',exact:true}),select=compare.getByRole('combobox',{name:'对照卡片版本',exact:true});
+  await expect(select.locator('option:not([disabled])')).toHaveCount(4);
+  expect(await select.locator('option:not([disabled])').evaluateAll(items=>items.map(el=>Number(el.value)))).toEqual([6,5,2,1]);
+  expect(historyReads[0].includeContent).toBeUndefined();
+  await expect(compare.locator('[data-field="content"]')).toContainText('选择与代价');
+  failRevision=2;await select.selectOption('2');const failure=compare.getByRole('alert').filter({hasText:'模拟单版读取失败'});await expect(failure).toBeVisible();
+  await failure.getByRole('button',{name:'重试',exact:true}).click();await expect(compare.locator('[data-field="content"]')).toContainText('第二版：她开始调查来信。');
+  await select.selectOption('1');await expect(compare.locator('[data-field="content"]')).toContainText('最初的约定');
+  // A late response must never appear under another selected revision.
+  delayRevision=2;await select.selectOption('2');await expect.poll(()=>historyReads.filter(a=>a.includeContent&&a.revision===2).length).toBe(3);
+  await select.selectOption('5');await expect(compare.locator('[data-field="content"]')).toContainText('选择与代价');
+  await page.evaluate(()=>{window.wrongHistory=[];window.historyWatch=new MutationObserver(()=>{const root=document.querySelector('.card-comparison'),panel=root?.querySelector('[data-field="content"]');if(root?.querySelector('select')?.value==='5'&&panel?.textContent.includes('第二版：'))window.wrongHistory.push(panel.textContent);});window.historyWatch.observe(document.querySelector('.card-comparison'),{childList:true,subtree:true,characterData:true});});
   await page.waitForTimeout(750);latePaints.push(...await page.evaluate(()=>window.wrongHistory));expect(latePaints).toEqual([]);delayRevision=null;
-  await page.getByRole('combobox',{name:'历史版本对照',exact:true}).selectOption('previous');await expect(page.locator('.version-compare-head')).toContainText('v2 → v5');
-  await page.getByRole('combobox',{name:'历史版本对照',exact:true}).selectOption('none');
   for(const width of [320,420,600,1400]){
-    await page.setViewportSize({width,height:950});await expect(page.locator('.history-version-panel .document-body')).toBeVisible();
+    await page.setViewportSize({width,height:950});await expect(compare).toBeVisible();
     expect(await page.locator('.detail-scroll').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
-    await page.locator('.history-event[aria-expanded=true]').scrollIntoViewIfNeeded();await page.screenshot({path:join(shots,`history-${width}.png`)});
+    await page.screenshot({path:join(shots,`history-${width}.png`)});
   }
   await page.evaluate(()=>document.documentElement.style.cssText='--dsw-alias-bg-base:#181a20;--dsw-alias-label-primary:#e9edf5;--dsw-alias-label-secondary:#99a0ad;--dsw-alias-border-l1:#353a46;--dsw-alias-state-business-primary:#6c8aff;');await page.screenshot({path:join(shots,'history-dark.png')});await page.evaluate(()=>document.documentElement.removeAttribute('style'));
-  // A concurrent edit after the restore confirmation opened must never be overwritten.
-  await page.getByRole('button',{name:'查看版本 v1',exact:true}).click();await expect(page.locator('.history-version-panel .document-body')).toContainText('最初的约定');await page.getByRole('button',{name:'恢复此版本',exact:true}).click();
+  // A concurrent edit after confirmation opened must never be overwritten.
+  await select.selectOption('1');await expect(compare.locator('[data-field="content"]')).toContainText('最初的约定');await compare.getByRole('button',{name:'恢复此版',exact:true}).click();
   const confirmation=page.getByRole('dialog').filter({hasText:'恢复设定到 v1'});await expect(confirmation).toBeVisible();await update({content:'并发的新版本，不应被覆盖。'});await confirmation.getByRole('button',{name:'确定',exact:true}).click();
   await expect(page.getByRole('alert').filter({hasText:'版本已变化'})).toBeVisible();expect((await call('graph.get',{novelId,nodeId:node.id})).content).toBe('并发的新版本，不应被覆盖。');
-  await page.getByRole('button',{name:'刷新当前页面',exact:true}).click();await expect(page.locator('.entry-document>.document-heading .document-meta')).toContainText('v7');
-  await page.getByRole('button',{name:'恢复此版本',exact:true}).click();await confirmation.getByRole('button',{name:'确定',exact:true}).click();await expect(page.locator('.document-tabs button[aria-pressed=true]')).toHaveText('内容');await expect(page.locator('.document-body')).toContainText('最初的约定');
+  await page.getByRole('button',{name:'刷新当前页面',exact:true}).click();await expect(compare.locator('.card-comparison-current')).toContainText('v7');
+  await compare.getByRole('button',{name:'恢复此版',exact:true}).click();await confirmation.getByRole('button',{name:'确定',exact:true}).click();await expect(compare).toHaveCount(0);await expect(page.locator('.document-body')).toContainText('最初的约定');
   expect((await call('graph.get',{novelId,nodeId:node.id})).revision).toBe(8);expect((await call('graph.history',{novelId,nodeId:node.id})).length).toBe(8);
-  await page.getByRole('button',{name:'编辑',exact:true}).click();await page.getByRole('textbox',{name:'全文',exact:true}).fill('尚未保存的本地设定。');await page.getByRole('button',{name:'修改轨迹',exact:true}).click();await page.getByRole('button',{name:'查看版本 v2',exact:true}).click();await expect(page.getByRole('button',{name:'恢复此版本',exact:true})).toBeDisabled();
-  await page.getByRole('button',{name:'内容',exact:true}).click();await expect(page.getByRole('textbox',{name:'全文',exact:true})).toHaveValue('尚未保存的本地设定。');await page.getByRole('button',{name:'保存设定',exact:true}).click();
-  await page.getByRole('button',{name:'‹ 返回设定',exact:true}).click();await page.getByRole('button',{name:'适应视图',exact:true}).click();
+  await page.getByRole('button',{name:'编辑',exact:true}).click();await page.getByRole('textbox',{name:'全文',exact:true}).fill('尚未保存的本地设定。');await page.getByRole('button',{name:'改动对比',exact:true}).click();await select.selectOption('2');await expect(compare.getByRole('button',{name:'保存草稿后恢复',exact:true})).toBeEnabled();
+  await compare.getByRole('button',{name:'返回内容',exact:true}).click();await expect(page.getByRole('textbox',{name:'全文',exact:true})).toHaveValue('尚未保存的本地设定。');await page.getByRole('button',{name:'保存设定',exact:true}).click();
+  await expect(page.getByRole('button',{name:'编辑',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'‹ 返回设定',exact:true}).click();await expect(page.locator('.relation-canvas')).toBeVisible();await page.getByRole('button',{name:'适应视图',exact:true}).click();
   // Drawn route endpoints and interactive four-sided ports are the same world points.
   const edges=await call('edge.list',{novelId});const endpointErrors=await page.locator('.relation-canvas').evaluate((canvas,edges)=>{
     const errors=[];for(const e of edges){const path=canvas.querySelector(`[data-edge-id="${e.id}"]`).parentElement.querySelector('.graph-line'),matrix=path.getScreenCTM();for(const [id,length] of [[e.from,0],[e.to,path.getTotalLength()]]){const p=path.getPointAtLength(length),screen=new DOMPoint(p.x,p.y).matrixTransform(matrix),ports=[...canvas.querySelectorAll(`.planning-card[data-node-id="${id}"] .graph-port`)];const closest=Math.min(...ports.map(port=>{const r=port.getBoundingClientRect();return Math.hypot(screen.x-r.x-r.width/2,screen.y-r.y-r.height/2);}));if(closest>.65)errors.push({id,closest});}}return errors;
@@ -103,5 +99,5 @@ try {
   await page.getByRole('button',{name:'导出图片',exact:true}).click();const exporter=page.getByRole('dialog',{name:'导出画布图片',exact:true});await exporter.getByLabel('图片格式',{exact:true}).selectOption('svg');const downloaded=page.waitForEvent('download');await exporter.getByRole('button',{name:'保存图片',exact:true}).click();const svg=await readFile(await (await downloaded).path(),'utf8');
   for(const path of await page.locator('.relation-canvas .graph-line').evaluateAll(paths=>paths.map(p=>p.getAttribute('d'))))expect(svg).toContain(`d="${path}"`);
   expect(historyReads.filter(a=>a.includeContent).every(a=>Number.isSafeInteger(a.revision)&&a.revision>0)).toBe(true);expect(errors).toEqual([]);
-  await writeFile(join(shots,'report.json'),JSON.stringify({ok:true,checks:['no polling disable/fade; clicking during refresh','all semantic revisions; optional organization events','single-revision reads + read failure retry','two-version comparison; stale response isolation','restore CAS + retained history + unsaved draft protection','responsive/dark timeline','four-sided ports align with routed endpoints','SVG export shares relation routing'],historyBodyRevisions:historyReads.filter(a=>a.includeContent).map(a=>a.revision)},null,2));console.log('History, silent polling and relation routing regression passed.');
+  await writeFile(join(shots,'report.json'),JSON.stringify({ok:true,checks:['no polling disable/fade; clicking during refresh','all semantic versions; organization events excluded from comparison','single-revision reads + read failure retry','two-version comparison; stale response isolation','restore CAS + retained history + unsaved draft protection','responsive/dark card comparison','four-sided ports align with routed endpoints','SVG export shares relation routing'],historyBodyRevisions:historyReads.filter(a=>a.includeContent).map(a=>a.revision)},null,2));console.log('History, silent polling and relation routing regression passed.');
 }catch(error){if(page)await page.screenshot({path:join(shots,'failure.png')}).catch(()=>{});throw error;}finally{await browser?.close();host.kill();}

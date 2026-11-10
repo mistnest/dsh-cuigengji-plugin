@@ -25,7 +25,7 @@ try {
   await expect(drawer).toBeVisible();
   const reopen=async()=>{await page.getByRole('button',{name:/^(打开目录|‹ 目录)$/}).click();await expect(drawer).toBeVisible();};
   // Closing an unselected directory must survive navigation and a cold reload.
-  await close.click();await page.getByRole('button',{name:'规划',exact:true}).click();await page.getByRole('button',{name:'正文',exact:true}).click();await expect(drawer).toHaveCount(0);
+  await close.click();await page.getByRole('button',{name:'规划',exact:true}).click();await page.getByRole('button',{name:'正文',exact:true}).click();await expect(page.locator('.chapter-workspace')).toBeVisible();await expect(drawer).toHaveCount(0);
   await page.reload();await expect(page.getByRole('button',{name:'打开目录',exact:true})).toBeVisible();await expect(drawer).toHaveCount(0);await reopen();
   for(const width of [360,590,750]) {
     await page.setViewportSize({width,height:780});
@@ -45,17 +45,24 @@ try {
     await page.mouse.click(outsideX,300);await expect(drawer).toHaveCount(0);
     await expect(page.getByRole('button',{name:/^(打开目录|‹ 目录)$/})).toBeFocused();await reopen();
   }
-  // A DSH tab clips/transforms its subtree and sits below the title bar. The
-  // native modal still spans the viewport; verify coordinates outside that pane.
+  // A DSH tab clips/transforms its subtree and sits below the title bar.
+  // Its directory stays inside that pane and leaves the chat interactive.
   await page.setViewportSize({width:1280,height:820});
   await page.evaluate(()=>{document.getElementById('root').style.cssText='position:absolute;inset:64px 0 0 auto;width:560px;overflow:hidden;transform:translateZ(0)';});
   await expect(drawer).toBeVisible();
-  for(const y of [8,26,44]) {await page.mouse.click(300,y);await expect(drawer).toHaveCount(0);await reopen();}
+  const panel=await page.locator('#root').boundingBox(),localDrawer=await drawer.boundingBox();
+  expect(localDrawer.x).toBeGreaterThanOrEqual(panel.x);expect(localDrawer.y).toBeGreaterThanOrEqual(panel.y);
+  expect(localDrawer.x+localDrawer.width).toBeLessThanOrEqual(panel.x+panel.width);
+  await page.evaluate(()=>{const input=document.createElement('textarea');input.id='fixture-chat';input.setAttribute('aria-label','DSH 示例聊天');input.style.cssText='position:absolute;left:20px;top:100px;width:400px;height:100px;';document.body.appendChild(input);});
+  for(const y of [8,26,44]) {await page.mouse.click(300,y);await expect(drawer).toBeVisible();}
+  await page.getByRole('textbox',{name:'DSH 示例聊天'}).fill('目录展开时仍可继续讨论。');
+  await expect(page.getByRole('textbox',{name:'DSH 示例聊天'})).toHaveValue('目录展开时仍可继续讨论。');
+  await expect(drawer).toBeVisible();
   await drawer.locator('.chapter-directory').evaluate(el=>{el.scrollTop=el.scrollHeight;});
-  await page.mouse.click(300,26);await expect(drawer).toHaveCount(0);await reopen();
-  await page.mouse.click(980,320);await expect(drawer).toHaveCount(0);await reopen();
+  await expect(close).toBeInViewport();await close.click();await expect(drawer).toHaveCount(0);await reopen();
+  const embedded=await drawer.boundingBox();await page.mouse.click(embedded.x+embedded.width+12,embedded.y+120);await expect(drawer).toHaveCount(0);await reopen();
   await page.keyboard.press('Escape');
-  await page.evaluate(()=>{document.getElementById('root').style.cssText='';});
+  await page.evaluate(()=>{document.getElementById('root').style.cssText='';document.getElementById('fixture-chat').remove();});
   await page.setViewportSize({width:390,height:780});
   await reopen();
   await page.screenshot({path:join(shots,'drawer-light.png')});
@@ -68,6 +75,15 @@ try {
   await close.click();
   await page.setViewportSize({width:1100,height:820});
   await page.locator('.chapter-item').first().click();
+  const directory=page.locator('.chapter-directory'),heading=directory.locator('.directory-header');
+  await directory.evaluate(el=>{el.scrollTop=0;});
+  const headingTop=(await heading.boundingBox()).y;
+  await directory.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+  expect(await directory.evaluate(el=>el.scrollTop)).toBeGreaterThan(200);
+  expect(Math.abs((await heading.boundingBox()).y-headingTop)).toBeLessThan(1);
+  const collapseBox=await page.getByRole('button',{name:'收起章节目录',exact:true}).boundingBox();
+  expect(await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.closest('button')?.getAttribute('aria-label'),{x:collapseBox.x+collapseBox.width/2,y:collapseBox.y+collapseBox.height/2})).toBe('收起章节目录');
+  await page.screenshot({path:join(shots,'directory-fixed-header.png')});
   await page.getByRole('button',{name:'收起章节目录',exact:true}).click();
   const workspace=page.locator('.chapter-workspace');
   const expectCollapsed=async()=>{await expect(workspace).toHaveClass(/directory-collapsed/);await expect(page.getByRole('button',{name:'展开章节目录',exact:true})).toBeVisible();};
@@ -93,5 +109,5 @@ try {
   await expect(page.getByRole('button',{name:'＋ 情节',exact:true})).toHaveCSS('background-color','rgb(77, 107, 254)');
   await page.screenshot({path:join(shots,'planning-light.png')});
   expect(errors).toEqual([]);
-  console.log(JSON.stringify({ok:true,checks:['drawer corners/center hit at 360/590/750px','close remains fixed while directory scrolls','Enter, Escape, backdrop and focus return','inside-to-outside drag does not dismiss','embedded DSH pane: top/center/bottom hit coordinates','closed drawer and desktop collapse survive navigation/preset/home/refresh/reload; explicit expansion stays open','desktop collapse, blue fallback and host dark accent']}));
+  console.log(JSON.stringify({ok:true,checks:['drawer corners/center hit at 360/590/750px','close remains fixed while directory scrolls','Enter, Escape, local backdrop and focus return','inside-to-outside drag does not dismiss','directory stays in embedded DSH pane; chat remains interactive','closed drawer and desktop collapse survive navigation/preset/home/refresh/reload; explicit expansion stays open','desktop collapse, blue fallback and host dark accent']}));
 } finally {await browser?.close();preview.kill();}

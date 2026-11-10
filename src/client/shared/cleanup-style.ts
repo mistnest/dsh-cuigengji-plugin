@@ -1,0 +1,20 @@
+export const cleanupStyles=`
+.cuigengji.cleanup-dialog{margin:auto;padding:0;width:min(640px,calc(100vw - 32px));height:fit-content;max-height:calc(100dvh - 32px);border:1px solid var(--cg-line,#dde0e6);border-radius:16px;background:var(--cg-paper,var(--dsw-alias-bg-base,#fff));color:var(--cg-ink,var(--dsw-alias-label-primary,#252936));box-shadow:0 18px 64px #0003;overflow:auto;}
+.cleanup-dialog::backdrop{background:#11182766;}
+.cuigengji.cleanup-dialog>header,.cuigengji.cleanup-dialog>footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;}
+.cuigengji.cleanup-dialog>header{border-bottom:1px solid var(--cg-line,#dde0e6);}
+.cuigengji.cleanup-dialog h2{margin:4px 0 0;font-size:20px;}.cuigengji.cleanup-dialog header small{color:var(--cg-muted,#737780);}
+.cuigengji.cleanup-dialog>header>button{border:0;background:none;font-size:22px;}
+.cuigengji.cleanup-dialog>footer{position:sticky;bottom:0;background:var(--cg-paper,var(--dsw-alias-bg-base,#fff));border-top:1px solid var(--cg-line,#dde0e6);justify-content:flex-end;}
+.cuigengji .cleanup-target{margin:16px 22px 10px;font-weight:600;overflow-wrap:anywhere;}
+.cuigengji .cleanup-filters{display:flex;align-items:end;gap:12px;padding:0 22px 12px;flex-wrap:wrap;}.cuigengji .cleanup-filters label{margin:0;flex:1 1 180px;min-width:0;}.cuigengji .cleanup-filters input,.cuigengji .cleanup-filters select{width:100%;min-width:0;max-width:100%;}
+.cuigengji .cleanup-list{margin:0 22px;border:1px solid var(--cg-line,#dde0e6);border-radius:10px;max-height:min(38dvh,360px);overflow:auto;overscroll-behavior:contain;}
+.cuigengji .cleanup-list label{display:flex;align-items:center;gap:10px;margin:0;padding:12px;cursor:pointer;}.cuigengji .cleanup-list input{width:16px;height:16px;flex:none;margin:0;}
+.cuigengji .cleanup-select-all{position:sticky;top:0;background:var(--cg-paper,var(--dsw-alias-bg-base,#fff));z-index:1;border-bottom:1px solid var(--cg-line,#dde0e6);font-size:12px;}
+.cuigengji .cleanup-item+.cleanup-item{border-top:1px solid var(--cg-line,#dde0e6);}.cuigengji .cleanup-item label>span{display:grid;gap:4px;min-width:0;flex:1;}.cuigengji .cleanup-item strong{font-size:13px;overflow-wrap:anywhere;}.cuigengji .cleanup-item small{font-size:11px;color:var(--cg-muted,#737780);}.cuigengji .cleanup-item em{font-style:normal;font-size:11px;border-radius:5px;padding:3px 6px;background:var(--cg-wash,#f3f4ff);white-space:nowrap;}
+.cuigengji .cleanup-item details{font-size:12px;padding:0 12px 8px 38px;}.cuigengji .cleanup-item details ul{margin:0;padding-left:18px;}.cuigengji .cleanup-item details li{margin:6px 0;overflow-wrap:anywhere;}.cuigengji .cleanup-item details button{font-size:11px;margin-left:8px;padding:2px 6px;}
+.cuigengji .cleanup-confirm{padding:12px 22px 16px;}.cuigengji .cleanup-confirm p{margin:0 0 8px;}.cuigengji .cleanup-confirm small{display:block;color:var(--cg-muted,#737780);font-size:12px;line-height:1.6;}
+.cuigengji .cleanup-delete{background:#b53732;color:white;border-color:#b53732;}.cuigengji .cleanup-done{padding:24px 22px;}.cuigengji .cleanup-done>strong{font-size:18px;}.cuigengji .cleanup-error{margin:12px 22px;overflow-wrap:anywhere;}.cuigengji .cleanup-error button{margin-left:10px;}
+.cuigengji .history-cleanup-menu{flex:none;position:relative;margin-left:auto;}.cuigengji .history-cleanup-menu>summary{padding:5px 8px;}.cuigengji .chapter-trash-select{flex:none;margin:0 0 0 8px;width:16px;height:16px;}.cuigengji .trash-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 0;}.cuigengji .trash-toolbar button{font-size:12px;padding:5px 8px;}.cuigengji .trash-toolbar label{display:flex;align-items:center;gap:6px;margin:0;font-size:12px;}
+@media(max-width:420px){.cuigengji.cleanup-dialog>header,.cuigengji.cleanup-dialog>footer{padding:14px 16px;}.cuigengji .cleanup-target{margin-inline:16px;}.cuigengji .cleanup-list{margin-inline:16px;}.cuigengji .cleanup-filters,.cuigengji .cleanup-confirm{padding-inline:16px;}.cuigengji .cleanup-item label{gap:8px;padding:10px;}}
+`;

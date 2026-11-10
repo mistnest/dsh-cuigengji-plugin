@@ -26,7 +26,7 @@ export function applyWithRPC(ctx:any, rpc:WorkbenchRPC) {
   const transport = rpc;
   rpc = async (action, args, sessionId) => {
     const value = await transport(action, args, sessionId);
-    if (/^(chapter\.(create|update)|graph\.(create|update|continue)|planning\.(apply|continue|page\.|group\.)|novel\.(archive|restore|purge)|binding\.set)/.test(action)) {
+    if (/^(chapter\.(create|update|replace|delete|restore)|volume\.delete|graph\.(create|update|continue)|planning\.(apply|continue|page\.|group\.)|novel\.(create|import|archive|restore|purge)|binding\.set)/.test(action)) {
       invalidatePetActivity(rpc, action === 'binding.set' || action.startsWith('novel.'));
     }
     return value;
@@ -56,6 +56,7 @@ export function applyWithRPC(ctx:any, rpc:WorkbenchRPC) {
       // retainedBy.mainView is a lifetime count, not the selected conversation.
       hooks: { mounted: ctx.sidebarRight.mounted },
       rpc, statusSource: ctx.uiSession?.sessionStatus,
+      openConversation:(id:string)=>{ctx.uiWorkspace.openSession(id);ctx.layout.selectPanel(null);},
       openPet: () => {
         const sessionId = ctx.sidebarRight.mounted.getSnapshot();
         if (sessionId) {
@@ -64,7 +65,7 @@ export function applyWithRPC(ctx:any, rpc:WorkbenchRPC) {
         }
       },
     }),
-  }, (props:any) => <PetBoundary><PetOverlay useMounted={props.useMounted} openPet={props.openPet} rpc={props.rpc} statusSource={props.statusSource}/></PetBoundary>));
+  }, (props:any) => <PetBoundary><PetOverlay useMounted={props.useMounted} openPet={props.openPet} openConversation={props.openConversation} rpc={props.rpc} statusSource={props.statusSource}/></PetBoundary>));
 }
 
 function WorkbenchTab(props:any) {

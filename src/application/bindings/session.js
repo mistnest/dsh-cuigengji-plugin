@@ -36,12 +36,13 @@ export function createSessionPolicy({ store, audit, ready = async () => undefine
       // books used during this turn, including while a tool awaits the lock.
       rememberTarget(actor.sessionId, args.novelId);
     }
-    const guard = action === 'binding.set' || recyclesNovel(action, args) ? state => {
+    const purgesWorks=action==='cleanup.apply'&&args.scope==='novel-trash';
+    const guard = action === 'binding.set' || recyclesNovel(action, args) || purgesWorks ? state => {
       if (action === 'binding.set' && active.has(actor.sessionId)) throw new Error('会话正在运行，请停止后切换小说或章节');
-      if (recyclesNovel(action, args)) {
-        const novelId = args.novelId || state.bindings[sessionKey(actor.sessionId)]?.novelId;
-        for (const sessionId of active) if (novelId && (state.bindings[sessionKey(sessionId)]?.novelId === novelId || workingBooks.get(sessionId)?.has(novelId))) {
-          throw Object.assign(new Error('这部作品仍有 AI 写作任务在运行，请先停止相关会话，再移入回收站'), {code: 'NOVEL_BUSY'});
+      if (recyclesNovel(action, args)||purgesWorks) {
+        const targets=purgesWorks?Object.values(state.novels).filter(n=>n.archived&&(args.ids===undefined||Array.isArray(args.ids)&&args.ids.includes(n.id))).map(n=>n.id):[args.novelId || state.bindings[sessionKey(actor.sessionId)]?.novelId];
+        for (const sessionId of active) if (targets.some(novelId=>novelId&&(state.bindings[sessionKey(sessionId)]?.novelId===novelId||workingBooks.get(sessionId)?.has(novelId)))) {
+          throw Object.assign(new Error(`这部作品仍有 AI 写作任务在运行，请先停止相关会话，再${purgesWorks||action==='novel.purge'?'永久删除':'移入回收站'}`), {code: 'NOVEL_BUSY'});
         }
       }
     } : undefined;

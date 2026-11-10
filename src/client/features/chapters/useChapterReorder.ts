@@ -4,16 +4,18 @@ import {directorySnapshot, planChapterMove, type ChapterPlacement, type ChapterD
 interface ChapterItem extends ChapterPlacement { title: string; revision: number; textCount?: number }
 interface Options {
   chapters: ChapterItem[]; volumes: VolumePlacement[]; novelId: string; busy: boolean;
+  descending?: boolean;
   call: (action: string, args: Record<string, unknown>) => Promise<any>;
   onMoved: (volumeId: string | null) => void;
 }
+type DropIndicator = {kind:'row';chapterId:string;edge:'before'|'after'} | {kind:'group';volumeId:string|null;edge:'start'|'end'};
 interface Gesture {
   pointerId: number; element: HTMLElement; source: ChapterItem; active: boolean;
   startX: number; startY: number; x: number; y: number;
   chapters: ChapterItem[]; volumes: VolumePlacement[]; snapshot: DirectorySnapshot;
-  target: ChapterDestination | null;
+  descending: boolean; target: ChapterDestination | null; indicator: DropIndicator | null;
 }
-interface DragView { source: ChapterItem; x: number; y: number; target: ChapterDestination | null }
+interface DragView { source: ChapterItem; x: number; y: number; target: ChapterDestination | null; indicator: DropIndicator | null }
 const includeDeleted = (original: ChapterItem[], live: ChapterItem[]) => [...live, ...original.filter(chapter => chapter.deleted)].sort((a, b) => a.order - b.order);
 
 /** Pointer gestures keep native scrolling/clicking; only a real drag writes a placement. */
@@ -47,38 +49,52 @@ export function useChapterReorder(options: Options) {
     return () => {window.removeEventListener('keydown', escape, true); window.removeEventListener('blur', cancel); window.removeEventListener('pointerup', releaseClick); window.removeEventListener('pointercancel', releaseClick); clearTimeout(clickTimer); cancelAnimationFrame(frame.current); gesture.current = null;};
   }, []);
   useEffect(() => {if (options.busy) clearGesture();}, [options.busy]);
+  useEffect(() => {if (gesture.current && gesture.current.descending !== !!options.descending) clearGesture();}, [options.descending]);
 
   const locate = (current: Gesture): ChapterDestination | null => {
+    current.indicator = null;
     const directory = directoryRef.current, hit = document.elementFromPoint(current.x, current.y);
     if (!directory || !hit || !directory.contains(hit)) return null;
-    let section = hit.closest<HTMLElement>('[data-chapter-volume]');
+    let section = hit.closest<HTMLElement>('[data-chapter-volume]'), trailing = false;
     // Edge scrolling can move the last row above the pointer between events.
     // Keep the trailing whitespace a stable end drop, except on footer controls.
     if (!section && !hit.closest('button,input,summary,.menu')) {
       const sections = Array.from(directory.querySelectorAll<HTMLElement>('[data-chapter-volume]'));
       const last = sections.filter(item => item.getBoundingClientRect().height > 0).at(-1);
-      if (last && current.y >= last.getBoundingClientRect().bottom) section = last;
+      if (last && current.y >= last.getBoundingClientRect().bottom) {section = last; trailing = true;}
     }
     if (!section || hit.closest('.menu')) return null;
     const volumeId = section.dataset.chapterVolume || null;
     const row = hit.closest<HTMLElement>('[data-chapter-id]');
+    const peers = current.chapters.filter(chapter => !chapter.deleted && chapter.id !== current.source.id && (chapter.volumeId || null) === volumeId).sort((a, b) => a.order - b.order);
     let beforeChapterId: string | null = null;
+    let indicator: DropIndicator;
     if (row) {
       const target = current.chapters.find(chapter => chapter.id === row.dataset.chapterId);
       if (!target || target.deleted || target.id === current.source.id) return null;
       const box = row.getBoundingClientRect();
-      if (current.y < box.top + box.height / 2) beforeChapterId = target.id;
-      else {
-        const peers = current.chapters.filter(chapter => !chapter.deleted && chapter.id !== current.source.id && (chapter.volumeId || null) === volumeId).sort((a, b) => a.order - b.order);
-        beforeChapterId = peers[peers.findIndex(chapter => chapter.id === target.id) + 1]?.id || null;
-      }
+      const above = current.y < box.top + box.height / 2;
+      // The storage API always means "before" in manuscript order. A reverse
+      // directory flips that meaning, while the indicator follows the pointer.
+      const before = current.descending ? !above : above;
+      beforeChapterId = before ? target.id : peers[peers.findIndex(chapter => chapter.id === target.id) + 1]?.id || null;
+      const atEnd = !above && (current.descending ? target.id === peers[0]?.id : beforeChapterId === null);
+      indicator = atEnd ? {kind:'group',volumeId,edge:'end'} : {kind:'row',chapterId:target.id,edge:above?'before':'after'};
+    } else {
+      const rows = section.querySelectorAll<HTMLElement>('[data-chapter-id]');
+      const last = rows.item(rows.length - 1);
+      const atEnd = trailing || !!last && current.y >= last.getBoundingClientRect().bottom;
+      beforeChapterId = current.descending && atEnd ? peers[0]?.id || null : null;
+      indicator = {kind:'group',volumeId,edge:current.descending && !atEnd?'start':'end'};
     }
     const destination = {volumeId, beforeChapterId};
-    return planChapterMove(current.chapters, current.volumes, current.source.id, destination).changed ? destination : null;
+    if (!planChapterMove(current.chapters, current.volumes, current.source.id, destination).changed) return null;
+    current.indicator = indicator;
+    return destination;
   };
   const showDrag = (current: Gesture) => {
     current.target = locate(current);
-    setDrag({source: current.source, x: current.x, y: current.y, target: current.target});
+    setDrag({source: current.source, x: current.x, y: current.y, target: current.target, indicator: current.indicator});
   };
   const autoScroll = () => {
     const current = gesture.current, directory = directoryRef.current;
@@ -123,7 +139,7 @@ export function useChapterReorder(options: Options) {
       if ((event.target as HTMLElement).closest('.chapter-row-action,input,textarea,select')) return;
       if (event.pointerType === 'touch' && !(event.target as HTMLElement).closest('.chapter-grip')) return;
       const {visibleChapters, volumes} = latest.current;
-      gesture.current = {pointerId: event.pointerId, element: event.currentTarget, source: chapter, active: false, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, chapters: visibleChapters, volumes, snapshot: directorySnapshot(visibleChapters, volumes), target: null};
+      gesture.current = {pointerId: event.pointerId, element: event.currentTarget, source: chapter, active: false, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, chapters: visibleChapters, volumes, snapshot: directorySnapshot(visibleChapters, volumes), descending: !!latest.current.descending, target: null, indicator: null};
       event.currentTarget.setPointerCapture(event.pointerId);
     },
     onPointerMove: (event: PointerEvent<HTMLElement>) => {
@@ -148,7 +164,7 @@ export function useChapterReorder(options: Options) {
       event.preventDefault();
       const {visibleChapters, volumes} = latest.current;
       const peers = visibleChapters.filter(item => !item.deleted && (item.volumeId || null) === (chapter.volumeId || null)).sort((a, b) => a.order - b.order);
-      const index = peers.findIndex(item => item.id === chapter.id), up = event.key === 'ArrowUp';
+      const index = peers.findIndex(item => item.id === chapter.id), up = (event.key === 'ArrowUp') !== !!latest.current.descending;
       if (up ? index <= 0 : index >= peers.length - 1) return;
       void persist({source: chapter, chapters: visibleChapters, volumes, snapshot: directorySnapshot(visibleChapters, volumes)}, {volumeId: chapter.volumeId || null, beforeChapterId: up ? peers[index - 1].id : peers[index + 2]?.id || null});
     },

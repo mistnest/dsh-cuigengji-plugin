@@ -5,7 +5,7 @@ description: 按作者意图写作或续写小说正文，用章节工具保存�
 
 # 正文写作与协作落盘
 
-共享协作规则：shared-canvas-v12。
+共享协作规则：shared-canvas-v16。
 
 ## 读到足够再写
 

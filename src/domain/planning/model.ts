@@ -70,7 +70,13 @@ export function validatePlanning(board:Board,novel:PlanningNovel):void {
     if((board.nodes[e.from].pageId??null)!==(board.nodes[e.to].pageId??null))fail('INVALID_PLANNING','不同页面不能直接连线，请先移动规划或移除跨页连线');
     const key=JSON.stringify([e.from,e.to,e.type]);if(duplicates.has(key))fail('INVALID_PLANNING','重复关系');duplicates.add(key);
   }
-  for(const tx of board.transactions){if(typeof tx.id!=='string'||!Number.isSafeInteger(tx.sequence)||!Array.isArray(tx.changes))fail('INVALID_PLANNING','规划历史无效');for(const change of tx.changes)if(!['nodes','edges','groups','pages','decorations'].includes(change.collection)||typeof change.id!=='string'||change.after?.id!==change.id||!Number.isSafeInteger(change.after.revision)||change.after.revision<1||(change.before&&change.before.id!==change.id))fail('INVALID_PLANNING','规划历史快照无效');}
+  for(const tx of board.transactions){
+    if(typeof tx.id!=='string'||!Number.isSafeInteger(tx.sequence)||!Array.isArray(tx.changes))fail('INVALID_PLANNING','规划历史无效');
+    for(const change of tx.changes){
+      if(!['nodes','edges','groups','pages','decorations'].includes(change.collection)||typeof change.id!=='string'||change.after?.id!==change.id||!Number.isSafeInteger(change.after.revision)||change.after.revision<1||(change.before&&change.before.id!==change.id))fail('INVALID_PLANNING','规划历史快照无效');
+      for(const snapshot of [change.before,change.after])if(snapshot&&'pruned'in snapshot&&(change.collection!=='nodes'||snapshot.pruned!==true||Object.keys(snapshot).some(key=>!['id','revision','pruned'].includes(key))||!Number.isSafeInteger(snapshot.revision)||snapshot.revision<1))fail('INVALID_PLANNING','历史清理标记无效');
+    }
+  }
   cycle(nodes,edges.filter(e=>e.type==='next'||e.type==='alternative').map(e=>[e.from,e.to]));
   cycle(nodes,nodes.filter(n=>n.parentId).map(n=>[n.parentId!,n.id]));
   for(const type of ['next','requires','alternative'])cycle(nodes,edges.filter(e=>e.type===type).map(e=>[e.from,e.to]));

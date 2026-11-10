@@ -47,7 +47,7 @@ test('recycling is metadata-only, unbinds every related session and restores exa
   const bytes=await Promise.all(files.map(path=>readFile(join(bookPath,path))));
   const reads=[],read=f.store.readText.bind(f.store);f.store.readText=async path=>{reads.push(path);return read(path);};
   const recycled=await f.recycle();
-  assert.ok(reads.every(path=>!path.includes('/chapters/')&&!path.includes('/history/')&&!path.includes('/planning/')&&!path.includes('/settings/')),'recycling must not read the whole novel');
+  assert.ok(reads.every(path=>(!path.includes('/chapters/')||path.endsWith('/chapters/index.json'))&&!path.includes('/history/')&&!path.includes('/planning/')&&!path.includes('/settings/')),'recycling may read chapter counts from the index, but must not read chapter bodies or other novel content');
   assert.ok(recycled.archivedAt);
   assert.equal((await f.store.dispatch('novel.list',{},f.actor)).length,1);
   assert.equal((await f.run('novel.list',{includeArchived:true})).find(n=>n.id===novel.id).archivedAt,recycled.archivedAt);

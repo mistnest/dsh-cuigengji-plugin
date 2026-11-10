@@ -94,7 +94,10 @@ function validatePlanning(board, novel) {
   }
   for (const tx of board.transactions) {
     if (typeof tx.id !== "string" || !Number.isSafeInteger(tx.sequence) || !Array.isArray(tx.changes)) fail("INVALID_PLANNING", "\u89C4\u5212\u5386\u53F2\u65E0\u6548");
-    for (const change of tx.changes) if (!["nodes", "edges", "groups", "pages", "decorations"].includes(change.collection) || typeof change.id !== "string" || change.after?.id !== change.id || !Number.isSafeInteger(change.after.revision) || change.after.revision < 1 || change.before && change.before.id !== change.id) fail("INVALID_PLANNING", "\u89C4\u5212\u5386\u53F2\u5FEB\u7167\u65E0\u6548");
+    for (const change of tx.changes) {
+      if (!["nodes", "edges", "groups", "pages", "decorations"].includes(change.collection) || typeof change.id !== "string" || change.after?.id !== change.id || !Number.isSafeInteger(change.after.revision) || change.after.revision < 1 || change.before && change.before.id !== change.id) fail("INVALID_PLANNING", "\u89C4\u5212\u5386\u53F2\u5FEB\u7167\u65E0\u6548");
+      for (const snapshot of [change.before, change.after]) if (snapshot && "pruned" in snapshot && (change.collection !== "nodes" || snapshot.pruned !== true || Object.keys(snapshot).some((key) => !["id", "revision", "pruned"].includes(key)) || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 1)) fail("INVALID_PLANNING", "\u5386\u53F2\u6E05\u7406\u6807\u8BB0\u65E0\u6548");
+    }
   }
   cycle(nodes, edges.filter((e) => e.type === "next" || e.type === "alternative").map((e) => [e.from, e.to]));
   cycle(nodes, nodes.filter((n) => n.parentId).map((n) => [n.parentId, n.id]));

@@ -95,28 +95,28 @@ test('no-op content saves, title changes and card geometry do not count as writi
   assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.planningChanges, 2);
 });
 
-test('historical totals retain recycled works and rejected saves never increase progress', async t => {
+test('recycled works leave adopted totals and rejected saves never increase progress', async t => {
   const { store, actor, novel } = await fixture(t);
   const chapter = await store.dispatch('chapter.create', { title: '正文', content: '写下一句话。' }, actor);
   const stats = (await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats;
   await assert.rejects(store.dispatch('chapter.update', { chapterId: chapter.id, expectedRevision: 0, append: '没有保存' }, actor), error => error.code === 'CONFLICT');
   assert.deepEqual((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats, stats);
   await store.dispatch('novel.archive', { novelId: novel.id, expectedRevision: 2, confirm: true }, actor);
-  assert.equal((await store.dispatch('activity.today', {}, actor)).stats.proseAdded, stats.proseAdded);
-  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded,stats.proseAdded);
+  assert.equal((await store.dispatch('activity.today', {}, actor)).stats.proseAdded, 0);
+  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded,0);
 });
 
-test('distant edits count changed characters, while formatting and deletion add no writing', async t => {
+test('distant edits and formatting preserve adopted length while deletion reduces it', async t => {
   const { store, actor, novel } = await fixture(t);
   const middle = '保留这段文字。'.repeat(600);
   let chapter = await store.dispatch('chapter.create', { title: '正文', content: '甲' + middle + '乙' }, actor);
   const initial = (await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded;
   chapter = await store.dispatch('chapter.update', { chapterId: chapter.id, expectedRevision: chapter.revision, content: '丙' + middle + '丁' }, actor);
-  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded, initial + 2);
+  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded, initial);
   chapter = await store.dispatch('chapter.update', { chapterId: chapter.id, expectedRevision: chapter.revision, content: '\n　　丙\n' + middle + '\n丁　\n' }, actor);
-  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded, initial + 2);
+  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded, initial);
   chapter = await store.dispatch('chapter.update', { chapterId: chapter.id, expectedRevision: chapter.revision, content: middle }, actor);
-  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded, initial + 2);
+  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded, initial - 2);
   await store.dispatch('chapter.update', { chapterId: chapter.id, expectedRevision: chapter.revision, append: '🌟' }, actor);
-  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded, initial + 3);
+  assert.equal((await store.dispatch('activity.today', { novelId: novel.id }, actor)).stats.proseAdded, initial - 1);
 });

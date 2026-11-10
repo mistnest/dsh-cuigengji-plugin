@@ -6,6 +6,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { assertMemoryAction, toolName } from "./actions.js";
 import { errorInfo } from "../../contracts/errors.js";
 const MAX_BODY_BYTES = 1024 * 1024;
+const MAX_PRESET_BODY_BYTES = 8 * 1024 * 1024;
 function memoryRuntime(options = {}, runtime = process) {
   const command = options.nodeCommand ?? runtime.env.CUIGENGJI_DSH_NODE ?? runtime.execPath;
   const env = {};
@@ -60,11 +61,12 @@ class MemoryBridge {
       const chunks = [];
       for await (const chunk of request) {
         size += chunk.length;
-        if (size > MAX_BODY_BYTES) return reply(413, { error: "\u8BB0\u5FC6\u8BF7\u6C42\u8FC7\u5927" });
+        if (size > MAX_PRESET_BODY_BYTES) return reply(413, { error: "\u8BB0\u5FC6\u8BF7\u6C42\u8FC7\u5927" });
         chunks.push(chunk);
       }
       const { action, args = {} } = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       assertMemoryAction(action);
+      if (!action.startsWith("preset.") && size > MAX_BODY_BYTES) return reply(413, { error: "\u8BB0\u5FC6\u8BF7\u6C42\u8FC7\u5927" });
       if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("\u53C2\u6570\u5FC5\u987B\u662F\u5BF9\u8C61");
       const actor = { kind: "agent", sessionId };
       const onDemandGuidance = action === "guidance.read";

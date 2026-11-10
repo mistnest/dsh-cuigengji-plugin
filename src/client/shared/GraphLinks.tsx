@@ -22,8 +22,8 @@ export function GraphLinks({routes,links,selected,selectedEdge,choose,label,dire
     {preview&&<path className="graph-preview" d={preview}/>}
   </svg>;
 }
-export function GraphViewTools({focus,title,count,total,edges,choose,clear,children,exporter}:{focus:boolean;title?:string;count:number;total:number;edges:number;choose?:()=>void;clear:()=>void;children?:React.ReactNode;exporter?:React.ReactNode}){
+export function GraphViewTools({focus,title,count,total,edges,clear,exporter}:{focus:boolean;title?:string;count:number;total:number;edges:number;clear:()=>void;exporter?:React.ReactNode}){
   return <div className="graph-top-area" data-no-drag="true"><div className="graph-view-context"><div><span>{focus?`${count} / ${total}`:count} 张卡片</span><i aria-hidden="true"/><span>{edges} 条连线</span></div>
-    {focus?<button onClick={clear} aria-label="返回全图">‹ 返回全图{title&&<span>{title}</span>}</button>:choose&&<button onClick={choose}>只看相关</button>}{exporter}
-  </div>{children}</div>;
+    {focus&&<button onClick={clear} aria-label="返回全图">‹ 返回全图{title&&<span>{title}</span>}</button>}{exporter}
+  </div></div>;
 }

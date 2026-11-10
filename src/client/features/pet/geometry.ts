@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type React from 'react';
+import type {CompanionSettings} from '../../../contracts/usage.ts';
 
 export interface PetPosition { right: number; bottom: number }
 export interface Viewport { width: number; height: number; left: number; top: number; right: number; bottom: number }
@@ -15,10 +16,11 @@ function viewport(): Viewport {
   const left = view?.offsetLeft || 0, top = view?.offsetTop || 0;
   return { width, height, left, top, right: left + (view?.width || width), bottom: top + (view?.height || height) };
 }
-export function clampPetPosition(position: PetPosition, view: Viewport): PetPosition {
+export function clampPetPosition(position: PetPosition, view: Viewport,scale=1): PetPosition {
+  const extra=PET_SIZE*(scale-1)/2,size=PET_SIZE*scale;
   return {
-    right: clamp(position.right, view.width - view.right + MARGIN, view.width - view.left - PET_SIZE - MARGIN),
-    bottom: clamp(position.bottom, view.height - view.bottom + MARGIN, view.height - view.top - PET_SIZE - MARGIN),
+    right: clamp(position.right, view.width - view.right + MARGIN+extra, view.width - view.left - PET_SIZE - MARGIN-extra),
+    bottom: clamp(position.bottom, view.height - view.bottom + MARGIN, view.height - view.top - size - MARGIN),
   };
 }
 function readPosition(): PetPosition {
@@ -50,10 +52,10 @@ export function usePetViewport(): Viewport {
 
 /** Anchor bubbles to the character, then fit them to the *visible* viewport.
  * ResizeObserver supplies their actual height (including errors/menu items). */
-export function petBubbleRect(position: PetPosition, view: Viewport, measuredHeight: number) {
-  const width = Math.min(280, Math.max(0, view.right - view.left - 2 * MARGIN));
+export function petBubbleRect(position: PetPosition, view: Viewport, measuredHeight: number,scale=1) {
+  const width = Math.min(340, Math.max(0, view.right - view.left - 2 * MARGIN));
   const height = Math.min(measuredHeight, Math.max(0, view.bottom - view.top - 2 * MARGIN));
-  const x = view.width - position.right - PET_SIZE, y = view.height - position.bottom - PET_SIZE;
+  const x = view.width - position.right - PET_SIZE, y = view.height - position.bottom - PET_SIZE*scale;
   let side: 'left' | 'right' | 'above' | 'below' = 'above';
   let left = x + PET_SIZE / 2 - width / 2, top = y - height - 10;
   if (x - width - 10 >= view.left + MARGIN) { side = 'left'; left = x - width - 10; top = y + PET_SIZE - height; }
@@ -62,20 +64,23 @@ export function petBubbleRect(position: PetPosition, view: Viewport, measuredHei
   return { left: clamp(left, view.left + MARGIN, view.right - width - MARGIN), top: clamp(top, view.top + MARGIN, view.bottom - height - MARGIN), width, maxHeight: view.bottom - view.top - 2 * MARGIN, side };
 }
 
-export function usePetDrag(view: Viewport) {
+export function usePetDrag(view: Viewport,snap:CompanionSettings['snap']='none',scale=1,zones?:CompanionSettings['snapZones']) {
   const [position, setPosition] = useState(readPosition);
   const [dragging, setDragging] = useState(false);
   const positionRef = useRef(position);
   const viewRef = useRef(view); viewRef.current = view;
   const stop = useRef<(() => void) | null>(null);
+  const snapRef=useRef(snap);snapRef.current=snap;
+  const scaleRef=useRef(scale);scaleRef.current=scale;
+  const zonesRef=useRef(zones);zonesRef.current=zones;
   const suppressClick = useRef(false);
   const update = (next: PetPosition) => { positionRef.current = next; setPosition(next); };
   useEffect(() => {
-    const next = clampPetPosition(positionRef.current, view);
+    const next = clampPetPosition(positionRef.current, view,scale);
     if (next.right !== positionRef.current.right || next.bottom !== positionRef.current.bottom) { stop.current?.(); update(next); persist(next); }
-  }, [view]);
+  }, [view,scale]);
   useEffect(() => {
-    const reset = () => { stop.current?.(); const next = clampPetPosition(initialPosition, viewRef.current); update(next); persist(next); };
+    const reset = () => { stop.current?.(); const next = clampPetPosition(initialPosition, viewRef.current,scaleRef.current); update(next); persist(next); };
     window.addEventListener(RESET, reset);
     return () => { stop.current?.(); window.removeEventListener(RESET, reset); };
   }, []);
@@ -95,7 +100,7 @@ export function usePetDrag(view: Viewport) {
       setDragging(true);
       // Always use the unchanged origin; accumulating this delta makes the pet
       // accelerate away from the cursor after the second pointermove.
-      update(clampPetPosition({ right: origin.right - dx, bottom: origin.bottom - dy }, viewRef.current));
+      update(clampPetPosition({ right: origin.right - dx, bottom: origin.bottom - dy }, viewRef.current,scaleRef.current));
     };
     const finish = (next?: PointerEvent) => {
       if (ended || next && next.pointerId !== pointerId) return;
@@ -107,7 +112,17 @@ export function usePetDrag(view: Viewport) {
       target.removeEventListener('lostpointercapture', finish);
       stop.current = null;
       if (target.hasPointerCapture?.(pointerId)) target.releasePointerCapture(pointerId);
-      if (moved) persist(positionRef.current);
+      if (moved){
+        if(snapRef.current!=='none'){
+          const v=viewRef.current,p=positionRef.current,s=scaleRef.current,left=clampPetPosition({right:Infinity,bottom:p.bottom},v,s).right,right=clampPetPosition({right:-Infinity,bottom:p.bottom},v,s).right,top=clampPetPosition({right:p.right,bottom:Infinity},v,s).bottom,bottom=clampPetPosition({right:p.right,bottom:-Infinity},v,s).bottom;
+          let result={...p};if(snapRef.current==='corners')result={right:Math.abs(p.right-left)<Math.abs(p.right-right)?left:right,bottom:Math.abs(p.bottom-top)<Math.abs(p.bottom-bottom)?top:bottom};
+          else if(snapRef.current==='custom'){
+            const z=zonesRef.current||{unit:'percent',left:12,right:12,top:0,bottom:12},limit=(side:'left'|'right'|'top'|'bottom')=>z[side]*(z.unit==='percent'?(['left','right'].includes(side)?v.right-v.left:v.bottom-v.top)/100:1);
+            if(z.left>0&&Math.abs(p.right-left)<=limit('left'))result.right=left;else if(z.right>0&&Math.abs(p.right-right)<=limit('right'))result.right=right;
+            if(z.top>0&&Math.abs(p.bottom-top)<=limit('top'))result.bottom=top;else if(z.bottom>0&&Math.abs(p.bottom-bottom)<=limit('bottom'))result.bottom=bottom;
+          }else{const options=[{...p,right:left},{...p,right},{...p,bottom:top},{...p,bottom}];result=options.sort((a,b)=>Math.hypot(a.right-p.right,a.bottom-p.bottom)-Math.hypot(b.right-p.right,b.bottom-p.bottom))[0];}update(result);
+        }persist(positionRef.current);
+      }
       setDragging(false);
     };
     const blur = () => finish();
@@ -123,5 +138,5 @@ export function usePetDrag(view: Viewport) {
     if (event.detail !== 0 && suppressClick.current) { suppressClick.current = false; event.preventDefault(); event.stopPropagation(); return false; }
     return true;
   };
-  return { position: clampPetPosition(position, view), dragging, onPointerDown, acceptClick };
+  return { position: clampPetPosition(position, view,scale), dragging, onPointerDown, acceptClick };
 }

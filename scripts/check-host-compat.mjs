@@ -42,16 +42,17 @@ try {
 export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cuigengji-probe',methods:['POST'],requestBody:'buffered',fetch:async request=>{
   const {sessionId,name,action,args}=await request.json();
   if(name==='fixture-workspace')return Response.json({id:(await ctx.workspaceRegistry.create(args.path,'兼容验收')).id});
-  const tools=['cuigengji_project','cuigengji_plan','cuigengji_memory','cuigengji_context','cuigengji_guidance','cuigengji_maintenance'];
+  const tools=['cuigengji_project','cuigengji_plan','cuigengji_memory','cuigengji_context','cuigengji_guidance','cuigengji_maintenance','cuigengji_variables'];
   for(const tool of tools)if(!ctx.tools.get(tool))throw new Error('Missing tool '+tool);
   const skills=(await ctx.skills.list()).filter(skill=>skill.name.startsWith('cuigengji-')).map(skill=>skill.name);
-  const result=await ctx.tools.get(name).execute({action,args},{agent:{id:sessionId},callId:crypto.randomUUID(),signal:request.signal});
+  const result=await ctx.tools.get(name).execute(name==='cuigengji_guidance'?{section:action,args}:{action,args},{agent:{id:sessionId},callId:crypto.randomUUID(),signal:request.signal});
   return Response.json({tools,skills,result:JSON.parse(result)});
 }});}`);
   const patch=join(root,'probe.patch.yml');await writeFile(patch,`- insert:\n    - id: isolated-compatibility-probe\n      name: ${JSON.stringify(probe)}\n`);
   child=spawn(exe,['--expose-internals',hostCli,'--profile','compatibility','--patch',patch,'--host','127.0.0.1','--port','0','--no-open'],{env,windowsHide:true,stdio:['ignore','pipe','pipe']});
   const url=await new Promise((done,reject)=>{
-    const timer=setTimeout(()=>reject(new Error('Host startup timed out')),45000);
+    // Cold alpha Hosts load a larger first-run plugin tree on Windows.
+    const timer=setTimeout(()=>reject(new Error('Host startup timed out')),120000);
     const receive=bytes=>{log+=bytes;const match=log.match(/http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+/);if(match){clearTimeout(timer);done(match[0]);}};
     child.stdout.on('data',receive);child.stderr.on('data',receive);child.once('exit',code=>{clearTimeout(timer);reject(new Error('Host exited '+code));});child.once('error',reject);
   });
@@ -119,11 +120,20 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
     const response=await page.request.post(new URL('/api/isolated-cuigengji-probe',url).href,{headers:{origin:new URL(url).origin},data:{sessionId,name,action,args}});assert.equal(response.status(),200);return response.json();
   };
   await probeTool('cuigengji_project','novel.focus',{novelId});
-  const handoff=await probeTool('cuigengji_project','novel.handoff');assert.equal(handoff.result.novel.id,novelId);assert.equal(handoff.skills.length,6);
+  const handoff=await probeTool('cuigengji_project','novel.handoff');assert.equal(handoff.result.novel.id,novelId);assert.equal(handoff.skills.length,7);assert.ok(handoff.skills.includes('cuigengji-variables'));
   const memory=await probeTool('cuigengji_memory','graph.list');assert.ok(memory.result.some(node=>node.name==='林岚'));
   const planning=await probeTool('cuigengji_plan','planning.list');assert.equal(planning.result.items[0].title,'灯塔来信');
   const maintenance=await probeTool('cuigengji_maintenance','verify',{expectedVersion:manifest.version,expectedNovelIds:[novelId]});assert.equal(maintenance.result.verified,true);
   report.checks.push('real host tool and Skill registries, handoff, MCP, planning, integrity');
+  const cfg=await rpc('usage.config');assert.ok(resolve(cfg.root).startsWith(resolve(home)));assert.equal(cfg.templates.length,34);
+  const usage=await rpc('usage.report');assert.equal(usage.total.calls,0);
+  assert.ok((await rpc('usage.presentation')).lines.length>0);
+  await rpc('variables.configure',{novelId,baseRevision:0,enabled:true});
+  const vars=await probeTool('cuigengji_variables','variables.read',{novelId});
+  await probeTool('cuigengji_variables','variables.patch',{novelId,baseRevision:vars.result.revision,anchor:{kind:'chapter',chapterId:chapter.id,chapterRevision:(await rpc('chapter.get',{novelId,chapterId:chapter.id})).revision,position:'end'},operations:[{op:'set',path:'/等级',value:1}],reason:'临时兼容验收'});
+  assert.equal((await probeTool('cuigengji_variables','variables.read',{novelId})).result.data.等级,1);
+  const rules=await probeTool('cuigengji_guidance','variables',{novelId});assert.equal(rules.result.modules[0].id,'variables');
+  report.checks.push('isolated usage service, built-in companion payload, variable tool writes and on-demand variable guidance');
   assert.deepEqual(errors,[]);assert.deepEqual(failedRpc,[]);report.ok=true;
   if(argv.includes('--report')){const target=resolve(arg('--report'));await mkdir(dirname(target),{recursive:true});await page.screenshot({path:target.replace(/\.json$/,'.png')});await writeFile(target,JSON.stringify(report,null,2));}
   console.log(JSON.stringify(report));

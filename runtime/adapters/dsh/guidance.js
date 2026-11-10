@@ -11,6 +11,7 @@ const modules = Object.freeze({
   write: module("write", "\u6B63\u6587\u5199\u4F5C\u89C4\u5219"),
   plan: module("plan", "\u89C4\u5212\u4E0E\u5171\u4EAB\u753B\u5E03\u89C4\u5219"),
   memory: module("memory", "\u4EBA\u7269\u4E0E\u4E16\u754C\u8BBE\u5B9A\u89C4\u5219"),
+  variables: module("variables", "\u53EF\u9009\u5267\u60C5\u53D8\u91CF\u4E0E\u72B6\u6001\u7EF4\u62A4"),
   revise: module("revise", "\u5BA1\u9605\u4E0E\u4FEE\u8BA2\u89C4\u5219")
 });
 const sections = /* @__PURE__ */ new Set([...Object.keys(modules), "preset", "all"]);

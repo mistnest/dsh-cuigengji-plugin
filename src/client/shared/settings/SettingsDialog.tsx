@@ -1,9 +1,10 @@
-import React from 'react';
+import React,{useState} from 'react';
 import {Modal} from '../Modal.tsx';
 import {Icon} from '../icons.tsx';
 import {useWorkspacePreference,type FeatureCall} from '../workspace-state.ts';
 import type {GuidanceProps} from '../GuidanceToggle.tsx';
 import {PetSettings} from '../../features/pet/Settings.tsx';
+import {UsageSettings} from '../../features/pet/UsageSettings.tsx';
 import {SettingsAction,SettingsRow} from './SettingsRow.tsx';
 import {EditorSettings} from './EditorSettings.tsx';
 import {LibraryDirectory} from './LibraryDirectory.tsx';
@@ -11,20 +12,21 @@ import {defaults,useWorkbenchPreferences} from './preferences-state.tsx';
 import {categories,settingsItems,matchesSetting,type SettingId,type SettingsCategory} from './model.ts';
 interface Props {
   close:()=>void;novelTitle?:string;onPreset?:()=>void;guidance?:GuidanceProps;
-  onData?:()=>void;onRecords:()=>void;call?:FeatureCall;
+  onData?:()=>void;onRecords:()=>void;call?:FeatureCall;onVariables?:()=>void;
 }
-export function SettingsDialog({close,novelTitle,onPreset,guidance,onData,onRecords,call}:Props) {
+export function SettingsDialog({close,novelTitle,onPreset,guidance,onData,onRecords,call,onVariables}:Props) {
+  const [usageOpen,setUsageOpen]=useState(false);
   const [savedCategory,setCategory]=useWorkspacePreference<SettingsCategory>('settings-category','editor');
   const category=categories.some(item=>item.id===savedCategory)?savedCategory:'editor';
   const [query,setQuery]=useWorkspacePreference('settings-search','');
   const {update,error}=useWorkbenchPreferences();
-  const available=(id:SettingId)=>id==='guidance'?Boolean(guidance):id==='preset'?Boolean(onPreset):id==='transfer'?Boolean(onData):id==='directoryPath'?Boolean(call):true;
+  const available=(id:SettingId)=>id==='guidance'?Boolean(guidance):id==='preset'?Boolean(onPreset):id==='variables'?Boolean(onVariables):id==='transfer'?Boolean(onData):id==='directoryPath'?Boolean(call):true;
   const matched=(id:SettingId)=>available(id)&&matchesSetting(id,query);
   const ids=Object.keys(settingsItems) as SettingId[];
   const visibleCategories=categories.filter(item=>ids.some(id=>settingsItems[id].category===item.id&&matched(id))&&(query.trim()||item.id===category));
   const show=(id:SettingId)=>matched(id)&&(Boolean(query.trim())||settingsItems[id].category===category);
   const select=(value:SettingsCategory)=>{setCategory(value);setQuery('');};
-  return <Modal title="设置" close={close} className="settings-modal">
+  return <><Modal title="设置" close={close} className="settings-modal">
     <div className="settings-search"><Icon name="search"/><input autoFocus aria-label="搜索设置" placeholder="搜索设置，例如：字号、预设、备份" value={query} onChange={e=>setQuery(e.target.value)}/>{query&&<button type="button" aria-label="清除设置搜索" onClick={()=>setQuery('')}>×</button>}</div>
     <label className="settings-mobile-category">设置分类<select aria-label="设置分类" value={category} onChange={e=>select(e.target.value as SettingsCategory)}>{categories.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
     <div className="settings-layout">
@@ -42,9 +44,10 @@ export function SettingsDialog({close,novelTitle,onPreset,guidance,onData,onReco
             </>} scope="当前会话"><input type="checkbox" role="switch" aria-label="当前会话写作指引" checked={guidance.enabled===true} disabled={guidance.disabled||guidance.enabled===undefined} onChange={guidance.onToggle}/></SettingsRow>}
             {show('preset')&&novelTitle&&<p className="settings-work-name" title={novelTitle}>当前查看的作品 <strong>{novelTitle}</strong></p>}
             {show('preset')&&onPreset&&<SettingsAction title="写作预设" description="为这本书设置叙述风格、表达习惯和希望 AI 遵守的写作要求。" scope="当前作品" onClick={onPreset}/>}
+            {show('variables')&&onVariables&&<SettingsAction title="剧情变量" description="可选：按剧情位置记录人物属性、物品和世界状态，预览变更并查看历史。支持常见酒馆取值宏。" scope="当前作品" onClick={onVariables}/>}
             {!onPreset&&!query.trim()&&<p className="settings-hint">进入一本作品后，可以在这里管理它的写作预设。</p>}
           </>}
-          {item.id==='pet'&&<PetSettings onRecords={onRecords} show={show}/>}
+          {item.id==='pet'&&<><PetSettings onRecords={onRecords} show={show}/>{show('pet-usage')&&call&&<SettingsAction title="用量、费用与气泡" description="选择记账来源、模型价格和预算，编排桌宠气泡、提醒音效与自定义素材。" scope="此 DSH" onClick={()=>setUsageOpen(true)}/>}</>}
           {item.id==='data'&&<>
             {show('transfer')&&onData&&<SettingsAction title="数据管理" description="导入或导出指定作品、章节、规划和设定，也可以备份、恢复整个作品库。" scope="作品库" onClick={onData}/>}
             {show('directoryPath')&&call&&<LibraryDirectory call={call}/>}
@@ -54,5 +57,5 @@ export function SettingsDialog({close,novelTitle,onPreset,guidance,onData,onReco
       </div>
     </div>
     <footer className="settings-footer"><small role="status">{error||'修改自动保存，按各项标注的范围生效。'}</small></footer>
-  </Modal>;
+  </Modal>{usageOpen&&call&&<UsageSettings rpc={call} onClose={()=>setUsageOpen(false)}/>}</>;
 }

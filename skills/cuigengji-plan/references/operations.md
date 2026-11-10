@@ -2,6 +2,8 @@
 
 先读主 Skill，再按当前需要选一个范例。示例 ID 和 revision 须替换成真实读取值，requestId 须为本次唯一值。ref 只在同一 apply 内有效；后续使用返回 mapping。
 
+先用 planning.pages 按用途定位画布，再带 pageId 读 planning.groups 与 planning.list/search。读命中事件用 planning.get；目录层级看 parentId/groupId，真实前后关系看 flow。整理已有内容可直接选文末“收进文件夹”或“组织成阶段”的范例；这两种操作保留原卡及连线，不需要新开画布。
+
 创建后用 planning.layout 安放本页新增对象：pageId 取返回的新页 ID 或所选页，expectedSequence 取刚返回的 sequence。默认 missing 保留所有已摆放卡片；并非每轮都全图整理。
 
 ## 新建独立讨论页与便签
@@ -340,3 +342,45 @@
 ```
 
 planning.get 返回的 resources 仅为这些引用的有限当前摘要；状态或摘要不足以判断动机时再 graph.get。没有“读取完所有设定才准写入”的要求。
+
+## 把已有同级事件收进嵌套文件夹
+
+先读原卡的 pageId、groupId、parentId、revision，并读 planning.groups 核对目标路径。此例两张卡原在 PLAN_GROUP_ID 下；新建子文件夹后仅调整 groupId，原来的事件关系与坐标保留。如果卡片属于同一个阶段，移动整个阶段通常更清楚；按作者要整理的范围决定。
+
+```json
+{
+  "action": "planning.apply",
+  "args": {
+    "requestId": "collect-existing-scenes-unique",
+    "reason": "把假账追查的已有事件归到同一子文件夹",
+    "operations": [
+      {"op":"group.create","ref":"collected","value":{"name":"假账追查","pageId":"SCENE_PAGE_ID","parentId":"PLAN_GROUP_ID"}},
+      {"op":"node.update","id":"SCENE_ID","expectedRevision":1,"value":{"groupId":"collected"}},
+      {"op":"node.update","id":"NEXT_SCENE_ID","expectedRevision":1,"value":{"groupId":"collected"}}
+    ]
+  }
+}
+```
+
+已有子文件夹也可收进来：读它的 revision 后，用 planning.group.update 的 groupId 指定原夹、parentId 指定新父夹；同一 apply 内对应 group.update 的 id 和 value.parentId。这里的 parentId 属于文件夹，不是情节阶段。
+
+## 把已有同级事件组织成阶段
+
+作者需要一个概括事件来展开、收纳整段剧情时，先复用合适的原阶段；确实没有再创建。此例原事件位于同一画布、同一文件夹中，新建一个阶段，将原卡的 parentId 指向它。原本“发现假账 → 追查码头”的推进关系保留；不用新增“阶段 → 子项”的因果边表示包含。
+
+```json
+{
+  "action": "planning.apply",
+  "args": {
+    "requestId": "group-existing-stage-unique",
+    "reason": "用一个阶段概括已有假账追查情节",
+    "operations": [
+      {"op":"node.create","ref":"phase","value":{"title":"假账追查","summary":"从发现疑点到追查码头，逐步收紧线索。","pageId":"SCENE_PAGE_ID","groupId":"PLAN_GROUP_ID"}},
+      {"op":"node.update","id":"SCENE_ID","expectedRevision":1,"value":{"parentId":"phase"}},
+      {"op":"node.update","id":"NEXT_SCENE_ID","expectedRevision":1,"value":{"parentId":"phase"}}
+    ]
+  }
+}
+```
+
+完成后回读阶段的 children 或文件夹的 path，向作者说明“已整理到哪张画布、哪一级目录”。展开、折叠及目录同级手动排序仍是界面操作，不向节点写入 folded/order 等虚构字段。需要重排画布时另用布局工具。

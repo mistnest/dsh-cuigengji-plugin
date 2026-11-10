@@ -92,6 +92,63 @@ try {
   const dragTo = async (from, to, after = false) => {await startDrag(from); await overRow(to, after); await page.mouse.up();};
   await row(second.id).click(); await expect(manuscript).toHaveValue('正在编辑的正文。');
 
+  const visibleOrder = volumeId => group(volumeId).locator('.chapter-item').evaluateAll(items => items.map(item => item.dataset.chapterId));
+  const toggleOrder = () => page.locator('.directory-order-toggle').click();
+  await expect(page.locator('.directory-order-toggle')).toHaveText('倒序');
+  await expect.poll(() => visibleOrder(volumes[0].id)).toEqual([third.id,second.id,first.id]);
+  await expect.poll(() => page.locator('[data-chapter-volume]').evaluateAll(items => items.map(item => item.dataset.chapterVolume))).toEqual(volumes.map(v=>v.id).reverse());
+  const placementBeforeSort = directorySnapshot(await call('chapter.list',{novelId}),await call('volume.list',{novelId})), movesBeforeSort=moveCount;
+  await group(volumes[1].id).locator('.volume-toggle').click();
+  await toggleOrder();
+  await expect(page.locator('.directory-order-toggle')).toHaveText('正序');
+  await expect(group(volumes[1].id).locator('.volume-toggle')).toHaveAttribute('aria-expanded','false');
+  await expect.poll(() => visibleOrder(volumes[0].id)).toEqual([first.id,second.id,third.id]);
+  await expect(page.locator('.directory-heading .menu')).toHaveCount(0);
+  expect(directorySnapshot(await call('chapter.list',{novelId}),await call('volume.list',{novelId}))).toEqual(placementBeforeSort);
+  expect(moveCount).toBe(movesBeforeSort);
+  await page.reload();await expect(page.locator('.directory-order-toggle')).toHaveText('正序');
+  await expect(manuscript).toHaveValue('正在编辑的正文。');
+  await toggleOrder();await page.reload();await expect(page.locator('.directory-order-toggle')).toHaveText('倒序');
+  await expect.poll(() => visibleOrder(volumes[0].id)).toEqual([third.id,second.id,first.id]);
+  await group(volumes[1].id).locator('.volume-toggle').click();
+
+  // Reverse display changes pointer placement and Alt+arrows, never the API's
+  // canonical meaning of beforeChapterId or the chapter open in the editor.
+  await startDrag(first.id);await overRow(third.id);
+  await expect(row(third.id)).toHaveClass(/chapter-drop-before/);
+  await page.mouse.up();
+  await expect.poll(() => order(volumes[0].id)).toEqual([second.id,third.id,first.id]);
+  await expect.poll(() => visibleOrder(volumes[0].id)).toEqual([first.id,third.id,second.id]);
+  await row(first.id).locator('.chapter-open').focus();await page.keyboard.press('Alt+ArrowDown');
+  await expect.poll(() => order(volumes[0].id)).toEqual([second.id,first.id,third.id]);
+  await expect.poll(() => visibleOrder(volumes[0].id)).toEqual([third.id,first.id,second.id]);
+  await page.keyboard.press('Alt+ArrowUp');
+  await expect.poll(() => order(volumes[0].id)).toEqual([second.id,third.id,first.id]);
+  await startDrag(first.id);await overRow(second.id,true);
+  await expect(group(volumes[0].id).locator('.chapter-drop-end')).toHaveCount(1);
+  await page.mouse.up();
+  await expect.poll(() => order(volumes[0].id)).toEqual([first.id,second.id,third.id]);
+  await page.getByRole('textbox',{name:'搜索章节'}).fill('线索');
+  await startDrag(third.id);await overRow(first.id);
+  await expect(row(first.id)).toHaveClass(/chapter-drop-before/);
+  await page.mouse.up();
+  await expect.poll(() => order(volumes[0].id)).toEqual([first.id,third.id,second.id]);
+  await page.getByRole('textbox',{name:'搜索章节'}).fill('');
+  await dragTo(third.id,second.id);
+  await expect.poll(() => order(volumes[0].id)).toEqual([first.id,second.id,third.id]);
+  await expect(row(second.id).locator('.chapter-open')).toHaveAttribute('aria-pressed','true');
+  await expect(manuscript).toHaveValue('正在编辑的正文。');
+
+  await page.locator('.directory-heading>.primary').click();
+  await page.locator('.creation').getByRole('textbox',{name:'标题',exact:true}).fill('追加的新章节');
+  await page.getByRole('button',{name:'创建',exact:true}).click();
+  await expect(group(volumes[0].id).locator('.chapter-open>span').first()).toHaveText('追加的新章节');
+  const added=(await call('chapter.list',{novelId})).find(chapter=>chapter.title==='追加的新章节');
+  await row(added.id).getByRole('button',{name:'移入回收站 追加的新章节',exact:true}).click();
+  await expect(row(added.id)).toHaveCount(0);
+  await row(second.id).click();await expect(manuscript).toHaveValue('正在编辑的正文。');
+  await toggleOrder();await waitOrder(volumes[0].id,[first.id,second.id,third.id]);
+
   await startDrag(third.id); await overRow(first.id);
   await expect(row(first.id)).toHaveClass(/chapter-drop-before/);
   await expect(page.locator('.chapter-drag-preview')).toContainText(third.title);
@@ -191,6 +248,6 @@ try {
   await page.reload(); await expect(manuscript).toHaveValue('保存回执回来后也不能改变顺序。');
   expect((await call('chapter.get', {novelId, chapterId: second.id})).volumeId).toBe(volumes[1].id);
   expect(errors).toEqual([]);
-  console.log(JSON.stringify({ok: true, checks: ['first/middle/last and reload persistence', 'drag leaves the current editor selected', 'Escape, outside and no-op cancellation', 'search does not reorder only the filtered subset', 'atomic failure, lost acknowledgement and concurrent placement', 'in-flight autosave and delayed receipt preserve prose/order', 'folded, empty and unassigned volumes', 'deleted chapters cannot drag', 'long-directory automatic edge scrolling', 'Alt+arrows', 'narrow modal drag and close']}));
+  console.log(JSON.stringify({ok: true, checks: ['default reverse directory and one-click toggle; preference/folds/editor survive reload', 'display sorting does not write manuscript placement', 'reverse pointer indicators, filtered drops and Alt+arrows', 'new chapter appears first in its volume', 'first/middle/last and reload persistence', 'drag leaves the current editor selected', 'Escape, outside and no-op cancellation', 'search does not reorder only the filtered subset', 'atomic failure, lost acknowledgement and concurrent placement', 'in-flight autosave and delayed receipt preserve prose/order', 'folded, empty and unassigned volumes', 'deleted chapters cannot drag', 'long-directory automatic edge scrolling', 'Alt+arrows', 'narrow panel drawer drag and close']}));
 } catch (error) {if (page) await page.screenshot({path: join(shots, 'failure.png')}).catch(() => {}); throw error;}
 finally {await browser?.close(); preview.kill();}

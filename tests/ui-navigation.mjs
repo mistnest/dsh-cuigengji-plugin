@@ -1,5 +1,5 @@
 import {selectSettingsCategory} from './helpers/navigation.mjs';
-import {selectPlanningPage,selectedPlanningPage,showOrganization} from './helpers/navigation.mjs';
+import {selectPlanningPage,selectedPlanningPage,showOrganization,clearCanvasSelection} from './helpers/navigation.mjs';
 import {spawn} from 'node:child_process';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {resolve, join} from 'node:path';
@@ -89,12 +89,12 @@ try {
   await refresh();await expect(page.getByRole('button',{name:'潜入仓库 · 新讨论',exact:true})).toBeVisible();expect(await world.getAttribute('style')).toBe(camera);
   await page.getByRole('button',{name:'适应视图',exact:true}).click();
   await page.locator(`[data-node-id="${plan.mapping.a}"] p`).click();
-  const tools=page.getByRole('toolbar',{name:'画布选中操作',exact:true});await expect(tools).toBeVisible();await tools.getByLabel('移动选中卡片',{exact:true}).click();await expect(tools.locator('details')).toHaveJSProperty('open',true);await page.keyboard.press('Escape');await expect(tools.locator('details')).toHaveJSProperty('open',false);
-  await tools.getByLabel('取消画布选择',{exact:true}).click();await expect(tools).toHaveCount(0);
+  const tools=page.getByRole('toolbar',{name:'画布选中操作',exact:true});await expect(tools).toHaveCount(0);await page.locator(`[data-node-id="${plan.mapping.a}"] p`).click({button:'right'});await page.getByRole('menuitem',{name:'移动到文件夹',exact:true}).click();await expect(page.getByRole('menu',{name:'画布操作'})).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('menu',{name:'画布操作'})).toHaveCount(0);
+  await clearCanvasSelection(page);await expect(tools).toHaveCount(0);
   for(const width of [1200,560,360]){await page.setViewportSize({width,height:900});await shot('planning-'+width);await expect(page.getByRole('button',{name:'＋ 情节',exact:true})).toBeInViewport();}
   await page.setViewportSize({width:1200,height:900});
   await page.getByRole('button',{name:'设定',exact:true}).click();await page.getByRole('button',{name:'适应视图',exact:true}).click();await page.locator(`[data-node-id="${person.id}"] p`).click();
-  await expect(tools).toBeVisible();await tools.getByLabel('移动选中卡片',{exact:true}).click();await tools.getByRole('button',{name:group.name,exact:true}).click();await expect.poll(async()=>(await call('graph.get',{novelId,nodeId:person.id})).groupId).toBe(group.id);
+  await expect(tools).toHaveCount(0);await page.locator(`[data-node-id="${person.id}"] p`).click({button:'right'});await page.getByRole('menuitem',{name:'移动到文件夹',exact:true}).click();await page.getByRole('menuitem',{name:group.name,exact:true}).click();await expect.poll(async()=>(await call('graph.get',{novelId,nodeId:person.id})).groupId).toBe(group.id);
   await page.locator(`[data-node-id="${person.id}"] .planning-title`).dblclick();await page.getByRole('button',{name:'编辑',exact:true}).click();await page.getByLabel('全文',{exact:true}).fill('这份人物草稿应在刷新后保留。');
   await refresh();await expect(page.getByLabel('全文',{exact:true})).toHaveValue('这份人物草稿应在刷新后保留。');
   await page.getByRole('button',{name:'保存设定',exact:true}).click();await expect(page.getByRole('button',{name:'编辑',exact:true})).toBeVisible();

@@ -6,7 +6,7 @@ export function replaceManuscriptRange(element: HTMLTextAreaElement, start: numb
   const expected = before.slice(0, start) + replacement + before.slice(end);
   if (expected === before) return before;
   element.ownerDocument.execCommand('insertText', false, replacement);
-  if (element.value !== expected) throw new Error('替换未完成，请重试。原文仍可通过撤销或版本历史找回。');
+  if (element.value !== expected) throw new Error('替换未完成，请重试。原文仍可通过撤销或「改动对比」找回。');
   element.setSelectionRange(start, start + replacement.length);
   return element.value;
 }

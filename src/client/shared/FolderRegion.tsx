@@ -10,6 +10,3 @@ export function FolderRegion({folder,point,folded,selected,busy,connections,drag
     {folded&&<div className="canvas-folder-summary">{folder.content?<p>{folder.content}</p>:<span>{folder.stage?'阶段':'文件夹'} · {folder.count} 项内容</span>}{connections>0&&<span>{connections} 条外部连接</span>}</div>}
   </section>;
 }
-export function FolderSelectionTools({group,folded,busy,toggle,rename,dissolve,clear}:{group:{name:string};folded:boolean;busy:boolean;toggle:()=>void;rename:()=>void;dissolve:()=>void;clear:()=>void}){
- return <div className="canvas-selection-tools" data-canvas-actions role="toolbar" aria-label="文件夹操作" onPointerDown={event=>event.stopPropagation()} onKeyDown={event=>{if(event.key!=='Escape')event.stopPropagation();}}><span>{group.name}</span><button disabled={busy} onClick={toggle}>{folded?'展开':'收纳'}</button><button disabled={busy} onClick={rename}>重命名</button><button disabled={busy} onClick={dissolve}>解散</button><button disabled={busy} aria-label="取消画布选择" onClick={clear}>×</button></div>;
-}

@@ -13,9 +13,11 @@ export function useManuscriptTextarea(content: string) {
     const selection = mapSelection(element.value, next, {
       start: element.selectionStart, end: element.selectionEnd, direction: element.selectionDirection,
     });
-    const focused = document.activeElement === element, top = element.scrollTop;
+    const top = element.scrollTop;
     element.value = next;
-    if (focused) element.setSelectionRange(selection.start, selection.end, selection.direction);
+    // Apply remote edits without focusing the textarea, mapping the selection
+    // when AI inserts text above the author's current position.
+    element.setSelectionRange(selection.start, selection.end, selection.direction);
     element.scrollTop = top;
   }, [content]);
   return {ref, defaultValue: initialContent.current,

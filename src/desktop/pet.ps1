@@ -19,7 +19,7 @@ $references = @(
   [System.Drawing.Point].Assembly.Location,
   'System.dll'
 )
-Add-Type -Path (Join-Path $PSScriptRoot 'PetWindow.cs') -ReferencedAssemblies $references
+Add-Type -Path @((Join-Path $PSScriptRoot 'PetWindow.cs'), (Join-Path $PSScriptRoot 'PetSummary.cs')) -ReferencedAssemblies $references
 if ($SelfTestOutput) {
   [Cuigengji.Desktop.PetWindow]::SelfTest($StateDirectory, $AssetsDirectory, $SelfTestOutput)
 } else {

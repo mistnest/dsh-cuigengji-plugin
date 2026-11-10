@@ -153,7 +153,7 @@ async function host(t,root) {
   const ctx = {tools:{register:tool => registered.set(tool.name,tool)},skills:{register(){}},connection:{fetch:{register:route => routes.push(route)}},
     on:(name,fn) => hooks.set(name,fn),effect:fn => effects.push(fn()),provide:(key,value) => {ctx[key] = value;}};
   t.after(async () => {for (const dispose of effects) await dispose();});
-  await apply(ctx,{dataRoot:root});
+  await apply(ctx,{dataRoot:root,usageRoot:join(root,'test-usage')});
   const execute = (name,action,args={}) => registered.get(name).execute({action,args},{agent:{id:'unbound'},callId:'maintenance-test',signal:new AbortController().signal});
   const rpc = async (action,args={}) => (await (await routes[0].fetch(new Request('http://localhost/api/cuigengji/dispatch',{method:'POST',headers:{'content-type':'application/json'},
     body:JSON.stringify({type:'client-request',rpcId:'verify-upgrade',method:'cuigengji/dispatch',payload:{action,args}})}))).json()).result;

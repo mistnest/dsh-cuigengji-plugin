@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ChapterSync,mergeText} from '../src/client/features/chapters/sync.ts';
-import {groupHistory} from '../src/client/features/chapters/history.ts';
 import {draftKey,draftScope} from '../src/client/shared/drafts.js';
 const initial={id:'one',revision:1,contentHash:'h1',deleted:false,title:'第一章',content:'甲段。\n\n乙段。',volumeId:null,order:0};
 const cache=()=>{const map=new Map();return{getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};};
@@ -101,9 +100,4 @@ test('failed writes retain the draft and retry the same request identity',async 
 });
 test('remote deletion never destroys an unsaved local draft',async t=>{
  const s=setup(t);s.sync.change(v=>({...v,content:'还在写'}));s.set({...initial,revision:2,deleted:true});await s.sync.flush();assert.equal(s.sync.state.phase,'conflict');assert.equal(s.sync.state.value.content,'还在写');
-});
-test('history folds nearby human autosaves, keeping every source revision',()=>{
- const versions=[1,2,3].map(revision=>({revision,timestamp:`2026-09-29T10:00:0${revision}Z`,reason:'作者自动保存',actor:{kind:'human',sessionId:'one'}}));
- versions.push({revision:4,timestamp:'2026-09-29T10:00:04Z',actor:{kind:'agent'}});
- const groups=groupHistory(versions);assert.deepEqual(groups.map(g=>g.map(v=>v.revision)),[[4],[3,2,1]]);
 });
