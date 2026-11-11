@@ -453,6 +453,51 @@ export const storyStyles=`
 .cuigengji .story-tone-chip.tone-horror {background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 32%,transparent);color:var(--dsw-alias-label-on-color,#fff);}
 .cuigengji .story-tone-chip.tone-oppressive {background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 58%,transparent);color:var(--dsw-alias-label-on-color,#fff);}
 .cuigengji .story-tone-chip.tone-other {background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 10%,transparent);}
+/* 角色 × 章矩阵：与章节健康矩阵共用表格骨架，只把单元格换成出场/未出场/未记录三态。 */
+.cuigengji .story-cast-matrix td {padding:2px;text-align:center;}
+.cuigengji .story-cast-matrix tbody th {min-width:124px;}
+.cuigengji .story-cast-name {display:block;font-size:12px;font-weight:600;}
+.cuigengji .story-cast-status {display:block;font-size:10px;font-weight:400;color:var(--dsw-alias-label-secondary,#737780);}
+.cuigengji .story-cast-chapter {padding:0;border:0;background:transparent;font-size:11px;color:inherit;cursor:pointer;white-space:nowrap;}
+.cuigengji .story-cast-chapter:hover {color:var(--dsw-alias-state-business-primary,#4d6bfe);}
+.cuigengji .story-cast-volumes th {text-align:center;font-size:11px;font-weight:600;color:var(--dsw-alias-label-secondary,#737780);border-bottom:1px solid var(--dsw-alias-border-l1,#8883);}
+.cuigengji .story-cast-cell {display:inline-flex;align-items:center;justify-content:center;width:100%;min-width:26px;min-height:26px;border:0;border-radius:6px;background:transparent;font-size:11px;color:var(--dsw-alias-label-secondary,#737780);}
+.cuigengji .story-cast-cell span[aria-hidden] {width:9px;height:9px;border-radius:50%;}
+.cuigengji .story-cast-cell.is-present,.cuigengji .story-cast-cell.is-absent {cursor:pointer;}
+.cuigengji .story-cast-cell.is-present span[aria-hidden] {background:var(--dsw-alias-state-business-primary,#4d6bfe);}
+.cuigengji .story-cast-cell.is-absent span[aria-hidden] {border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 34%,transparent);}
+.cuigengji .story-cast-cell:hover:not(.is-untracked) {background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4d6bfe) 10%,transparent);}
+.cuigengji .story-cast-cell.is-untracked {cursor:default;opacity:.6;}
+.cuigengji .story-cast-cell.is-stale span[aria-hidden] {outline:2px dotted var(--dsw-alias-state-warn-primary,#b25e09);outline-offset:1px;}
+.cuigengji .story-cast-summary {font-size:11px;white-space:nowrap;color:var(--dsw-alias-label-secondary,#737780);}
+.cuigengji .story-cast-summary span {display:block;color:var(--dsw-alias-label-primary,#252936);}
+.cuigengji .story-cast-summary small {display:block;font-size:10px;}
+.cuigengji .story-legend-square.tone-present {background:var(--dsw-alias-state-business-primary,#4d6bfe);}
+.cuigengji .story-legend-square.tone-absent {border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 34%,transparent);}
+.cuigengji .story-legend-square.tone-untracked {background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 10%,transparent);}
+.cuigengji .story-legend-square.tone-stale {outline:2px dotted var(--dsw-alias-state-warn-primary,#b25e09);outline-offset:1px;}
+.cuigengji .story-legend-dot.tone-warn {background:var(--dsw-alias-state-warn-primary,#b25e09);}
+.cuigengji .story-legend-dot.tone-muted {background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 26%,transparent);}
+.cuigengji .story-figure-note {margin:0;font-size:11px;line-height:1.6;color:var(--dsw-alias-label-secondary,#737780);}
+/* 故事时间双轴：叙事顺序 × 故事内时间序，只画作者明确填过的章。 */
+.cuigengji .story-clock-scroll {overflow-x:auto;overflow-y:hidden;padding-bottom:4px;}
+.cuigengji .story-clock {display:block;overflow:visible;font-family:inherit;}
+.cuigengji .story-clock text {font-size:10px;fill:var(--dsw-alias-label-secondary,#737780);}
+.cuigengji .story-clock-grid line {stroke:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 10%,transparent);stroke-dasharray:2 4;}
+.cuigengji .story-clock-tick {font-size:10px;paint-order:stroke;stroke:var(--dsw-alias-bg-layer-1,#fff);stroke-width:3px;stroke-linejoin:round;}
+.cuigengji .story-clock-tick-group {cursor:pointer;}
+.cuigengji .story-clock-tick-group:hover text {fill:var(--dsw-alias-state-business-primary,#4d6bfe);}
+.cuigengji .story-clock-tick-group.is-missing {opacity:.55;}
+.cuigengji .story-clock-path {fill:none;stroke:var(--dsw-alias-state-business-primary,#4d6bfe);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.cuigengji .story-clock-point {fill:var(--dsw-alias-bg-layer-1,#fff);stroke:var(--dsw-alias-state-business-primary,#4d6bfe);stroke-width:2;cursor:pointer;}
+.cuigengji .story-clock-point:hover,.cuigengji .story-clock-point:focus-visible {fill:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4d6bfe) 20%,transparent);outline:none;}
+.cuigengji .story-clock-point.is-stale {stroke:var(--dsw-alias-state-warn-primary,#b25e09);}
+.cuigengji .story-clock-point-label {fill:var(--dsw-alias-label-secondary,#737780);font-size:9px;}
+.cuigengji .story-clock-list {list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;}
+.cuigengji .story-clock-list li {display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:5px 8px;border-radius:7px;background:color-mix(in srgb,var(--dsw-alias-label-primary,#252936) 4%,transparent);font-size:12px;}
+.cuigengji .story-clock-list button {padding:0;border:0;background:transparent;font:inherit;color:var(--dsw-alias-state-business-primary,#4d6bfe);cursor:pointer;text-align:left;}
+.cuigengji .story-clock-list span {color:var(--dsw-alias-label-secondary,#737780);}
+.cuigengji .story-clock-list small {color:var(--dsw-alias-label-secondary,#737780);font-size:11px;}
 @container(max-width:759px) {
  .cuigengji .story-reference-layout {grid-template-columns:1fr;}
  .cuigengji .story-reference-list {position:static;flex-direction:row;overflow-x:auto;}
@@ -481,5 +526,7 @@ export const storyStyles=`
  .cuigengji .story-style-charts {grid-template-columns:minmax(0,1fr);}
  .cuigengji .story-heat-cell {min-height:104px;}
  .cuigengji .story-style-table tbody th {min-width:96px;}
+ .cuigengji .story-cast-matrix tbody th {min-width:96px;}
+ .cuigengji .story-clock-list li {gap:6px;}
 }
 `;

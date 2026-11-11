@@ -13,6 +13,9 @@ export interface StoryOutline {
 }
 export interface StoryTracking {
   chapterId: string; chapterRevision: number; summary: string; storyTime: string; location: string;
+  /** Optional sort key for `storyTime`. The text stays the source; this only orders
+   * it on the clock. Unset means "not ordered yet", never inferred from the text. */
+  storyTimeOrder?: number;
   activeCharacterIds: string[]; commitments: string[]; risks: string[];
   /** What is true in the story even if the reader has not been told (author-only). */
   authorTruth: string[];
@@ -124,7 +127,7 @@ export interface StorySnapshot {
 export type StoryOperation =
   | {op: 'configure'; value: {mode?: StoryMode; stage?: StoryStage; brief?: Partial<StoryBrief>}}
   | {op: 'outline.upsert'; value: StoryOutline}
-  | {op: 'tracking.commit'; value: Omit<StoryTracking, 'chapterRevision'> & {expectedChapterRevision: number; chapterRevision?: number}}
+  | {op: 'tracking.commit'; value: Omit<StoryTracking, 'chapterRevision' | 'storyTimeOrder'> & {storyTimeOrder?: number | null; expectedChapterRevision: number; chapterRevision?: number}}
   | {op: 'thread.upsert'; value: Partial<StoryThread> & Pick<StoryThread, 'kind' | 'title' | 'detail' | 'status'> | (Partial<StoryThread> & {id: string})}
   | {op: 'unit.upsert'; value: Partial<StoryUnit> & Pick<StoryUnit, 'volumeId' | 'title'> | (Partial<StoryUnit> & {id: string})}
   | {op: 'storyline.upsert'; value: Partial<StoryLine> & Pick<StoryLine, 'title'> | (Partial<StoryLine> & {id: string})}

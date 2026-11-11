@@ -7,7 +7,7 @@ import type {StoryActions} from './useStoryWorkspace.ts';
 
 type BriefDraft={revision:number;mode:StoryState['mode'];stage:StoryState['stage'];brief:StoryBrief};
 const initial=(snapshot:StorySnapshot):BriefDraft=>({revision:snapshot.story.revision,mode:snapshot.story.mode,stage:snapshot.story.stage,brief:snapshot.story.brief});
-export function BriefMap({snapshot,busy,save,onSection}:{onSection:(section:'chapters'|'threads'|'reviews')=>void}&StoryActions) {
+export function BriefMap({snapshot,busy,save,onSection}:{onSection:(section:'chapters'|'cast'|'threads'|'reviews')=>void}&StoryActions) {
   const draft=useStoryDraft(`${snapshot.novelId}:story-brief`,initial(snapshot));
   const value=draft.value;
   const update=(field:keyof StoryBrief,text:string)=>draft.change(current=>({...current,brief:{...current.brief,[field]:text}}));
@@ -19,7 +19,7 @@ export function BriefMap({snapshot,busy,save,onSection}:{onSection:(section:'cha
     <div className="story-section-heading"><div><h2>把这本书的方向写清楚</h2><p>从读者期待到章节落实，每一步都由你决定。</p></div><Badge>{snapshot.story.mode==='long'?'长篇连载':'短篇故事'} · {stageNames[snapshot.story.stage]}</Badge></div>
     <div className="story-metrics" aria-label="创作进度">
       <div><strong>{outlined}<small> / {count}</small></strong><span>已有章节蓝图</span><progress value={outlined} max={Math.max(count,1)} aria-label="章节蓝图进度"/></div>
-      <div><strong>{tracked}<small> / {count}</small></strong><span>正文事实已追踪</span><progress value={tracked} max={Math.max(count,1)} aria-label="有效追踪进度"/></div>
+      <div><strong>{tracked}<small> / {count}</small></strong><span>正文事实已追踪</span><progress value={tracked} max={Math.max(count,1)} aria-label="有效追踪进度"/><button onClick={()=>onSection('cast')}>查看角色出场 →</button></div>
       <div><strong>{snapshot.diagnostics.dueThreadIds.length}</strong><span>待核对的到期事项</span><button onClick={()=>onSection('threads')}>查看故事线索 →</button></div>
       <div><strong className={snapshot.diagnostics.blockingReviewIds.length?'story-error-text':''}>{snapshot.diagnostics.blockingReviewIds.length}</strong><span>待处理阻断问题</span><button onClick={()=>onSection('reviews')}>查看证据审稿 →</button></div>
     </div>

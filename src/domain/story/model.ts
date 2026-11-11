@@ -136,9 +136,12 @@ export function validateOutline(value: unknown, novel: StoryNovel, code = 'INVAL
   if (value.minWords !== undefined && value.maxWords !== undefined && (value.minWords as number) > (value.maxWords as number)) fail(code, 'minWords 不能大于 maxWords');
 }
 export function validateTracking(value: unknown, novel: StoryNovel, code = 'INVALID_INPUT', live = false): asserts value is StoryTracking {
-  fields(value, ['chapterId', 'chapterRevision', 'summary', 'storyTime', 'location', 'activeCharacterIds', 'commitments', 'risks', 'authorTruth', 'readerKnown'], 'tracking', code);
+  fields(value, ['chapterId', 'chapterRevision', 'summary', 'storyTime', 'storyTimeOrder', 'location', 'activeCharacterIds', 'commitments', 'risks', 'authorTruth', 'readerKnown'], 'tracking', code);
   chapterVersion(novel, value.chapterId, value.chapterRevision, code, live);
   string(value.summary, 'tracking.summary', 6000, true, code); string(value.storyTime, 'tracking.storyTime', 1000, false, code); string(value.location, 'tracking.location', 1000, false, code);
+  // The order is a sort key the author (or an Agent) states explicitly; it is
+  // never derived from the free text, so an absent key stays absent.
+  if (value.storyTimeOrder !== undefined && (!Number.isSafeInteger(value.storyTimeOrder) || Math.abs(value.storyTimeOrder as number) > 1000000000)) fail(code, 'tracking.storyTimeOrder 必须是绝对值不超过 10 亿的整数');
   strings(value.activeCharacterIds, 'tracking.activeCharacterIds', 100, 200, code);
   if (new Set(value.activeCharacterIds).size !== value.activeCharacterIds.length) fail(code, '活跃角色 ID 不能重复');
   for (const id of value.activeCharacterIds) {

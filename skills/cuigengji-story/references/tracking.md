@@ -5,7 +5,7 @@
 ## 提交一章
 
 1. 正文经 chapter.create/update 保存并回读后，取得最新真实 chapter.revision。确认本章已经写完；写一半的段落不能假装整章已完成。
-2. 只记录会影响后文的实际变化：summary 为简短的已发生事件，storyTime/location 为章末时地；activeCharacterIds 使用本作品角色卡 ID，角色状态与知情仍在原生设定卡维护。
+2. 只记录会影响后文的实际变化：summary 为简短的已发生事件，storyTime/location 为章末时地；activeCharacterIds 使用本作品角色卡 ID，角色状态与知情仍在原生设定卡维护。故事内时间需要排序时另填 storyTimeOrder 整数（越小越早，例如闪回章给更小的值）；它只用于故事时间轴，留空就按未排序显示，不要从 storyTime 文本猜测。
 3. commitments 记录交接摘要，risks 记录明确的连续性风险或未决定项；不要把检测器计数、创作过程日志塞入事实。
 4. 读取最新 story.revision，以 tracking.commit 原子提交，并携带 expectedChapterRevision。冲突后保留拟稿、重读当前数据并合并，不只换版本号重送。
 5. 提交成功后才继续同书下一章。正文已保存而追踪失败时明确报告，不再次生成正文。

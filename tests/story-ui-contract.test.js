@@ -28,7 +28,7 @@ test('the story workbench is reachable from the book navigation and renders real
 
 test('the four visual additions read real data and never invent a score', async () => {
   const entry = await read('src/client/features/story/index.tsx');
-  for (const [section, label] of [['units', '卷纲与单元'], ['detect', '去 AI 味体检'], ['rhythm', '节奏热力图'], ['truth', '双时间线'], ['style', '文风对照'], ['reference', '拆文库与对标']]) {
+  for (const [section, label] of [['units', '卷纲与单元'], ['detect', '去 AI 味体检'], ['rhythm', '节奏热力图'], ['cast', '角色与时间'], ['truth', '双时间线'], ['style', '文风对照'], ['reference', '拆文库与对标']]) {
     assert.match(entry, new RegExp(`${section}:'${label}'`), `the ${label} section must be reachable`);
   }
   const detect = await read('src/client/features/story/DetectBoard.tsx');
@@ -57,6 +57,15 @@ test('the four visual additions read real data and never invent a score', async 
   assert.match(truth, /authorTruth/);
   assert.match(truth, /readerKnown/);
   assert.match(truth, /信息差/, 'the board must separate what the author knows from what the reader knows');
+  const cast = await read('src/client/features/story/CharacterMatrix.tsx');
+  assert.match(cast, /castMatrix/, 'the cast matrix must use the shared projection');
+  assert.match(cast, /未记录/, 'an untracked chapter must stay distinguishable from absence');
+  const castModel = await read('src/client/features/story/cast-model.ts');
+  assert.match(castModel, /activeCharacterIds/, 'the cast projection must read saved tracking');
+  assert.match(castModel, /untracked/, 'an untracked chapter must have its own state');
+  const clock = await read('src/client/features/story/StoryClock.tsx');
+  assert.match(clock, /storyTimeOrder/, 'the clock must only use the explicit order');
+  assert.match(clock, /不推断/, 'the clock must state that missing time is not inferred');
   const review = await read('src/client/features/story/ReviewDesk.tsx');
   assert.match(review, /ReviewMatrix/, 'review distribution must be part of the review page');
   assert.match(await read('src/client/features/story/ReviewMatrix.tsx'), /categoryNames/);

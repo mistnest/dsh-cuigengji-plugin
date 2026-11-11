@@ -7,6 +7,8 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {Store} from '../src/application/store.js';
 import {scanProse} from '../src/domain/story/detect/engine.js';
+import {castMatrix} from '../src/client/features/story/cast-model.ts';
+import {clockLayout} from '../src/client/features/story/clock-model.ts';
 
 const actor = {kind: 'human', sessionId: 'visual-test-author'};
 async function setup(t) {
@@ -41,6 +43,52 @@ test('rhythm records and the style dossier are writable plans bound to prose ver
   await assert.rejects(() => s.apply([{op: 'rhythm.upsert', value: {chapterId: c1.id, expectedChapterRevision: 99, tone: 'sad', role: '', note: ''}}]), /正文已变化|版本/);
   await s.apply([{op: 'rhythm.remove', value: {chapterId: c2.id}}]);
   assert.equal(Object.hasOwn((await s.call('story.get')).story.rhythms, c2.id), false);
+});
+
+test('cast matrix and story clock only project saved tracking, never infer', async t => {
+  const s = await setup(t);
+  const c1 = await s.call('chapter.create', {title: '第一章 雨夜', content: '雨停了。'});
+  const c2 = await s.call('chapter.create', {title: '第二章 钟楼', content: '灯亮了。'});
+  const c3 = await s.call('chapter.create', {title: '第三章 码头', content: ''});
+  const hero = await s.call('graph.create', {type: 'character_card', name: '林照', summary: '主角'});
+  const mate = await s.call('graph.create', {type: 'character_card', name: '陆行舟', summary: '旧人'});
+  const fresh = (await s.call('story.get')).chapters;
+  const at = id => fresh.find(chapter => chapter.id === id).revision;
+  await s.apply([
+    {op: 'tracking.commit', value: {chapterId: c1.id, expectedChapterRevision: at(c1.id), summary: '她收到信。', storyTime: '傍晚', storyTimeOrder: 2, location: '书铺', activeCharacterIds: [hero.id, mate.id], commitments: [], risks: []}},
+    {op: 'tracking.commit', value: {chapterId: c2.id, expectedChapterRevision: at(c2.id), summary: '天亮了。', storyTime: '次日', storyTimeOrder: 1, location: '钟楼', activeCharacterIds: [hero.id], commitments: [], risks: []}},
+  ]);
+  const snapshot = await s.call('story.get');
+  const matrix = castMatrix(snapshot);
+  assert.equal(matrix.tracked, 2);
+  assert.equal(matrix.untracked, 1);
+  const heroRow = matrix.rows.find(row => row.name === '林照');
+  const mateRow = matrix.rows.find(row => row.name === '陆行舟');
+  // A chapter without tracking is "未记录", never silently counted as absence.
+  assert.deepEqual(heroRow.cells.map(cell => cell.state), ['present', 'present', 'untracked']);
+  assert.equal(heroRow.appearances, 2);
+  assert.equal(mateRow.longestAbsence, 1);
+  // 陆行舟在第 1 章在场，缺席从第 2 章开始；第 3 章未记录不参与判断。
+  assert.equal(mateRow.absenceStart, 1);
+  const clock = clockLayout(snapshot);
+  assert.equal(clock.points.length, 2);
+  assert.equal(clock.missing[0]?.reason, 'untracked');
+  // A real flashback: chapter 2 is earlier in story time (序 1 < 序 2), so its
+  // point sits lower on the chart; the narrative order still runs left to right.
+  assert.ok(clock.points[1].y > clock.points[0].y);
+  assert.equal(clock.path.split('M').length - 1, 1, 'adjacent ordered chapters are connected');
+  // Committing a chapter without an order leaves it out of the chart.
+  await s.apply([{op: 'tracking.commit', value: {chapterId: c3.id, expectedChapterRevision: at(c3.id), summary: '码头没有人。', storyTime: '第三日', location: '码头', activeCharacterIds: [], commitments: [], risks: []}}]);
+  const after = clockLayout(await s.call('story.get'));
+  assert.equal(after.points.length, 2, 'a chapter without storyTimeOrder never enters the chart');
+  assert.ok(after.missing.some(item => item.chapterId === c3.id && item.reason === 'unordered'));
+  // The order is an explicit integer; the free text is never parsed.
+  await assert.rejects(() => s.apply([{op: 'tracking.commit', value: {chapterId: c3.id, expectedChapterRevision: at(c3.id), summary: '码头没有人。', storyTime: '第三日', storyTimeOrder: 1.5, location: '码头', activeCharacterIds: [], commitments: [], risks: []}}]), /storyTimeOrder/);
+  // An older caller that does not know the field must not wipe it; null clears it.
+  const preserved = await s.apply([{op: 'tracking.commit', value: {chapterId: c2.id, expectedChapterRevision: at(c2.id), summary: '天亮了，她离开钟楼。', storyTime: '次日', location: '钟楼', activeCharacterIds: [hero.id], commitments: [], risks: []}}]);
+  assert.equal(preserved.story.tracking[c2.id].storyTimeOrder, 1, 'an omitted order keeps the saved one');
+  const cleared = await s.apply([{op: 'tracking.commit', value: {chapterId: c2.id, expectedChapterRevision: at(c2.id), summary: '天亮了，她离开钟楼。', storyTime: '次日', storyTimeOrder: null, location: '钟楼', activeCharacterIds: [hero.id], commitments: [], risks: []}}]);
+  assert.equal(Object.hasOwn(cleared.story.tracking[c2.id], 'storyTimeOrder'), false, 'null removes the order');
 });
 
 test('an empty chapter has no sentences, so the style average is not poisoned', async t => {

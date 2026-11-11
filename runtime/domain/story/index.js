@@ -76,11 +76,13 @@ function applyStory(novel, args) {
       draft.outlines[value.chapterId] = value;
       results.push({ op: "outline.upsert", chapterId: value.chapterId });
     } else if (operation.op === "tracking.commit") {
-      fields(value, ["chapterId", "chapterRevision", "expectedChapterRevision", "summary", "storyTime", "location", "activeCharacterIds", "commitments", "risks", "authorTruth", "readerKnown"], "tracking.commit");
+      fields(value, ["chapterId", "chapterRevision", "expectedChapterRevision", "summary", "storyTime", "storyTimeOrder", "location", "activeCharacterIds", "commitments", "risks", "authorTruth", "readerKnown"], "tracking.commit");
       const current = freshChapter(novel, value.chapterId, value.expectedChapterRevision);
       if (value.chapterRevision !== void 0 && value.chapterRevision !== current.revision) fail("CONFLICT", "tracking.chapterRevision \u4E0E\u5F53\u524D\u6B63\u6587\u7248\u672C\u4E0D\u7B26");
       value.authorTruth = value.authorTruth === void 0 ? draft.tracking[current.id]?.authorTruth ?? [] : value.authorTruth;
       value.readerKnown = value.readerKnown === void 0 ? draft.tracking[current.id]?.readerKnown ?? [] : value.readerKnown;
+      value.storyTimeOrder = value.storyTimeOrder === void 0 ? draft.tracking[current.id]?.storyTimeOrder : value.storyTimeOrder;
+      if (value.storyTimeOrder === null) delete value.storyTimeOrder;
       delete value.expectedChapterRevision;
       value.chapterRevision = current.revision;
       validateTracking(value, novel, "INVALID_INPUT", true);

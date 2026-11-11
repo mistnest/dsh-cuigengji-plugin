@@ -68,13 +68,17 @@ export function applyStory(novel: StoryNovel, args: Record<string, unknown>): St
       validateOutline(value, novel, 'INVALID_INPUT', true); draft.outlines[value.chapterId] = value;
       results.push({op: 'outline.upsert', chapterId: value.chapterId});
     } else if (operation.op === 'tracking.commit') {
-      fields(value, ['chapterId', 'chapterRevision', 'expectedChapterRevision', 'summary', 'storyTime', 'location', 'activeCharacterIds', 'commitments', 'risks', 'authorTruth', 'readerKnown'], 'tracking.commit');
+      fields(value, ['chapterId', 'chapterRevision', 'expectedChapterRevision', 'summary', 'storyTime', 'storyTimeOrder', 'location', 'activeCharacterIds', 'commitments', 'risks', 'authorTruth', 'readerKnown'], 'tracking.commit');
       const current = freshChapter(novel, value.chapterId, value.expectedChapterRevision);
       if (value.chapterRevision !== undefined && value.chapterRevision !== current.revision) fail('CONFLICT', 'tracking.chapterRevision 与当前正文版本不符');
       // Older records and older callers predate the dual timeline; keep their
       // existing lists and default only what is actually absent.
       value.authorTruth = value.authorTruth === undefined ? draft.tracking[current.id]?.authorTruth ?? [] : value.authorTruth;
       value.readerKnown = value.readerKnown === undefined ? draft.tracking[current.id]?.readerKnown ?? [] : value.readerKnown;
+      // The story-time order follows the same rule: an older caller that does not
+      // know the field must not wipe it. An explicit null is the way to clear it.
+      value.storyTimeOrder = value.storyTimeOrder === undefined ? draft.tracking[current.id]?.storyTimeOrder : value.storyTimeOrder;
+      if (value.storyTimeOrder === null) delete value.storyTimeOrder;
       delete value.expectedChapterRevision; value.chapterRevision = current.revision;
       validateTracking(value, novel, 'INVALID_INPUT', true); draft.tracking[current.id] = value;
       results.push({op: 'tracking.commit', chapterId: current.id});

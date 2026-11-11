@@ -50,19 +50,22 @@ function OutlineEditor({snapshot,chapter,busy,save}:Props&{chapter:StoryChapter}
     <DraftFooter draft={draft} busy={busy} invalid={invalid} onSave={submit} label="保存章节蓝图" latest={<><p>{snapshot.story.outlines[chapter.id]?.intent||'尚未记录章节意图'}</p><p>{asText(snapshot.story.outlines[chapter.id]?.beats)}</p><p>{snapshot.story.outlines[chapter.id]?.endingHook}</p></>}/>
   </section>;
 }
-type TrackingDraft={revision:number;basisRevision:number;summary:string;storyTime:string;location:string;activeCharacterIds:string[];commitments:string;risks:string;authorTruth:string;readerKnown:string};
+type TrackingDraft={revision:number;basisRevision:number;summary:string;storyTime:string;storyTimeOrder:string;location:string;activeCharacterIds:string[];commitments:string;risks:string;authorTruth:string;readerKnown:string};
 const trackingInitial=(snapshot:StorySnapshot,chapter:StoryChapter):TrackingDraft=>{
   const tracking=snapshot.story.tracking[chapter.id];
-  return {revision:snapshot.story.revision,basisRevision:tracking?.chapterRevision??chapter.revision,summary:tracking?.summary||'',storyTime:tracking?.storyTime||'',location:tracking?.location||'',activeCharacterIds:tracking?.activeCharacterIds||[],commitments:asText(tracking?.commitments),risks:asText(tracking?.risks),authorTruth:asText(tracking?.authorTruth),readerKnown:asText(tracking?.readerKnown)};
+  return {revision:snapshot.story.revision,basisRevision:tracking?.chapterRevision??chapter.revision,summary:tracking?.summary||'',storyTime:tracking?.storyTime||'',storyTimeOrder:tracking?.storyTimeOrder?.toString()||'',location:tracking?.location||'',activeCharacterIds:tracking?.activeCharacterIds||[],commitments:asText(tracking?.commitments),risks:asText(tracking?.risks),authorTruth:asText(tracking?.authorTruth),readerKnown:asText(tracking?.readerKnown)};
 };
 function TrackingEditor({snapshot,chapter,busy,save,onChapter}:Props&{chapter:StoryChapter}) {
   const draft=useStoryDraft(`${snapshot.novelId}:story-tracking:${chapter.id}`,trackingInitial(snapshot,chapter));
   const value=draft.value,tracking=snapshot.story.tracking[chapter.id];
   const stale=value.basisRevision!==chapter.revision;
   const missingCharacters=value.activeCharacterIds.filter(id=>!snapshot.characters.some(character=>character.id===id));
+  // The order is optional; when it is given it must be an integer, and clearing it
+  // removes the ordering instead of guessing one from the text.
+  const orderInvalid=value.storyTimeOrder!==''&&(!/^-?\d+$/.test(value.storyTimeOrder)||!Number.isSafeInteger(Number(value.storyTimeOrder)));
   const submit=()=>{
-    if(busy||!draft.dirty||draft.updated||stale||!value.summary.trim())return;
-    void save([{op:'tracking.commit',value:{chapterId:chapter.id,expectedChapterRevision:value.basisRevision,summary:value.summary,storyTime:value.storyTime,location:value.location,activeCharacterIds:value.activeCharacterIds,commitments:lines(value.commitments),risks:lines(value.risks),authorTruth:lines(value.authorTruth),readerKnown:lines(value.readerKnown)}}],draft.base.revision,[{chapterId:chapter.id,revision:value.basisRevision}],result=>draft.accept(trackingInitial(result,result.chapters.find(item=>item.id===chapter.id)||chapter)));
+    if(busy||!draft.dirty||draft.updated||stale||!value.summary.trim()||orderInvalid)return;
+    void save([{op:'tracking.commit',value:{chapterId:chapter.id,expectedChapterRevision:value.basisRevision,summary:value.summary,storyTime:value.storyTime,storyTimeOrder:value.storyTimeOrder!==''?Number(value.storyTimeOrder):null,location:value.location,activeCharacterIds:value.activeCharacterIds,commitments:lines(value.commitments),risks:lines(value.risks),authorTruth:lines(value.authorTruth),readerKnown:lines(value.readerKnown)}}],draft.base.revision,[{chapterId:chapter.id,revision:value.basisRevision}],result=>draft.accept(trackingInitial(result,result.chapters.find(item=>item.id===chapter.id)||chapter)));
   };
   const toggle=(id:string)=>draft.change({...value,activeCharacterIds:value.activeCharacterIds.includes(id)?value.activeCharacterIds.filter(item=>item!==id):[...value.activeCharacterIds,id]});
   return <section className="story-panel" aria-label="正文事实追踪编辑" onKeyDown={event=>saveShortcut(event,submit)}>
@@ -70,12 +73,12 @@ function TrackingEditor({snapshot,chapter,busy,save,onChapter}:Props&{chapter:St
     <p className="story-muted">保存依据：正文 v{value.basisRevision} · 当前正文 v{chapter.revision}{tracking?` · 上次追踪 v${tracking.chapterRevision}`:''}。下章承诺与风险作为后续义务单独记录。</p>
     <fieldset disabled={busy} className="editor-fields">
       <label>本章事实小结<textarea rows={5} maxLength={12000} value={value.summary} onChange={event=>draft.change({...value,summary:event.target.value})} placeholder="谁做了什么，造成什么结果？请依据当前正文。"/></label>
-      <div className="story-field-grid"><label>故事时间<input maxLength={2000} value={value.storyTime} onChange={event=>draft.change({...value,storyTime:event.target.value})} placeholder="例如：同日傍晚"/></label><label>发生地点<input maxLength={2000} value={value.location} onChange={event=>draft.change({...value,location:event.target.value})}/></label></div>
+      <div className="story-field-grid"><label>故事时间<input maxLength={2000} value={value.storyTime} onChange={event=>draft.change({...value,storyTime:event.target.value})} placeholder="例如：同日傍晚"/></label><label>发生地点<input maxLength={2000} value={value.location} onChange={event=>draft.change({...value,location:event.target.value})}/></label><label>故事时间序（可选）<input type="number" inputMode="numeric" step="1" value={value.storyTimeOrder} onChange={event=>draft.change({...value,storyTimeOrder:event.target.value})} placeholder="数字越小越早" title="故事内的先后排序值；留空表示尚未排序，不会从「故事时间」文本自动推断"/></label></div>
       <fieldset className="story-character-picker"><legend>活跃角色</legend>{snapshot.characters.length?snapshot.characters.map(character=><label key={character.id} title={character.summary}><input type="checkbox" checked={value.activeCharacterIds.includes(character.id)} onChange={()=>toggle(character.id)}/>{character.name}</label>):<p className="story-muted">设定中还没有角色卡，可先记录事实小结。</p>}{missingCharacters.map(id=><label key={id}><input type="checkbox" checked onChange={()=>toggle(id)}/>已移除的角色（取消勾选后可保存）</label>)}</fieldset>
       <label>下章承诺（每行一项，属于后续义务）<textarea rows={3} maxLength={20000} value={value.commitments} onChange={event=>draft.change({...value,commitments:event.target.value})} placeholder="正文已经提出、后续仍须兑现的承诺。"/></label>
       <label>连续性风险（每行一项）<textarea rows={3} maxLength={20000} value={value.risks} onChange={event=>draft.change({...value,risks:event.target.value})} placeholder="时间、人物动机、持有物或悬而未决的事实。"/></label>
       <div className="story-field-grid"><label>作者真相（每行一项，读者未必知道）<textarea rows={3} maxLength={20000} value={value.authorTruth} onChange={event=>draft.change({...value,authorTruth:event.target.value})} placeholder="故事里已经成立、但还没向读者挑明的事实。"/></label><label>读者已知（每行一项，正文已披露）<textarea rows={3} maxLength={20000} value={value.readerKnown} onChange={event=>draft.change({...value,readerKnown:event.target.value})} placeholder="读者从已写正文里实际得知的信息。"/></label></div>
     </fieldset>
-    <DraftFooter draft={draft} busy={busy} invalid={!value.summary.trim()?'请填写本章事实小结':missingCharacters.length?'请取消已移除的角色':''} onSave={submit} label="保存正文事实追踪" source={{basis:value.basisRevision,current:chapter.revision,onOpen:()=>onChapter(chapter.id),onVerify:()=>draft.change({...value,basisRevision:chapter.revision})}} latest={<><p>{tracking?.summary||'尚未保存事实追踪'}</p><p>{tracking?.storyTime} · {tracking?.location}</p><p>{asText(tracking?.commitments)}</p></>}/>
+    <DraftFooter draft={draft} busy={busy} invalid={!value.summary.trim()?'请填写本章事实小结':missingCharacters.length?'请取消已移除的角色':orderInvalid?'故事时间序请输入整数':''} onSave={submit} label="保存正文事实追踪" source={{basis:value.basisRevision,current:chapter.revision,onOpen:()=>onChapter(chapter.id),onVerify:()=>draft.change({...value,basisRevision:chapter.revision})}} latest={<><p>{tracking?.summary||'尚未保存事实追踪'}</p><p>{tracking?.storyTime} · {tracking?.location}{typeof tracking?.storyTimeOrder==='number'?` · 时间序 ${tracking.storyTimeOrder}`:''}</p><p>{asText(tracking?.commitments)}</p></>}/>
   </section>;
 }

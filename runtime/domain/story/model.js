@@ -158,11 +158,12 @@ function validateOutline(value, novel, code = "INVALID_INPUT", live = false) {
   if (value.minWords !== void 0 && value.maxWords !== void 0 && value.minWords > value.maxWords) fail(code, "minWords \u4E0D\u80FD\u5927\u4E8E maxWords");
 }
 function validateTracking(value, novel, code = "INVALID_INPUT", live = false) {
-  fields(value, ["chapterId", "chapterRevision", "summary", "storyTime", "location", "activeCharacterIds", "commitments", "risks", "authorTruth", "readerKnown"], "tracking", code);
+  fields(value, ["chapterId", "chapterRevision", "summary", "storyTime", "storyTimeOrder", "location", "activeCharacterIds", "commitments", "risks", "authorTruth", "readerKnown"], "tracking", code);
   chapterVersion(novel, value.chapterId, value.chapterRevision, code, live);
   string(value.summary, "tracking.summary", 6e3, true, code);
   string(value.storyTime, "tracking.storyTime", 1e3, false, code);
   string(value.location, "tracking.location", 1e3, false, code);
+  if (value.storyTimeOrder !== void 0 && (!Number.isSafeInteger(value.storyTimeOrder) || Math.abs(value.storyTimeOrder) > 1e9)) fail(code, "tracking.storyTimeOrder \u5FC5\u987B\u662F\u7EDD\u5BF9\u503C\u4E0D\u8D85\u8FC7 10 \u4EBF\u7684\u6574\u6570");
   strings(value.activeCharacterIds, "tracking.activeCharacterIds", 100, 200, code);
   if (new Set(value.activeCharacterIds).size !== value.activeCharacterIds.length) fail(code, "\u6D3B\u8DC3\u89D2\u8272 ID \u4E0D\u80FD\u91CD\u590D");
   for (const id of value.activeCharacterIds) {

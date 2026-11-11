@@ -78,8 +78,23 @@ try{
   await expect(page.locator('body')).not.toContainText(/AI 味 \d+ ?分/);
   await page.screenshot({path:join(shots,'style.png'),fullPage:true});
 
+  // 8. Cast matrix and story clock read the same tracking; a missing chapter stays
+  // "未记录" and a chapter without a story-time order stays out of the chart.
+  await page.getByRole('button',{name:'角色与时间',exact:true}).click();
+  const cast=page.getByRole('region',{name:'角色出场矩阵'});
+  await expect(cast.locator('.story-cast-matrix tbody tr')).toHaveCount(2);
+  await expect(cast.locator('.story-cast-cell.is-present')).toHaveCount(3);
+  await expect(cast.locator('.story-cast-cell.is-absent')).toHaveCount(1);
+  await expect(cast.locator('.story-cast-cell.is-untracked')).toHaveCount(6);
+  await expect(cast.getByText('未记录').first()).toBeVisible();
+  await expect(cast.getByText(/已记录 2\/5 章/)).toBeVisible();
+  const clock=page.getByRole('region',{name:'故事时间轴'});
+  await expect(clock.locator('.story-clock-point')).toHaveCount(2);
+  await expect(clock.locator('.story-clock-path')).toHaveCount(1);
+  await page.screenshot({path:join(shots,'cast-clock.png'),fullPage:true});
+
   // Narrow layouts must not scroll sideways on any new section.
-  for(const name of ['卷纲与单元','去 AI 味体检','节奏热力图','双时间线','拆文库与对标','文风对照']){
+  for(const name of ['卷纲与单元','去 AI 味体检','节奏热力图','角色与时间','双时间线','拆文库与对标','文风对照']){
     await page.setViewportSize({width:420,height:900});
     await page.getByRole('button',{name,exact:true}).click();
     const overflow=await page.locator('.story-scroll').evaluate(el=>el.scrollWidth-el.clientWidth);
@@ -93,5 +108,5 @@ try{
   await page.screenshot({path:join(shots,'units-420.png'),fullPage:true});
 
   if(errors.length)throw new Error(errors.join('\n'));
-  console.log(JSON.stringify({ok:true,checks:['unit cards and contract diagnostic','detector candidates without a score','rhythm grid and editor','style samples, signed deviation and dossier','420px layouts']}));
+  console.log(JSON.stringify({ok:true,checks:['unit cards and contract diagnostic','detector candidates without a score','rhythm grid and editor','style samples, signed deviation and dossier','cast matrix and story clock without inference','420px layouts']}));
 }finally{await browser?.close();preview.kill();}

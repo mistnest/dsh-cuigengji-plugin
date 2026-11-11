@@ -21,7 +21,7 @@ export const storyArgsSchema = {
           op: {type: 'string', enum: STORY_OPERATIONS, required: true, description: '操作名'},
           value: {
             type: 'object', additionalProperties: true, required: true,
-            description: 'configure 更新模式/阶段/简报；outline.upsert 保存章蓝图；tracking.commit 保存已发生事实（summary/storyTime/location/activeCharacterIds/commitments/risks，可附 authorTruth 作者真相与 readerKnown 读者已知）；thread.upsert 维护伏笔/承诺/期待/约束；review.upsert 维护证据问题；unit.upsert 维护卷内剧情单元（promise/emotionEngine/blocker/choice/payoff/hook/lineIds/chapterIds/contractRisk）；storyline.upsert 维护故事线（title/kind/driver/junction/canCarryChapter）；rhythm.upsert 记录某章基调与章内角色；style.upsert 维护文风要求（targetSentence/dialogueRatio/viewpoint/tense/diction/avoid/anchors）；reference.upsert/reference.remove 维护项目内对标书副本。新建条目不传 id，更新/移除使用已读 id',
+            description: 'configure 更新模式/阶段/简报；outline.upsert 保存章蓝图；tracking.commit 保存已发生事实（summary/storyTime/location/activeCharacterIds/commitments/risks，可附 storyTimeOrder 故事内时间排序整数、authorTruth 作者真相与 readerKnown 读者已知）；thread.upsert 维护伏笔/承诺/期待/约束；review.upsert 维护证据问题；unit.upsert 维护卷内剧情单元（promise/emotionEngine/blocker/choice/payoff/hook/lineIds/chapterIds/contractRisk）；storyline.upsert 维护故事线（title/kind/driver/junction/canCarryChapter）；rhythm.upsert 记录某章基调与章内角色；style.upsert 维护文风要求（targetSentence/dialogueRatio/viewpoint/tense/diction/avoid/anchors）；reference.upsert/reference.remove 维护项目内对标书副本。新建条目不传 id，更新/移除使用已读 id',
             properties: {
               id: {type: 'string', description: '更新或移除条目的真实 ID'},
               chapterId: {type: 'string', description: '蓝图、追踪、审稿关联的真实章节 ID'},

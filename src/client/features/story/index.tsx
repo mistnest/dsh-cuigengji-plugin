@@ -5,6 +5,8 @@ import {useWorkspacePreference, type FeatureServices} from '../../shared/workspa
 import type {DetectorResult, StoryContext} from '../../../contracts/story.ts';
 import {BriefMap} from './BriefMap.tsx';
 import {ChapterDesk} from './ChapterDesk.tsx';
+import {CharacterMatrix} from './CharacterMatrix.tsx';
+import {StoryClock} from './StoryClock.tsx';
 import {ChapterHealthMatrix} from './ChapterHealthMatrix.tsx';
 import {ContextPreview} from './ContextPreview.tsx';
 import {DetectBoard} from './DetectBoard.tsx';
@@ -17,7 +19,7 @@ import {TimelineBoard} from './TimelineBoard.tsx';
 import {VolumeBoard} from './VolumeBoard.tsx';
 import {useStoryWorkspace} from './useStoryWorkspace.ts';
 
-const sections={overview:'简报与流程',chapters:'章节蓝图与追踪',units:'卷纲与单元',threads:'故事线索',reviews:'证据审稿',detect:'去 AI 味体检',rhythm:'节奏热力图',truth:'双时间线',style:'文风对照',reference:'拆文库与对标',context:'AI 上下文'} as const;
+const sections={overview:'简报与流程',chapters:'章节蓝图与追踪',units:'卷纲与单元',threads:'故事线索',reviews:'证据审稿',detect:'去 AI 味体检',rhythm:'节奏热力图',cast:'角色与时间',truth:'双时间线',style:'文风对照',reference:'拆文库与对标',context:'AI 上下文'} as const;
 type Section=keyof typeof sections;
 export function Story(props:FeatureServices&{onChapter:(id?:string)=>void}) {
   const workspace=useStoryWorkspace(props);
@@ -41,7 +43,7 @@ export function Story(props:FeatureServices&{onChapter:(id?:string)=>void}) {
       {workspace.cacheError&&<p className="story-alert story-error" role="alert">{workspace.cacheError}</p>}
       {workspace.pending&&<div className="story-alert story-warning" role="status"><p>{workspace.working?'正在核对并保存这次提交…':'这次提交的回执尚未确认。请用原请求重试，确认结果后继续编辑。'}</p>{!workspace.working&&<button onClick={()=>void workspace.retry()}>重试本次提交</button>}</div>}
       {workspace.notice&&<p className="story-save-notice" role="status">{workspace.notice}</p>}
-      <ResourceState resource={resource}>{shared&&(section==='overview'?<BriefMap {...shared} onSection={open}/>:section==='chapters'?<div className="story-visual-stack"><ChapterDesk {...shared} selectedChapter={selectedChapter} onSelectChapter={setSelectedChapter}/><ChapterHealthMatrix snapshot={shared.snapshot} selectedId={selectedChapter} onSelect={setSelectedChapter} onChapter={shared.onChapter}/></div>:section==='units'?<VolumeBoard {...shared}/>:section==='threads'?<ThreadBoard {...shared} onChapter={shared.onChapter}/>:section==='reviews'?<ReviewDesk {...shared}/>:section==='detect'?<DetectBoard {...shared} onDetect={loadDetect}/>:section==='rhythm'?<RhythmHeatmap snapshot={shared.snapshot} busy={shared.busy} save={shared.save}/>:section==='truth'?<TimelineBoard snapshot={shared.snapshot} onChapter={shared.onChapter}/>:section==='style'?<StyleBoard snapshot={shared.snapshot} busy={shared.busy} save={shared.save}/>:section==='reference'?<ReferenceBoard {...shared}/>:<ContextPreview {...shared} onLoad={loadContext}/>)}</ResourceState>
+      <ResourceState resource={resource}>{shared&&(section==='overview'?<BriefMap {...shared} onSection={open}/>:section==='chapters'?<div className="story-visual-stack"><ChapterDesk {...shared} selectedChapter={selectedChapter} onSelectChapter={setSelectedChapter}/><ChapterHealthMatrix snapshot={shared.snapshot} selectedId={selectedChapter} onSelect={setSelectedChapter} onChapter={shared.onChapter}/></div>:section==='units'?<VolumeBoard {...shared}/>:section==='threads'?<ThreadBoard {...shared} onChapter={shared.onChapter}/>:section==='reviews'?<ReviewDesk {...shared}/>:section==='detect'?<DetectBoard {...shared} onDetect={loadDetect}/>:section==='rhythm'?<RhythmHeatmap snapshot={shared.snapshot} busy={shared.busy} save={shared.save}/>:section==='cast'?<div className="story-visual-stack"><CharacterMatrix snapshot={shared.snapshot} onChapter={shared.onChapter}/><StoryClock snapshot={shared.snapshot} onChapter={shared.onChapter}/></div>:section==='truth'?<TimelineBoard snapshot={shared.snapshot} onChapter={shared.onChapter}/>:section==='style'?<StyleBoard snapshot={shared.snapshot} busy={shared.busy} save={shared.save}/>:section==='reference'?<ReferenceBoard {...shared}/>:<ContextPreview {...shared} onLoad={loadContext}/>)}</ResourceState>
     </div>
   </div>;
 }

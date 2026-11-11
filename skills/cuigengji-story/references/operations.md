@@ -18,7 +18,7 @@
 | --- | --- |
 | configure | 局部更新 mode、stage、brief |
 | outline.upsert | 真实 chapterId、intent、beats 数组、endingHook，可选 minWords/maxWords |
-| tracking.commit | chapterId、expectedChapterRevision、summary、storyTime、location、activeCharacterIds、commitments、risks；可附 authorTruth（作者真相，读者未必知道）与 readerKnown（读者已从正文得知）两个字符串数组 |
+| tracking.commit | chapterId、expectedChapterRevision、summary、storyTime、location、activeCharacterIds、commitments、risks；可附 storyTimeOrder（可选整数，故事内时间顺序，越小越早，只用于画故事时间轴，不从 storyTime 文本推断；不传表示保留原值，传 null 表示清除）、authorTruth（作者真相，读者未必知道）与 readerKnown（读者已从正文得知）两个字符串数组 |
 | thread.upsert | 新建提供 kind/title/detail/status；更新提供真实 id 和变动字段；可附 sourceChapterId/sourceRevision/dueChapterId |
 | review.upsert | 新建提供 chapterId/expectedChapterRevision/severity/category/location/evidence/issue/suggestion/status；更新用 id、expectedChapterRevision 和变动字段 |
 | unit.upsert | 剧情单元（卷内一段完整剧情，不等于章节）：新建提供 volumeId（无卷用 null）、title，可附 order/promise/emotionEngine/causeEntry/blocker/choice/payoff/hook/lineIds/chapterIds/contractRisk |
