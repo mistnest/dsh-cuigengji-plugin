@@ -146,7 +146,7 @@ class FileTransaction {
     const paths = /* @__PURE__ */ new Set();
     const contents = [];
     for (const entry of journal.entries) {
-      if (!entry || typeof entry.path !== "string" || paths.has(entry.path) || !/^(library\.json|activity\.json|activity\/(index|[0-9]{4})\.json|backups\/before-content-tree-[0-9]+-[a-f0-9-]{36}\/(store|library|migration)\.json|backups\/before-writing-records-[a-f0-9]{16}\/activity\.json|backups\/before-session-focus-[a-f0-9]{16}\/bindings\.json|runtime\/(bindings\.json|requests\/[^/]+\.json)|novels\/[^/]+\/.+\.json|audit\/[a-f0-9]{64}\.jsonl|before-planning-[a-f0-9]{64}\.json)$/.test(entry.path)) corrupt("\u4E8B\u52A1\u76EE\u6807\u6587\u4EF6\u65E0\u6548");
+      if (!entry || typeof entry.path !== "string" || paths.has(entry.path) || !/^(library\.json|activity\.json|activity\/(index|[0-9]{4})\.json|backups\/cleanup\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.json|backups\/before-content-tree-[0-9]+-[a-f0-9-]{36}\/(store|library|migration)\.json|backups\/before-writing-records-[a-f0-9]{16}\/activity\.json|backups\/before-session-focus-[a-f0-9]{16}\/bindings\.json|runtime\/(bindings\.json|requests\/[^/]+\.json)|novels\/[^/]+\/.+\.json|audit\/[a-f0-9]{64}\.jsonl|before-planning-[a-f0-9]{64}\.json)$/.test(entry.path)) corrupt("\u4E8B\u52A1\u76EE\u6807\u6587\u4EF6\u65E0\u6548");
       this.path(entry.path);
       paths.add(entry.path);
       if (entry.stage === null && entry.sha256 === null) {

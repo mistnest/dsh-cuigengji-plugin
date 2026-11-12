@@ -5,7 +5,7 @@ export function presetBlockReason(block) {
 }
 export function presetBlockNotice(block) {
   if (presetBlockReason(block)) return presetBlockReason(block);
-  return /\{\{|\}\}/.test(block.content) ? '含酒馆宏或占位符：按原文保留，不执行替换；可在下方改成明确的写作要求。' : '';
+  return /\{\{|\}\}/.test(block.content) ? '原文保留。此作品启用剧情变量后，可替换常见取值宏；写入宏、JS/EJS 与扩展脚本不会在读取时执行。' : '';
 }
 function source(input) {
   if (!object(input) || JSON.stringify(input).length > 2_000_000) fail('预设必须是小于 2 MB 的 JSON 对象');
@@ -64,7 +64,7 @@ export function importPreset(input, orderId) {
   }
   for (const p of data.prompts) add(p,order?false:p.enabled!==false);
   const warnings=['导入后整体停用，核对后启用并保存。启用条目的正文按当前列表顺序加入写作要求。', '仅使用提示词内容；酒馆消息角色、触发、插入深度及装填规则不执行。模型和采样参数由 DSH 管理，原始文件随备份保留。'];
-  if(blocks.some(b=>/\{\{|\}\}/.test(b.content)))warnings.push('宏与占位符按原文保留，不执行。需要替换角色名或用户称谓时，请直接编辑提示词内容。');
+  if(blocks.some(b=>/\{\{|\}\}/.test(b.content)))warnings.push('宏与占位符按原文保留。此作品启用剧情变量后可读取常见取值宏；未启用时保持原文，写入宏和 JS/EJS 不会自动执行。');
   if(missing.length)warnings.push(`排列中有 ${missing.length} 项未随文件导出，已跳过这些引用；未编造其提示词内容。`);
   const result={name:typeof input.name==='string'&&input.name.trim()?input.name:typeof data.name==='string'&&data.name.trim()?data.name:'导入的写作预设',enabled:false,blocks,raw:input,importFormat:format,warnings};
   validatePreset(result);

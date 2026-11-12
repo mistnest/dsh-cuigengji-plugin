@@ -3,6 +3,8 @@ import {SessionScope,readLocal} from './state.js';
 import {CARD_WIDTH,CARD_HEIGHT,PORT_Y,contains,intersects,fitCamera,toWorld,toScreen,zoomAt,curve,vacantCardPoint} from './graph-geometry.ts';
 import type {Camera,Rect} from './graph-geometry.ts';
 import type {Point} from '../../contracts/planning.ts';
+import {wheelCamera} from './graph-wheel.ts';
+import {useWorkbenchPreferences} from './settings/preferences-state.tsx';
 import {frameMembers,FOLDED_WIDTH,FOLDED_HEIGHT,portPoint,anchorVector,type AnchorSide,type LayoutPoint} from '../../domain/canvas/model.ts';
 export {CARD_WIDTH,CARD_HEIGHT,PORT_Y,curve};
 type Side='in'|'out';
@@ -41,12 +43,12 @@ export function GraphStatus({graph,busy}:{graph:ReturnType<typeof useGraph>;busy
   if(graph.failed)return <span className="graph-save-error" role="alert">{graph.error||'布局未保存'}<button disabled={busy||graph.saving} onClick={graph.retry}>重试</button><button disabled={busy||graph.saving} onClick={graph.discard}>还原布局</button></span>;
   if(graph.error)return <small role="alert">{graph.error}</small>;
   if(graph.arranging)return <small role="status">正在整理…</small>;
-  if(graph.saving)return <small role="status">正在保存…</small>;
   if(graph.wire)return <small role="status">连接到另一张卡片，或拖到空白新建 · Esc 取消</small>;
   return null;
 }
 export function GraphControls({graph,busy}:{graph:ReturnType<typeof useGraph>;busy:boolean}){
-  return <><div className="graph-view-controls"><button aria-label="适应视图" onClick={()=>graph.fit()}>适应</button><button aria-label="恢复百分之百缩放" onClick={()=>graph.zoomTo(1)}>{Math.round(graph.zoom*100)}%</button><span className="graph-control-divider" aria-hidden="true"/><button aria-label="撤销布局" title="撤销布局 · Ctrl+Z" disabled={busy||graph.saving||graph.failed||!graph.canUndo} onClick={()=>graph.undo()}>↶</button><button aria-label="重做布局" title="重做布局 · Ctrl+Y" disabled={busy||graph.saving||graph.failed||!graph.canRedo} onClick={()=>graph.redo()}>↷</button></div><details className="graph-help"><summary>操作</summary><div><p>右键拖动平移 · 滚轮缩放</p><p>单击选中卡片 · 双击打开详情</p><p>拖动空白框选 · Shift 追加选择</p><p>拖动圆点连线 · 右键查看操作</p><p>自动排布：整理选区或当前显示内容</p><p>C 收纳为文件夹 · Esc 取消</p><p>Home 适应 · Ctrl+Z / Ctrl+Y 撤销、重做布局</p></div></details><div className="graph-status"><GraphStatus graph={graph} busy={busy}/></div></>;
+  const {preferences:{canvasScrollAction}}=useWorkbenchPreferences();
+  return <><div className="graph-view-controls"><button aria-label="适应视图" onClick={()=>graph.fit()}>适应</button><button aria-label="缩小画布" title="缩小画布" disabled={graph.zoom<=.35} onClick={()=>graph.zoomTo(graph.zoom/1.2)}>−</button><button aria-label="恢复百分之百缩放" onClick={()=>graph.zoomTo(1)}>{Math.round(graph.zoom*100)}%</button><button aria-label="放大画布" title="放大画布" disabled={graph.zoom>=1.8} onClick={()=>graph.zoomTo(graph.zoom*1.2)}>＋</button><span className="graph-control-divider" aria-hidden="true"/><button aria-label="撤销布局" title="撤销布局 · Ctrl / ⌘+Z" disabled={busy||graph.saving||graph.failed||!graph.canUndo} onClick={()=>graph.undo()}>↶</button><button aria-label="重做布局" title="重做布局 · Ctrl+Y / ⌘+Shift+Z" disabled={busy||graph.saving||graph.failed||!graph.canRedo} onClick={()=>graph.redo()}>↷</button></div><details className="graph-help"><summary>操作</summary><div><p>{canvasScrollAction==='pan'?'双指滑动 / 滚轮平移':'滚轮缩放'} · 捏合 / Ctrl / ⌘＋滚动缩放</p><p>右键 / 中键拖动，或空格＋拖动平移</p><p>滚动方式可在设置 → 编辑与外观中调整</p><p>单击选中卡片 · 双击打开详情</p><p>拖动空白框选 · Shift 追加选择</p><p>拖动圆点连线 · 右键查看操作</p><p>自动排布：整理选区或当前显示内容</p><p>C 收纳为文件夹 · Esc 取消</p><p>Home 适应 · Ctrl / ⌘+Z 撤销，Ctrl+Y / ⌘+Shift+Z 重做</p></div></details><div className="graph-status"><GraphStatus graph={graph} busy={busy}/></div></>;
 }
 export function GraphArrangeButton({graph,busy}:{graph:ReturnType<typeof useGraph>;busy:boolean}) {
   return <button className="graph-auto-arrange" aria-label="自动排布" title={`${graph.selected.length?'整理所选区域':'整理当前显示的内容'}，可用 Ctrl+Z 撤销`} disabled={busy||graph.saving||graph.failed||!graph.canArrange} onClick={()=>void graph.organize()}>{graph.arranging?'排布中…':'自动排布'}</button>;
@@ -54,6 +56,7 @@ export function GraphArrangeButton({graph,busy}:{graph:ReturnType<typeof useGrap
 
 /** One world coordinate system. Viewport changes are local preferences, never novel edits. */
 export function useGraph(options:Options){
+  const {preferences:{canvasScrollAction}}=useWorkbenchPreferences();
   const opts=useRef(options);opts.current=options;
   const scope=useContext(SessionScope),storageKey=`cuigengji:camera:${scope}:${options.scopeKey}`;
   const saved=useRef(readLocal(storageKey,null));
@@ -189,9 +192,32 @@ export function useGraph(options:Options){
     if(g.kind==='wire'&&g.moved){const target=targetAt(e.clientX,e.clientY),current=wireRef.current;if(target)void connect(target.id);else{updateWire(null);if(current&&!hitAt(document.elementFromPoint(e.clientX,e.clientY)).id)opts.current.onCreateConnected?.(current.id,opts.current.relation?'out':current.side,clientPoint(e.clientX,e.clientY));}}
   };
   const keyHandler=useRef<(event:KeyboardEvent)=>void>(()=>{});
-  keyHandler.current=e=>{const el=scroll.current;if(!el?.offsetWidth||!(el.contains(document.activeElement)||el.contains(e.target as Node)))return;if((e.target as Element).closest('dialog,input,textarea,select,[contenteditable=true],[role=menu]'))return;if(e.key==='Escape'){e.preventDefault();cancel();}else if(e.key===' '&&!(e.target as Element).closest('button,summary')){e.preventDefault();space.current=true;}else if(e.key==='Home'){e.preventDefault();fit();}else if((e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault();void history(e.key.toLowerCase()==='y'||e.shiftKey);}else if(e.key.toLowerCase()==='c'&&!e.ctrlKey&&!e.metaKey&&!opts.current.busy)opts.current.onFrame?.(selection.current);};
+  keyHandler.current=e=>{const el=scroll.current;if(!el?.offsetWidth||!(el.contains(document.activeElement)||el.contains(e.target as Node)))return;if((e.target as Element).closest('dialog,input,textarea,select,[contenteditable=true],[role=menu]'))return;if(e.key==='Escape'){e.preventDefault();cancel();select([]);}else if(e.key===' '&&!(e.target as Element).closest('button,summary')){e.preventDefault();space.current=true;}else if(e.key==='Home'){e.preventDefault();fit();}else if((e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault();void history(e.key.toLowerCase()==='y'||e.shiftKey);}else if(e.key.toLowerCase()==='c'&&!e.ctrlKey&&!e.metaKey&&!opts.current.busy)opts.current.onFrame?.(selection.current);};
   useEffect(()=>{const key=(e:KeyboardEvent)=>keyHandler.current(e),release=(e:KeyboardEvent)=>{if(e.key===' ')space.current=false;},blur=()=>{space.current=false;cancel();};window.addEventListener('keydown',key);window.addEventListener('keyup',release);window.addEventListener('blur',blur);return()=>{window.removeEventListener('keydown',key);window.removeEventListener('keyup',release);window.removeEventListener('blur',blur);};},[]);
-  useEffect(()=>{const el=scroll.current;if(!el)return;const wheel=(e:WheelEvent)=>{if(!e.deltaY||gesture.current||el.dataset.resizing)return;const target=e.target instanceof Element?e.target:null;if(target?.closest('dialog,input,textarea,select,[contenteditable=true],[role=menu],.menu-panel,.graph-help'))return;for(let node=target;node&&node!==el;node=node.parentElement)if(node.scrollHeight>node.clientHeight+1&&/^(auto|scroll)$/.test(getComputedStyle(node).overflowY))return;e.preventDefault();zoomTo(cameraRef.current.zoom*Math.exp(-e.deltaY*.0015),relative(e.clientX,e.clientY));};el.addEventListener('wheel',wheel,{passive:false});return()=>el.removeEventListener('wheel',wheel);},[]);
+  useEffect(()=>{
+    const el=scroll.current;if(!el)return;
+    let saveTimer:ReturnType<typeof setTimeout>|undefined;
+    const wheel=(e:WheelEvent)=>{
+      if(e.defaultPrevented||(!e.deltaX&&!e.deltaY))return;
+      const target=e.target instanceof Element?e.target:null;
+      if(target?.closest('dialog,input,textarea,select,[contenteditable=true],[role=menu],.menu-panel,.graph-help,.graph-view-controls,.graph-status,[data-no-drag]'))return;
+      // A scrollable note keeps its native scroll, including at its boundary.
+      if(!e.ctrlKey&&!e.metaKey)for(let node=target;node&&node!==el;node=node.parentElement){
+        const style=getComputedStyle(node);
+        if((e.deltaY&&node.scrollHeight>node.clientHeight+1&&/^(auto|scroll)$/.test(style.overflowY))||(e.deltaX&&node.scrollWidth>node.clientWidth+1&&/^(auto|scroll)$/.test(style.overflowX)))return;
+      }
+      if(e.cancelable)e.preventDefault();e.stopPropagation();
+      // Momentum arriving during a drag must not move the camera or trigger
+      // the host's page zoom while card/link coordinates are being committed.
+      if(gesture.current||wireRef.current||el.dataset.resizing)return;
+      const next=wheelCamera(cameraRef.current,e,relative(e.clientX,e.clientY),{width:el.clientWidth,height:el.clientHeight},canvasScrollAction);
+      if(!next)return;
+      updateCamera(next);
+      clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveTimer=undefined;rememberCamera();},160);
+    };
+    el.addEventListener('wheel',wheel,{passive:false});
+    return()=>{el.removeEventListener('wheel',wheel);if(saveTimer!==undefined){clearTimeout(saveTimer);rememberCamera();}};
+  },[canvasScrollAction]);
   const preview=wire&&points[wire.id]?options.relation?(()=>{const a=endpoint(wire.id,wire.side,wire.anchor),b=wire.target?endpoint(wire.target,'in',wire.targetAnchor):wire.point,v=anchorVector[wire.anchor],w=wire.targetAnchor?anchorVector[wire.targetAnchor]:{x:-v.x,y:-v.y},length=Math.min(120,Math.max(32,Math.hypot(b.x-a.x,b.y-a.y)/3));return `M ${a.x} ${a.y} C ${a.x+v.x*length} ${a.y+v.y*length}, ${b.x+w.x*length} ${b.y+w.y*length}, ${b.x} ${b.y}`;})():curve(wire.side==='out'?endpoint(wire.id,'out'):wire.target?endpoint(wire.target,'out'):wire.point,wire.side==='in'?endpoint(wire.id,'in'):wire.target?endpoint(wire.target,'in'):wire.point):null;
   const arrange=(positions:Record<string,LayoutPoint>)=>{if(opts.current.busy||locked.current||failed)return;const ids=Object.keys(positions).filter(id=>pointsRef.current[id]);if(!ids.length)return;const after=Object.fromEntries(ids.map(id=>[id,positions[id]]));setLocal({...localRef.current,...after});return save({before:Object.fromEntries(ids.map(id=>{const n=opts.current.nodes.find(n=>n.id===id)!;return [id,{...pointsRef.current[id],...(positions[id].width?{width:localRef.current[id]?.width??n.width,height:localRef.current[id]?.height??n.height}:{})}];})),after,revisions:Object.fromEntries(ids.map(id=>[id,opts.current.nodes.find(n=>n.id===id)!.revision]))});};
   const organize=async()=>{
@@ -210,7 +236,7 @@ export function useGraph(options:Options){
     ensureVisible,ensurePanelVisible,screenPoint:(point:Point)=>toScreen(point,camera),canArrange:visible().length>0,canUndo:undoStack.current.length>0,canRedo:redoStack.current.length>0,undo:()=>history(),redo:()=>history(true),
     worldStyle:{transform:`translate(${camera.x}px,${camera.y}px) scale(${camera.zoom})`,transformOrigin:'0 0'} as React.CSSProperties,
     viewportStyle:{backgroundSize:`${24*camera.zoom}px ${24*camera.zoom}px`,backgroundPosition:`${camera.x}px ${camera.y}px`} as React.CSSProperties,
-    scrollProps:{onPointerDown:down,onPointerMove:move,onPointerUp:up,onPointerCancel:cancel,onScroll:(e:React.UIEvent<HTMLDivElement>)=>{if(e.currentTarget.scrollLeft||e.currentTarget.scrollTop)e.currentTarget.scrollTo(0,0);},onClickCapture:(e:React.MouseEvent)=>{if(suppress.current){e.preventDefault();e.stopPropagation();suppress.current=false;}},onContextMenu:(e:React.MouseEvent)=>{e.preventDefault();if(gesture.current?.kind==='pan'||Date.now()-rightEnd.current<500)return;context(e.clientX,e.clientY,hitAt(e.target));},tabIndex:0,'aria-label':'画布：右键拖动平移，滚轮缩放，空白拖动框选'},
+    scrollProps:{onPointerDown:down,onPointerMove:move,onPointerUp:up,onPointerCancel:cancel,onScroll:(e:React.UIEvent<HTMLDivElement>)=>{if(e.currentTarget.scrollLeft||e.currentTarget.scrollTop)e.currentTarget.scrollTo(0,0);},onClickCapture:(e:React.MouseEvent)=>{if(suppress.current){e.preventDefault();e.stopPropagation();suppress.current=false;}},onContextMenu:(e:React.MouseEvent)=>{e.preventDefault();if(gesture.current?.kind==='pan'||Date.now()-rightEnd.current<500)return;context(e.clientX,e.clientY,hitAt(e.target));},tabIndex:0,'aria-label':`画布：${canvasScrollAction==='pan'?'双指滑动或滚轮平移':'滚轮缩放'}，捏合或 Ctrl / Command 加滚动缩放，空白拖动框选`},
     cancel,retry:()=>{const pending=failedChange.current;if(pending)void save(pending.change,pending.persist,pending.commit);},discard:()=>{setLocal({});setFailed(false);setError('');failedChange.current=null;},
     arrange,organize,
   };

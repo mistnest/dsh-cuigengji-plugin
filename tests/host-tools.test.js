@@ -16,7 +16,7 @@ test('registered DSH tools execute through session policy and real MCP', async t
     on() {}, effect: fn => effects.push(fn()), provide: (key, value) => { ctx[key] = value; },
   };
   t.after(async () => { for (const dispose of effects) await dispose(); await rm(root, { recursive: true, force: true }); });
-  await apply(ctx, { dataRoot: root });
+  await apply(ctx, { dataRoot: root,usageRoot:join(root,'test-usage') });
   const human = { kind: 'human', sessionId: 'writer' };
   const dispatch = (action, args = {}) => ctx.cuigengji.dispatch(action, args, human);
   let id = 0;
@@ -36,6 +36,7 @@ test('registered DSH tools execute through session policy and real MCP', async t
   const savedPreset = await dispatch('preset.set', { expectedRevision: 0, preset: {
     name: '文风', enabled: true, blocks: [{ identifier: 'style', name: '表达', enabled: true, role: 'system', content: '短句与留白' }],
   } });
+  assert.equal((await execute('cuigengji_context', 'preset.read')).content, '短句与留白');
   const beforeRead = await storageSnapshot(root);
   const handoff = await execute('cuigengji_project', 'novel.handoff');
   assert.equal(handoff.novel.id, novel.id);
@@ -45,9 +46,17 @@ test('registered DSH tools execute through session policy and real MCP', async t
   assert.deepEqual((await execute('cuigengji_context', 'context.get')).items, []);
   assert.equal(await storageSnapshot(root), beforeRead, 'read tools must not create request-cache entries or rewrite the store');
   await dispatch('preset.set', { expectedRevision: savedPreset.revision, preset: { ...savedPreset, enabled: false } });
-  assert.equal((await execute('cuigengji_context', 'preset.read')).content, '');
+  assert.equal((await execute('cuigengji_context', 'preset.read')).content, '短句与留白');
   const node = await execute('cuigengji_memory', 'graph.create', { type: 'character_card', name: '来客', sources: [{ chapterId: chapter.id, revision: chapter.revision }] });
   assert.equal((await execute('cuigengji_memory', 'graph.get', { nodeId: node.id })).name, '来客');
+  // Native DSH uses its value-schema DSL; the MCP path uses JSON Schema.
+  // Both must accept arbitrary structured values and share the same state.
+  await dispatch('variables.configure',{baseRevision:0,enabled:true});
+  await execute('cuigengji_variables','variables.patch',{baseRevision:1,anchor:{kind:'initial'},operations:[{op:'set',path:'/主角',value:{等级:1,背包:['药'],在场:true}}]});
+  const varState=await ctx.cuigengji.memory.call('writer','variables.read',{});
+  assert.deepEqual(varState.data,{主角:{等级:1,背包:['药'],在场:true}});
+  await ctx.cuigengji.memory.call('writer','variables.patch',{baseRevision:varState.revision,requestId:'mcp-variable-edit',anchor:{kind:'initial'},operations:[{op:'inc',path:'/主角/等级',value:1}]});
+  assert.equal((await execute('cuigengji_variables','variables.read',{path:'/主角/等级'})).value,2);
   const setting = await execute('cuigengji_memory', 'graph.continue', { nodeId: node.id, expectedRevision: node.revision, value: { type: 'world_entry', name: '旧书铺', content: '临时工具验证设定' } });
   const moved = await execute('cuigengji_memory', 'graph.layout', { requestId: 'host-layout', positions: [{ nodeId: node.id, expectedRevision: node.revision, position: { x: -300, y: -120 } }, { nodeId: setting.node.id, expectedRevision: setting.node.revision, position: { x: 60, y: -120 } }] });
   assert.deepEqual((await execute('cuigengji_memory', 'graph.get', { nodeId: node.id })).position, { x: -300, y: -120 });

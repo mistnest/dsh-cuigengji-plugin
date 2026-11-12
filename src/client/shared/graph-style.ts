@@ -27,6 +27,16 @@ export const graphStyles = `
 .cuigengji .planning-lines .graph-edge {transition:opacity 130ms,color 130ms;}
 .cuigengji .planning-lines .graph-edge.edge-related {color:var(--cg-accent);}
 .cuigengji .planning-lines .graph-edge.edge-muted {opacity:.23;}
+/* Typed relation lanes: tone encodes the semantic group; hover/selection still win. */
+.cuigengji .relation-canvas .planning-lines .graph-edge.edge-kind-hostile {color:#c64e42;}
+.cuigengji .relation-canvas .planning-lines .graph-edge.edge-kind-hostile .graph-line {stroke-dasharray:7 4;}
+.cuigengji .relation-canvas .planning-lines .graph-edge.edge-kind-alliance {color:var(--dsw-alias-state-success-primary,#12805c);}
+.cuigengji .relation-canvas .planning-lines .graph-edge.edge-kind-family {color:#8981c8;}
+.cuigengji .relation-canvas .planning-lines .graph-edge.edge-kind-location {stroke-dasharray:2 4;}
+.cuigengji .relation-canvas .planning-lines .graph-edge.edge-kind-location .graph-line {stroke-dasharray:2 4;}
+.cuigengji .relation-canvas .planning-lines .graph-edge.edge-kind-membership .graph-line {stroke-dasharray:1 4;stroke-linecap:round;}
+.cuigengji .relation-canvas .planning-lines .graph-edge.edge-kind-other {color:var(--cg-muted,#9ca5b5);}
+.cuigengji .relation-canvas .planning-lines .graph-edge.edge-selected .graph-line {stroke-dasharray:none;}
 .cuigengji .planning-lines .graph-edge.edge-related .graph-line {stroke-width:2px;}
 .cuigengji .planning-lines .graph-edge .edge-hit:hover {cursor:pointer;}
 .cuigengji .planning-card.card-muted {opacity:.42;}
@@ -151,6 +161,7 @@ export const graphStyles = `
 .cuigengji .inline-appearance select {min-width:0;flex:1;font-size:12px;padding:4px;}
 @keyframes cg-menu-arrive {from {opacity:0;transform:translateY(-3px);}to {opacity:1;transform:translateY(0);}}
 @container(max-width:599px){.cuigengji .canvas-heading {padding:8px 10px;}.cuigengji .canvas-heading .module-toolbar {gap:4px;}.cuigengji .canvas-heading .module-toolbar>.primary,.cuigengji .canvas-heading .module-toolbar>.menu:has(.primary) {margin-left:0;}.cuigengji .canvas-heading .filter-control select {max-width:120px;font-size:13px;}.cuigengji .canvas-heading .group-new {font-size:12px;padding:6px;}.cuigengji .graph-search .module-search {order:initial;flex-basis:initial;width:120px;}.cuigengji .graph-view-controls {right:10px;bottom:10px;}.cuigengji .graph-help {left:10px;bottom:10px;}}
+@container(max-width:359px){.cuigengji .graph-view-controls>button{padding-inline:5px;}.cuigengji .graph-view-controls{max-width:calc(100% - 72px);}}
 @media(pointer:coarse){.cuigengji .planning-card .graph-port,.cuigengji .canvas-folder>.graph-port {width:44px;height:44px;top:13px;}.cuigengji .graph-port.port-in {left:-23px;}.cuigengji .graph-port.port-out {right:-23px;}.cuigengji .graph-port::after {inset:18px;}.cuigengji .canvas-heading button,.cuigengji .canvas-heading summary,.cuigengji .graph-view-controls button,.cuigengji .graph-help summary {min-height:44px;}}
 @media(pointer:coarse){.cuigengji .relation-canvas .graph-port {opacity:1!important;}.cuigengji .relation-canvas .graph-port.anchor-left{top:calc(50% - 22px);left:-23px;}.cuigengji .relation-canvas .graph-port.anchor-right{top:calc(50% - 22px);right:-23px;}.cuigengji .relation-canvas .graph-port.anchor-top{top:-23px;left:calc(50% - 22px);}.cuigengji .relation-canvas .graph-port.anchor-bottom{top:auto;bottom:-23px;left:calc(50% - 22px);}}
 @media(prefers-reduced-motion:reduce){.cuigengji .graph-context-menu {animation:none;}.cuigengji .planning-card,.cuigengji .graph-port::after {transition:none;}}

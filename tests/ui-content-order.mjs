@@ -3,7 +3,7 @@ import {spawn} from 'node:child_process';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {chromium,expect} from '@playwright/test';
-import {showOrganization} from './helpers/navigation.mjs';
+import {showOrganization,moveBatch} from './helpers/navigation.mjs';
 import {directorySnapshot} from '../src/domain/directory/order.ts';
 const root=resolve(import.meta.dirname,'..'),shots=join(root,'test-results/content-order');
 await mkdir(shots,{recursive:true});
@@ -46,7 +46,7 @@ try{
   const domOrder=ids=>page.locator('.directory-entry').evaluateAll((rows,ids)=>rows.map(row=>row.dataset.entryId).filter(id=>ids.includes(id)),ids);
   const coordinates=()=>page.locator('.planning-card').evaluateAll(cards=>Object.fromEntries(cards.map(card=>[card.dataset.nodeId,{x:card.style.left,y:card.style.top}])));
   const planningOrder=async()=>((await run('planning.list',{pageId:null})).items.map(n=>n.id)).filter(id=>ids.includes(id));
-  const sorted=async(ids,expected)=>{await expect.poll(()=>domOrder(ids)).toEqual(expected);await expect(page.locator('.directory-order-status')).toHaveCount(0);};
+  const sorted=async(ids,expected)=>{await expect.poll(()=>domOrder(ids)).toEqual(expected);await expect(page.locator('.content-tree')).toHaveAttribute('aria-busy','false');};
   const noOrderError=()=>expect(page.locator('.directory-reorder-error')).toHaveCount(0);
   await page.goto(url);await button('规划').click();await showOrganization(page);
   await sorted(ids,ids);await expect(page.locator('.planning-card')).toHaveCount(5);
@@ -93,7 +93,7 @@ try{
   await expect(page.locator('.planning-card')).toHaveCount(5);await button('多选').click();await row(tx.mapping.loose).getByRole('checkbox').check();
   const batch=page.getByRole('region',{name:'批量管理'}).or(page.locator('.batch-manager'));
   await expect(batch.getByRole('status')).toHaveText('已选 1 项');
-  await batch.getByRole('combobox',{name:'批量移动目标',exact:true}).selectOption(`group:${created.id}`);await batch.getByRole('button',{name:'移动',exact:true}).click();
+  await moveBatch(page,`group:${created.id}`);
   await expect.poll(async()=>(await run('planning.get',{nodeId:tx.mapping.loose})).node.groupId).toBe(created.id);
   await button('完成').click();await expect.poll(coordinates).toEqual(arrangedPositions);
   const dragToRoot=async(id,within)=>{await row(id).scrollIntoViewIfNeeded();const box=await row(id).locator('.directory-grip').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+16,box.y+box.height/2,{steps:4});const target=within.locator(':scope>.tree-root-drop');await expect(target).toBeVisible();const end=await target.boundingBox();await page.mouse.move(end.x+end.width/2,end.y+end.height/2,{steps:12});await page.mouse.up();};
@@ -118,7 +118,7 @@ try{
   await expect.poll(async()=>(await run('graph.get',{nodeId:memory.character_card[2]})).groupId).toBe(memoryOther.id);await expect.poll(coordinates).toEqual(memoryPositions);
   await page.reload();await showOrganization(page);await expect.poll(coordinates).toEqual(memoryPositions);
   await dragToRoot(memory.character_card[2],page.getByLabel('设定文件夹',{exact:true}));await expect.poll(async()=>(await run('graph.get',{nodeId:memory.character_card[2]})).groupId??null).toBe(null);await expect.poll(coordinates).toEqual(memoryPositions);
-  await button('多选').click();await row(looseCharacter.id).getByRole('checkbox').check();await expect(page.locator('.batch-manager [role=status]')).toHaveText('已选 1 项');await button('完成').click();
+  await button('多选').click();await row(looseCharacter.id).getByRole('checkbox').check();await expect(page.locator('.batch-toolbar [role=status]')).toHaveText('已选 1 项');await button('完成').click();
   checks.push('repeated character/world sorting, cross-group movement and reload preserve positions, types, content, history and relations');
   checks.push('mixed-type entries share root and folders; sorting and grouping preserve each entry type and prose');
   await noOrderError();await page.screenshot({path:join(shots,'memory-order.png')});

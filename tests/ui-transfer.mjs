@@ -80,7 +80,7 @@ try {
   await page.getByRole('button', {name: '继续导入', exact: true}).click();
   await upload('preset.json', {prompts: [{identifier: 'a', name: '要求A', content: 'A正文'}, {identifier: 'b', name: '要求B', content: 'B正文'}], prompt_order: [{character_id: 1, order: [{identifier: 'a', enabled: true}]}, {character_id: 2, order: [{identifier: 'b', enabled: true}, {identifier: 'a', enabled: true}]}]});
   await page.getByRole('combobox', {name: '提示词排列', exact: true}).selectOption('2'); await page.getByRole('combobox', {name: '现有预设', exact: true}).selectOption('append'); await confirm();
-  const preset = await call('preset.get', {novelId}); expect(preset.enabled).toBe(false); expect(preset.blocks.map(b => b.content)).toEqual(['每个角色的对白有自己的习惯。', 'B正文', 'A正文']);
+  const preset = await call('preset.get', {novelId}); expect(preset.enabled).toBe(true); expect(preset.blocks.map(b => b.content)).toEqual(['每个角色的对白有自己的习惯。', 'B正文', 'A正文']);
   await page.getByRole('button', {name: '继续导入', exact: true}).click();
   await upload('片段.txt', '　　她在雨里打开了信。\n\n　　正文的缩进要保留。', 'text/plain'); await confirm();
   const importedChapter = (await call('chapter.list', {novelId})).find(c => c.title === '片段'); expect((await call('chapter.get', {novelId, chapterId: importedChapter.id})).content.startsWith('　　')).toBe(true);

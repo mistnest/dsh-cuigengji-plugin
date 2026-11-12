@@ -6,6 +6,8 @@ import type {GroupItem} from './groups.tsx';
 import {useDialog} from '../dialog.tsx';
 import {groupDescendants,groupMatches,groupRows,groupTrail} from '../../domain/directory/groups.ts';
 import {useGroupDrag} from './useGroupDrag.ts';
+import {searchDirectory} from '../../domain/directory/search.ts';
+import {useDirectorySearchExpansion,type SearchExpansion} from './directory-search.ts';
 
 /** Fixed menus also need the origin of the embedded plugin's containing block. */
 function positionTreeMenu(menu:HTMLDetailsElement){
@@ -31,21 +33,21 @@ function TreeGroupMenu({name,children,root=false,restoreFocus}:{name:string;chil
   }}>···</summary><div className="menu-panel">{children}</div></details>;
 }
 
-function DirectoryFolder({id,name,count,children,action,scope,groupId,defaultCollapsed=false,forceOpen=false,revealKey,revealItemKey,collapseKey=0,rowProps,dragging=false,drop=false,grip=false,onOpen,active=false}:{
-  id:string;name:string;count?:number;children:React.ReactNode;action?:React.ReactNode;scope:string;groupId:string;defaultCollapsed?:boolean;forceOpen?:boolean;revealKey?:string;revealItemKey?:string;collapseKey?:number;rowProps?:React.HTMLAttributes<HTMLDivElement>;dragging?:boolean;drop?:boolean;grip?:boolean;onOpen?:()=>void;active?:boolean;
+function DirectoryFolder({id,name,count,children,action,scope,groupId,defaultCollapsed=false,searchExpansion,revealKey,revealItemKey,collapseKey=0,rowProps,dragging=false,drop=false,grip=false,onOpen,active=false,context=false}:{
+  id:string;name:string;count?:number;children:React.ReactNode;action?:React.ReactNode;scope:string;groupId:string;defaultCollapsed?:boolean;searchExpansion?:SearchExpansion;revealKey?:string;revealItemKey?:string;collapseKey?:number;rowProps?:React.HTMLAttributes<HTMLDivElement>;dragging?:boolean;drop?:boolean;grip?:boolean;onOpen?:()=>void;active?:boolean;context?:boolean;
 }){
   const [collapsed,setCollapsed]=useWorkspacePreference(`${scope}:tree:${id}`,defaultCollapsed);
   const [seenReveal,setSeenReveal]=useWorkspacePreference(`${scope}:tree:${id}:reveal`,'');
   const [seenItemReveal,setSeenItemReveal]=useWorkspacePreference(`${scope}:tree:${id}:entry-reveal`,'');
   const [seenCollapse,setSeenCollapse]=useWorkspacePreference(`${scope}:tree:${id}:collapse`,0);
   useLayoutEffect(()=>{if(collapseKey&&seenCollapse!==collapseKey){setSeenCollapse(collapseKey);setCollapsed(true);}},[collapseKey,seenCollapse]);
-  useLayoutEffect(()=>{if(revealKey&&revealKey!==seenReveal){setSeenReveal(revealKey);setCollapsed(false);}},[revealKey,seenReveal]);
-  useLayoutEffect(()=>{if(revealItemKey&&revealItemKey!==seenItemReveal){setSeenItemReveal(revealItemKey);setCollapsed(false);}},[revealItemKey,seenItemReveal]);
-  const expanded=forceOpen||!collapsed;
-  const activate=()=>setCollapsed(expanded);
+  useLayoutEffect(()=>{if(revealKey&&revealKey!==seenReveal){setSeenReveal(revealKey);if(!searchExpansion)setCollapsed(false);}},[revealKey,seenReveal,Boolean(searchExpansion)]);
+  useLayoutEffect(()=>{if(revealItemKey&&revealItemKey!==seenItemReveal){setSeenItemReveal(revealItemKey);if(!searchExpansion)setCollapsed(false);}},[revealItemKey,seenItemReveal,Boolean(searchExpansion)]);
+  const expanded=searchExpansion?.expanded(`group:${id}`)??!collapsed;
+  const activate=()=>searchExpansion?searchExpansion.toggle(`group:${id}`):setCollapsed(expanded);
   const showMenu=(row:HTMLElement,x?:number,y?:number)=>{const menu=row.querySelector<HTMLDetailsElement>('.tree-group-menu');if(!menu)return false;if(x!==undefined&&y!==undefined){menu.dataset.menuX=String(x);menu.dataset.menuY=String(y);}else{delete menu.dataset.menuX;delete menu.dataset.menuY;}menu.open=true;positionTreeMenu(menu);return true;};
   return <div className="tree-folder" data-tree-id={id} data-directory-group-id={groupId} data-group-id={groupId}>
-    <div {...rowProps} className="tree-folder-row" data-group-dragging={dragging||undefined} data-group-drop={drop||undefined} data-group-parent-id={groupId} onContextMenu={event=>{if(showMenu(event.currentTarget,event.clientX,event.clientY)){event.preventDefault();event.stopPropagation();}}} onKeyDown={event=>{rowProps?.onKeyDown?.(event);if((event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')&&showMenu(event.currentTarget)){event.preventDefault();event.stopPropagation();event.currentTarget.querySelector<HTMLElement>('.menu-panel button')?.focus();}}}>
+    <div {...rowProps} className={`tree-folder-row${context?' directory-context':''}`} data-group-dragging={dragging||undefined} data-group-drop={drop||undefined} data-group-parent-id={groupId} onContextMenu={event=>{if(showMenu(event.currentTarget,event.clientX,event.clientY)){event.preventDefault();event.stopPropagation();}}} onKeyDown={event=>{rowProps?.onKeyDown?.(event);if((event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')&&showMenu(event.currentTarget)){event.preventDefault();event.stopPropagation();event.currentTarget.querySelector<HTMLElement>('.menu-panel button')?.focus();}}}>
       {grip&&<span className="tree-folder-grip" aria-hidden="true" title="拖动移动文件夹">⠿</span>}
       <button type="button" className="tree-chevron" aria-label={`${expanded?'收起':'展开'} ${name}`} aria-expanded={expanded} onClick={activate}><span aria-hidden="true">›</span></button>
       <button type="button" className="tree-folder-name" title={onOpen?`进入 ${name}`:name} aria-label={name} aria-current={active?'location':undefined} aria-expanded={onOpen?undefined:expanded} onClick={onOpen||activate}><Icon name="folder"/><span>{name}</span>{count!==undefined&&<small>{count}</small>}</button>{action}
@@ -74,11 +76,16 @@ export function useTreeGroupActions({prefix,novelId,pageId,call,run,refresh,reve
   return {create,move,rename,describe,remove,revealId:reveal.id,revealKey:reveal.key};
 }
 export function DirectoryTools({create,collapse,busy,searching,children}:{create:()=>void;collapse:()=>void;busy:boolean;searching?:boolean;children?:React.ReactNode}){
-  return <div className="directory-tools"><button type="button" className="directory-new" aria-label="新建文件夹" title="在根目录新建文件夹" disabled={busy} onClick={create}><Icon name="folderPlus"/><span>新建</span></button>{children}<button type="button" aria-label="折叠全部目录" title={searching?'搜索时自动展开匹配项':'折叠全部目录'} disabled={Boolean(searching)} onClick={collapse}><Icon name="collapseAll"/></button></div>;
+  return <div className="directory-tools"><button type="button" className="directory-new" aria-label="新建文件夹" title="在根目录新建文件夹" disabled={busy} onClick={create}><Icon name="folderPlus"/><span>新建</span></button>{children}<button type="button" aria-label="折叠全部目录" title="折叠全部目录" onClick={collapse}><Icon name="collapseAll"/></button></div>;
 }
-export function TreeGroups({groups,allGroups=groups,actions,directory,scope,collapseKey=0,busy,prefix,newItems=[],revealItem,onOpenFolder,activeFolder}:{
-  groups:GroupItem[];allGroups?:GroupItem[];actions:ReturnType<typeof useTreeGroupActions>;directory:DirectorySelection;scope:string;collapseKey?:number;busy:boolean;prefix:'planning'|'graph';newItems?:{label:string;create:(groupId:string|null)=>void}[];revealItem?:string|null;onOpenFolder?:(id:string)=>void;activeFolder?:string|null;
+export function TreeGroups({groups,allGroups=groups,actions,directory:source,query='',scope,collapseKey=0,busy,prefix,newItems=[],revealItem,onOpenFolder,activeFolder}:{
+  groups:GroupItem[];allGroups?:GroupItem[];actions:ReturnType<typeof useTreeGroupActions>;directory:DirectorySelection;query?:string;scope:string;collapseKey?:number;busy:boolean;prefix:'planning'|'graph';newItems?:{label:string;create:(groupId:string|null)=>void}[];revealItem?:string|null;onOpenFolder?:(id:string)=>void;activeFolder?:string|null;
 }){
+  const projection=searchDirectory(source.items,groups,query);
+  const [savedCollapse,setSavedCollapse]=useWorkspacePreference(`${scope}:directory-collapse`,0);
+  const {searchExpansion,normalCollapse}=useDirectorySearchExpansion(projection.key,collapseKey,savedCollapse);
+  useLayoutEffect(()=>{if(savedCollapse!==normalCollapse)setSavedCollapse(normalCollapse);},[savedCollapse,normalCollapse]);
+  const directory={...source,searching:projection.searching,visibleIds:projection.itemIds,matchIds:projection.matches,searchExpansion};
   const canDrag=!busy&&!directory.batch&&!directory.searching;
   const drag=useGroupDrag({groups:allGroups,disabled:!canDrag,scope,move:actions.move});
   const manage=(group:GroupItem)=>{const excluded=groupDescendants(allGroups,group.id);return <TreeGroupMenu name={group.name}>
@@ -92,23 +99,25 @@ export function TreeGroups({groups,allGroups=groups,actions,directory,scope,coll
   const children=new Map<string|null,GroupItem[]>();for(const group of groups){const parent=group.parentId||null,peers=children.get(parent)||[];peers.push(group);children.set(parent,peers);}
   const revealPath=new Set(groupTrail(groups,actions.revealId).map(group=>group.id));
   const itemPath=new Set(groupTrail(groups,directory.items.find(item=>item.id===revealItem)?.groupId).map(group=>group.id));
-  const folderScope=directory.searching?`${scope}:search`:scope;
+  const itemIds=new Set(directory.items.map(item=>item.id));
   const render=(group:GroupItem,depth:number):React.ReactNode=>{
-    const direct=directory.items.filter(item=>item.groupId===group.id&&(!item.parentId||!directory.items.some(n=>n.id===item.parentId))),all=directory.items.filter(groupMatches(groups,group.id)),nested=children.get(group.id)||[];
-    if(directory.searching&&!all.length)return null;
-    return <DirectoryFolder key={`${group.id}:${Boolean(directory.searching)}`} id={group.id} scope={folderScope} name={group.name} count={all.length} groupId={group.id} onOpen={onOpenFolder?()=>onOpenFolder(group.id):undefined} active={activeFolder===group.id} action={manage(group)} defaultCollapsed={depth>0} forceOpen={Boolean(directory.searching)} revealKey={revealPath.has(group.id)?actions.revealKey:undefined} revealItemKey={itemPath.has(group.id)?revealItem||undefined:undefined} collapseKey={collapseKey} rowProps={drag.rowProps(group)} dragging={drag.drag?.id===group.id} drop={drag.drag?.target===group.id} grip={canDrag}>
-      {nested.map(child=>render(child,depth+1))}<DirectoryEntries {...directory} items={direct} allItems={directory.items} scope={scope} collapseKey={collapseKey} revealItem={revealItem}/>
+    if(!projection.groupIds.has(group.id))return null;
+    const direct=directory.items.filter(item=>item.groupId===group.id&&(!item.parentId||!itemIds.has(item.parentId))&&projection.itemIds.has(item.id)),all=directory.items.filter(groupMatches(groups,group.id)),nested=children.get(group.id)||[];
+    const count=directory.searching?all.filter(item=>projection.matches.has(item.id)).length:all.length;
+    return <DirectoryFolder key={group.id} id={group.id} scope={scope} name={group.name} count={count} groupId={group.id} onOpen={onOpenFolder?()=>onOpenFolder(group.id):undefined} active={activeFolder===group.id} action={manage(group)} defaultCollapsed={depth>0} searchExpansion={searchExpansion} context={directory.searching&&!projection.groupMatches.has(group.id)} revealKey={revealPath.has(group.id)?actions.revealKey:undefined} revealItemKey={itemPath.has(group.id)?revealItem||undefined:undefined} collapseKey={normalCollapse} rowProps={drag.rowProps(group)} dragging={drag.drag?.id===group.id} drop={drag.drag?.target===group.id} grip={canDrag}>
+      {nested.map(child=>render(child,depth+1))}<DirectoryEntries {...directory} items={direct} allItems={directory.items} scope={scope} collapseKey={normalCollapse} revealItem={revealItem}/>
     </DirectoryFolder>;
   };
-  const ungrouped=directory.items.filter(item=>!item.groupId&&(!item.parentId||!directory.items.some(n=>n.id===item.parentId)));
+  const ungrouped=directory.items.filter(item=>!item.groupId&&(!item.parentId||!itemIds.has(item.parentId))&&projection.itemIds.has(item.id));
   const entryDrag=directory.reorder?.drag;
   const showRootMenu=(x:number,y:number)=>{const menu=drag.root.current?.querySelector<HTMLDetailsElement>(':scope>.tree-root-menu');if(menu){menu.dataset.menuX=String(x);menu.dataset.menuY=String(y);menu.open=true;positionTreeMenu(menu);menu.querySelector<HTMLButtonElement>('.menu-panel button:not(:disabled)')?.focus();}};
   return <div ref={drag.root} className="tree-groups" tabIndex={0} aria-label={prefix==='planning'?'规划文件夹':'设定文件夹'} data-directory-group-id="" data-group-parent-id="" onPointerDownCapture={drag.onPointerDownCapture} onClickCapture={drag.onClickCapture} onContextMenu={event=>{if(!(event.target as HTMLElement).closest('.tree-folder-row,.directory-entry,.menu')){event.preventDefault();event.stopPropagation();showRootMenu(event.clientX,event.clientY);}}} onKeyDown={event=>{if(event.target===event.currentTarget&&(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){event.preventDefault();const box=event.currentTarget.getBoundingClientRect();showRootMenu(box.left+12,box.top+12);}}}>
     <TreeGroupMenu name="根目录" root restoreFocus={()=>drag.root.current?.focus()}>{newItems.map(item=><button key={item.label} disabled={busy} onClick={()=>item.create(null)}>{item.label}</button>)}<button disabled={busy} onClick={()=>void actions.create()}>新建文件夹</button></TreeGroupMenu>
+    {directory.searching&&<div className="directory-search-count" role="status">{projection.matches.size+projection.groupMatches.size} 项匹配</div>}
     {(children.get(null)||[]).map(group=>render(group,0))}
-    <DirectoryEntries {...directory} items={ungrouped} allItems={directory.items} scope={scope} collapseKey={collapseKey} revealItem={revealItem}/>
+    <DirectoryEntries {...directory} items={ungrouped} allItems={directory.items} scope={scope} collapseKey={normalCollapse} revealItem={revealItem}/>
     {(drag.drag||entryDrag)&&<div className="tree-root-drop" data-directory-group-id="" data-group-parent-id="" data-group-drop={drag.drag?.target===null||entryDrag?.target?.groupId===null&&!entryDrag?.target?.parentId}>移到根目录</div>}
     {drag.error&&<p className="directory-reorder-error" role="alert">{drag.error}</p>}
-    {!directory.items.length&&!groups.length&&<p className="directory-empty">{directory.searching?'没有匹配项':'暂无内容'}</p>}
+    {!projection.itemIds.size&&!projection.groupIds.size&&<p className="directory-empty">{directory.searching?'没有匹配项':'暂无内容'}</p>}
   </div>;
 }

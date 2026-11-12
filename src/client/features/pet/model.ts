@@ -2,13 +2,18 @@ export type PetRole = 'bigfish' | 'cuigengji';
 export type PetMood = 'idle' | 'thinking' | 'writing' | 'waiting' | 'celebrate' | 'sleepy' | 'reacting' | 'error';
 export type PetRPC = (action: string, args: Record<string, unknown>, sessionId?: string) => Promise<any>;
 export interface ActivityStats {
+  // Prose is the signed net change saved on that day; past days stay fixed.
   proseAdded: number; settingAdded: number; planningChanges: number; conversationInput:number;
   chaptersTouched: number; settingsTouched: number;
   byActor?: Record<'human' | 'agent', Omit<ActivityStats, 'byActor'>>;
 }
+export interface ManuscriptProgress {
+  words:number;chapters:number;novels:{novelId:string;title:string;words:number;chapters:number}[];
+}
 export interface ActivityResult {
   date: string; novelId: string | null; title: string | null; stats: ActivityStats;
   novels?: { novelId: string; title: string; stats: ActivityStats }[];
+  manuscript?:ManuscriptProgress;
 }
 export interface PetSessionStatus { running?: boolean; pendingInteraction?: { kind: string } | null }
 export interface RecordNovel {
@@ -17,6 +22,7 @@ export interface RecordNovel {
 export interface WritingRecordResult {
   from:string;to:string;novelId:string|null;title:string|null;stats:ActivityStats;
   novels:RecordNovel[];daily:{date:string;stats:ActivityStats;novels:RecordNovel[]}[];activeDays:number;
+  manuscript?:ManuscriptProgress;
 }
 export interface PetStatusSource {
   getSnapshot: () => ReadonlyMap<string, PetSessionStatus>;
@@ -32,6 +38,8 @@ export const moodLabels: Record<PetMood, string> = {
 };
 export const emptyStats: ActivityStats = Object.freeze({ proseAdded: 0, settingAdded: 0, planningChanges: 0, conversationInput:0, chaptersTouched: 0, settingsTouched: 0 });
 export const formatCount = (value: number | undefined) => Math.max(0, Number(value) || 0).toLocaleString('zh-CN');
+export const formatNetCount = (value:number|undefined) => (Number(value)||0).toLocaleString('zh-CN');
+export const formatActivityCount = (key:keyof ActivityStats,value:number|undefined) => key==='proseAdded'?formatNetCount(value):formatCount(value);
 export function dateLabel(date: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   return match ? `${Number(match[2])}月${Number(match[3])}日` : '今天';
@@ -45,7 +53,8 @@ export function petMessage(role: PetRole, mood: PetMood, stats: ActivityStats, h
   if (mood === 'writing') return 'AI 正在处理当前对话，我陪你一起等它。';
   if (mood === 'celebrate') return '刚刚又保存了一点新进展，给你一颗小星星！';
   if (mood === 'sleepy') return '夜深了，记下这个念头，明天也能接着写。';
-  if (stats.proseAdded) return `今天已写下 ${formatCount(stats.proseAdded)} 字正文，一点点把故事变完整。`;
+  if (stats.proseAdded > 0) return `今天正文净增 ${formatCount(stats.proseAdded)} 字，一点点把故事变完整。`;
+  if (stats.proseAdded < 0) return `今天正文净减少 ${formatCount(-stats.proseAdded)} 字，删改也是打磨故事。`;
   if (stats.settingAdded || stats.planningChanges) return '人物和情节在慢慢变清楚，构思也算进展。';
   return role === 'bigfish' ? '从一句开始也很好，我在这里陪着你。' : '今天想先写一段，还是聊聊接下来的情节？';
 }

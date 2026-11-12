@@ -14,16 +14,21 @@ function failure(error) {
   };
 }
 function registerRpcRoute(ctx, services) {
-  const { dispatch, workData, transfer, maintenance, desktopPet, libraries } = services;
+  const { dispatch, workData, transfer, maintenance, desktopPet, libraries, usage } = services;
   const ensureReady = () => maintenance?.ensureReady();
   const dispatchRpc = async (payload, signal, admitted = false) => {
-    if (libraries && !admitted && !String(payload?.action).startsWith("library.")) return libraries.use(() => dispatchRpc(payload, signal, true)).catch(failure);
+    if (libraries && !admitted && !String(payload?.action).startsWith("library.") && !String(payload?.action).startsWith("usage.")) return libraries.use(() => dispatchRpc(payload, signal, true)).catch(failure);
     try {
       signal.throwIfAborted();
       if (!record(payload) || !HUMAN_ACTIONS.includes(payload.action)) throw invalid("\u65E0\u6548\u7684\u50AC\u66F4\u59EC\u64CD\u4F5C");
       const { action, args: input = {}, sessionId } = payload;
       const args = record(input) ? { ...input } : input;
       if (!record(args)) throw invalid("args \u5FC5\u987B\u662F\u5BF9\u8C61");
+      if (action.startsWith("usage.")) {
+        if (!usage) throw invalid("\u8BB0\u8D26\u670D\u52A1\u5C1A\u672A\u5C31\u7EEA");
+        delete args.__libraryRoot;
+        return { ok: true, value: await usage.dispatch(action, args) };
+      }
       if (args.__libraryRoot && args.__libraryRoot !== services.dataRoot) throw Object.assign(new Error("\u4F5C\u54C1\u5E93\u5DF2\u5207\u6362\uFF0C\u65E7\u9875\u9762\u7684\u7F16\u8F91\u5DF2\u4FDD\u7559\uFF0C\u8BF7\u5237\u65B0\u540E\u7EE7\u7EED"), { code: "LIBRARY_CHANGED" });
       delete args.__libraryRoot;
       if (sessionId !== void 0 && (typeof sessionId !== "string" || !sessionId.trim() || sessionId.length > 512)) {

@@ -46,7 +46,7 @@ const bookPath = (id, directories) => {
 };
 const legacyBookPath = (id) => "novels/" + fileId(id);
 const pageKey = (id) => id === null ? "~main" : fileId(id);
-const sections = ["chapters", "nodes", "edges", "memoryGroups", "planning", "preset", "plan", "tavernSources", "collaboration", "collaborationProgress"];
+const sections = ["chapters", "nodes", "edges", "memoryGroups", "planning", "preset", "plan", "tavernSources", "collaboration", "collaborationProgress", "variables"];
 const libraryRow = (novel) => ({
   ...Object.fromEntries(["id", "title", "description", "revision", "archived", "archivedAt", "createdAt", "updatedAt"].filter((key) => own(novel, key)).map((key) => [key, novel[key]])),
   ...novel.hasCollaboration || collaborationIndex(novel) ? { hasCollaboration: true } : {},
@@ -208,7 +208,7 @@ function splitNovel(id, novel, directories, storageVersion = STORAGE_VERSION, oc
       for (const transaction of novel.planning.transactions) put("history/planning/" + fileId(transaction.id) + ".json", transaction);
     }
   }
-  for (const [field, path] of [["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"], ["collaboration", "collaboration.json"], ["collaborationProgress", "collaboration-progress.json"]]) if (own(novel, field)) put(path, novel[field]);
+  for (const [field, path] of [["variables", "variables.json"], ["preset", "preset.json"], ["plan", "planning/legacy.json"], ["tavernSources", "imports/originals.json"], ["collaboration", "collaboration.json"], ["collaborationProgress", "collaboration-progress.json"]]) if (own(novel, field)) put(path, novel[field]);
   const collaboration = projectCollaboration(novel);
   if (collaboration) put("collaboration-index.json", collaboration);
   return files;

@@ -86,7 +86,7 @@ test('preset persistence enforces human authorship and CAS; enabled requirements
   assert.deepEqual(await restored.dispatch('preset.get',{novelId:novel.id},human),saved);
   await store.dispatch('preset.set',{expectedRevision:1,preset:{...saved,enabled:false}},human);
   assert.equal((await store.dispatch('preset.read',{},human)).content,'');
-  assert.equal((await assemble('author')).sections.some(s=>s.name==='cuigengji:preset'),false);
+  assert.deepEqual(await assemble('author'),bound);
   const other=await store.dispatch('novel.create',{title:'另一本'},human);
   await store.dispatch('preset.set',{novelId:other.id,expectedRevision:0,preset:{...preset,blocks:[{...preset.blocks[0],content:'另一部作品的要求'}]}},human);
   await store.dispatch('binding.set',{novelId:other.id},human);
@@ -94,4 +94,6 @@ test('preset persistence enforces human authorship and CAS; enabled requirements
   assert.equal(switched.sections.filter(s=>s.name==='cuigengji:preset').length,1);
   assert.equal(switched.sections.at(-1).text,'作者的写作要求：\n另一部作品的要求');
   assert.doesNotMatch(JSON.stringify(switched),/保持人物视角/);
+  await store.dispatch('binding.set',{novelId:novel.id},human);
+  assert.deepEqual(await assemble('author'),bound);
 });

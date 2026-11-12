@@ -3,7 +3,7 @@ import {spawn} from 'node:child_process';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {chromium,expect} from '@playwright/test';
-import {showOrganization,selectPlanningPage} from './helpers/navigation.mjs';
+import {showOrganization,selectPlanningPage,moveBatch} from './helpers/navigation.mjs';
 const root=resolve(import.meta.dirname,'..'),out=join(root,'test-results','canvas-workspaces');
 await mkdir(out,{recursive:true});
 const host=spawn(process.execPath,['scripts/preview-workbench.mjs'],{cwd:root,stdio:['ignore','pipe','pipe']});
@@ -31,7 +31,7 @@ try{
  const newPage=async name=>{await button('新建画布').click();const dialog=page.getByRole('dialog',{name:'新建画布',exact:true});await dialog.getByLabel('画布名称',{exact:true}).fill(name);await dialog.getByLabel('用途摘要',{exact:true}).fill('独立画布验证');await dialog.getByRole('button',{name:'保存画布',exact:true}).click();await expect(dialog).toHaveCount(0);};
  const dragBy=async(locator,dx,dy)=>{await locator.scrollIntoViewIfNeeded();const box=await locator.boundingBox();const x=box.x+45,y=box.y+18;await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+dx,y+dy,{steps:12});await page.mouse.up();};
  await page.goto(url);await button('规划').click();await showOrganization(page);await expect(card(plan.mapping.a)).toBeVisible();
- await expect(page.locator('.directory-filters')).toHaveCount(0);await expect(page.getByRole('listbox',{name:'规划画布'})).toBeVisible();
+ await expect(page.locator('.directory-filters')).toHaveCount(0);await expect(page.getByRole('combobox',{name:'规划画布'})).toBeVisible();
  await button('适应视图').click();
  await button('收纳文件夹 雨城篇').click();await expect(card(plan.mapping.a)).toHaveCount(0);await expect(folder(plan.mapping.root)).toContainText('3 项内容');await expect(folder(plan.mapping.root)).toContainText('2 条外部连接');
  await expect(page.locator(`[data-entry-id="${plan.mapping.note}"]`)).toHaveCount(0);await expect(page.locator('.tree-folder[data-tree-id="'+plan.mapping.root+'"]')).toBeVisible();
@@ -71,7 +71,7 @@ try{
  await expect.poll(async()=>(await run('graph.get',{nodeId:messenger.id})).content).toBe('外城信使正文\n'.repeat(30));const saved=await run('graph.get',{nodeId:messenger.id});expect(saved.groupId).toBe(newGroup.id);expect(saved.pageId).toBe(null);
  await button('‹ 返回设定').click();await expect(card(messenger.id)).toBeVisible();await expect(card(a.id)).toHaveCount(0);checks.push('resource folder is the canvas scope; nested context creation retains one identity and thirty lines of prose');
  // Classification changes keep the source identity and external relationships intact.
- await button('全书设定').click();await expect(card(a.id)).toBeVisible();await button('多选').click();const childToggle=folderRow(mc.id).locator('.tree-chevron');if(await childToggle.getAttribute('aria-expanded')==='false')await childToggle.click();await entry(a.id).getByRole('checkbox').check();await page.getByLabel('批量移动目标',{exact:true}).selectOption('group:'+newGroup.id);await page.getByRole('region',{name:'批量管理',exact:true}).getByRole('button',{name:'移动',exact:true}).click();await button('完成').click();
+ await button('全书设定').click();await expect(card(a.id)).toBeVisible();await button('多选').click();const childToggle=folderRow(mc.id).locator('.tree-chevron');if(await childToggle.getAttribute('aria-expanded')==='false')await childToggle.click();await entry(a.id).getByRole('checkbox').check();await moveBatch(page,'group:'+newGroup.id);await button('完成').click();
  await expect.poll(async()=>(await run('graph.get',{nodeId:a.id})).groupId).toBe(newGroup.id);await folderRow(outer.id).getByRole('button',{name:'外城设定',exact:true}).click();await expect(card(a.id)).toBeVisible();const moved=await run('graph.get',{nodeId:a.id});expect(moved.content).toBe(a.content);expect(moved.id).toBe(a.id);expect((await run('edge.list',{nodeId:a.id})).length).toBe(1);await expect(page.locator('.resource-external')).toContainText('1');
  await button('适应视图').click();await page.screenshot({path:join(out,'settings-wide.png')});await page.setViewportSize({width:440,height:850});await showOrganization(page);await expect(page.getByRole('navigation',{name:'设定路径'})).toContainText('外城设定');await page.screenshot({path:join(out,'settings-narrow.png')});
  await page.setViewportSize({width:1500,height:1000});await page.evaluate(()=>{document.documentElement.style.cssText='--dsw-alias-bg-base:#20251f;--dsw-alias-label-primary:#e4e8de;--dsw-alias-label-secondary:#a8b0a0;--dsw-alias-border-l1:#404a3b;--dsw-alias-state-success-primary:#a4c195';});await button('适应视图').click();await page.screenshot({path:join(out,'settings-dark.png')});

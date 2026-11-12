@@ -39,7 +39,7 @@ try{
  await button('展开文件夹 主角行动').click();await expect(page.locator('.planning-card')).toHaveCount(7);await button('撤销布局').click();await idle();expect(await position(tx.mapping.a)).toEqual(aBefore);expect(await position(tx.mapping.b)).toEqual(bBefore);
  // Focus is a view, moving the focus to a direct neighbor does not rewrite the graph.
  const fullView=await page.locator('.planning-canvas').evaluate(el=>getComputedStyle(el).transform);
- await card('黑暗中争夺账本').locator('p').click();await button('只看相关').click();await expect(page.locator('.planning-card')).toHaveCount(6);
+ await card('黑暗中争夺账本').locator('p').click({button:'right'});await page.getByRole('menuitem',{name:'只看相关',exact:true}).click();await expect(page.locator('.planning-card')).toHaveCount(6);
  await card('封锁出口').locator('p').click();await expect(page.locator('.planning-card')).toHaveCount(3);await button('返回全图').click();await expect(page.locator('.planning-card')).toHaveCount(7);await expect.poll(()=>page.locator('.planning-canvas').evaluate(el=>getComputedStyle(el).transform)).toBe(fullView);
  // Rearrangement is saved atomically, keeps enclosing folders, and is undoable.
  const preLayout=await read();await button('自动排布').click();await idle();await expect.poll(async()=>(await read()).board.sequence).toBeGreaterThan(preLayout.board.sequence);
@@ -53,7 +53,7 @@ try{
  const disconnected=await read();expect(disconnected.board.items).toEqual(preDisconnect.board.items);expect(disconnected.board.edges.length).toBe(preDisconnect.board.edges.length-2);expect(disconnected.board.edges.some(e=>[tx.mapping.a,tx.mapping.b].includes(e.from)&&e.to===tx.mapping.f)).toBe(false);await page.mouse.move(4,4);await expect(page.locator('.edge-selected,.edge-muted')).toHaveCount(0);
  await button('展开文件夹 主角行动').click();await expect(page.locator('.planning-card')).toHaveCount(7);
  await button('设定').click();await button('适应视图').click();await expect(page.locator('.planning-card')).toHaveCount(5);const settingBefore=await call('graph.list',{novelId});
- await card('陆沉').locator('p').click();await button('只看相关').click();await expect(page.locator('.planning-card')).toHaveCount(3);await card('码头守卫').locator('p').click();await expect(page.locator('.planning-card')).toHaveCount(3);
+ await card('陆沉').locator('p').click({button:'right'});await page.getByRole('menuitem',{name:'只看相关',exact:true}).click();await expect(page.locator('.planning-card')).toHaveCount(3);await card('码头守卫').locator('p').click();await expect(page.locator('.planning-card')).toHaveCount(3);
  await button('返回全图').click();await expect(page.locator('.planning-card')).toHaveCount(5);expect(await call('graph.list',{novelId})).toEqual(settingBefore);
  await page.screenshot({path:join(shots,'settings-wide.png')});
  for(const width of [420,320]){await page.setViewportSize({width,height:850});await button('适应视图').click();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);expect(await canvas.evaluate(el=>el.scrollLeft)).toBe(0);await page.screenshot({path:join(shots,`settings-${width}.png`)});}

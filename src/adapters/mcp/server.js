@@ -3,6 +3,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { MEMORY_ACTIONS, toolName } from './actions.js';
 import { memoryArgsSchema, memoryActionDescription } from '../dsh/memory-schema.js';
+import {variablesJsonSchema,variableActionDescription} from '../dsh/variables-schema.js';
+import {presetJsonSchema,presetActionDescription} from '../dsh/preset-schema.js';
 import { GUIDANCE_SECTIONS } from '../dsh/guidance.js';
 
 // This process owns no project files. Its capability is one session-bound token.
@@ -20,8 +22,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     name: toolName(action),
     description: action === 'guidance.read'
       ? '按需读取催更姬的写作指引模块，填写 section。基础规则不要求绑定作品；preset/all 会附带目标作品的有效预设，未选作品时注明预设不可用，规则仍可读取。参考文件相对返回的 resourceBase。'
-      : memoryActionDescription(action),
-    inputSchema: action.startsWith('graph.')||action.startsWith('edge.') ? memoryArgsSchema
+      : action.startsWith('preset.')?presetActionDescription(action):action.startsWith('variables.')?variableActionDescription(action):memoryActionDescription(action),
+    inputSchema: action.startsWith('preset.')?presetJsonSchema:action.startsWith('variables.')?variablesJsonSchema:action.startsWith('graph.')||action.startsWith('edge.') ? memoryArgsSchema
       : action==='guidance.read' ? {type:'object',additionalProperties:true,properties:{section:{type:'string',enum:GUIDANCE_SECTIONS},novelId:{type:'string'}}}
       : { type: 'object', additionalProperties: true },
   })),

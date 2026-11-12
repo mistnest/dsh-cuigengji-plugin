@@ -12,6 +12,7 @@ const modules = Object.freeze({
   write: entry('write', '正文写作规则'),
   plan: entry('plan', '规划与共享画布规则'),
   memory: entry('memory', '人物与世界设定规则'),
+  variables: entry('variables', '可选剧情变量与状态维护'),
   revise: entry('revise', '审阅与修订规则'),
   story: entry('story', '长短篇创作流程与连续性'),
 });

@@ -50,7 +50,7 @@ try {
   const stableTyping = async (editor, label) => {
     // A viewport resize first updates the shared detail layout, then its native
     // autosized textarea. Wait for those real layout frames before hit testing.
-    await page.waitForFunction(()=>{const root=document.querySelector('.organized-workspace');return !root||root.dataset.narrow===String(root.clientWidth<560)&&root.dataset.detail===(root.clientWidth<1060?'full':'side');});
+    await page.waitForFunction(()=>{const root=document.querySelector('.organized-workspace');return !root||root.dataset.narrow===String(root.clientWidth<560)&&root.dataset.detail==='side';});
     await editor.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     // Scroll deep into the document and click visible text like the author does.
     // Programmatically moving an offscreen textarea caret has its own delayed

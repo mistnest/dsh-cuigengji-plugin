@@ -6,7 +6,6 @@ import {useDialog} from '../../dialog.tsx';
 import {groupMatches,groupDescendants} from '../../../domain/directory/groups.ts';
 import type {Point} from '../../../contracts/planning.ts';
 import type {SettingIndex,SettingDocument,SettingEdge} from './model.ts';
-import {kind} from './model.ts';
 import type {QuickCardValue} from '../../shared/QuickCardDraft.tsx';
 export interface SettingCreation {key:string;type:'character_card'|'world_entry';position:Point;groupId:string|null;connection?:{id:string;side:'in'|'out';expectedRevision?:number}}
 export function useSettingsWorkspace({call,novelId,tick,run,busy}:FeatureServices) {
@@ -40,19 +39,17 @@ export function useSettingsWorkspace({call,novelId,tick,run,busy}:FeatureService
    await resource.reload();setCreating(null);setFocused((result.node||result).id);setQuery('');
  });
  const saved=(n:SettingDocument|null)=>{if(n)trail.visit(n.id);else trail.clear();setNode(n);setSelected(n?.id||null);};
- const directoryNodes=nodes.filter(n=>!query||`${n.name} ${n.summary}`.toLowerCase().includes(query.toLowerCase()));
- const openDirectory=(id:string,details=true)=>{if(!visible.some(n=>n.id===id))switchFolder(nodes.find(n=>n.id===id)?.groupId||null);setFocused(id);setHighlighted([id]);if(details)void open(id);else{request.current++;trail.clear();setNode(null);setSelected(null);setEdge(null);}};
- const batchItems=visible.filter(n=>!query||`${n.name} ${n.summary}`.toLowerCase().includes(query.toLowerCase())).map(n=>({id:n.id,title:n.name,summary:n.summary,meta:[kind(n),groups.find(g=>g.id===n.groupId)?.name].filter(Boolean).join(' · ')}));
+ const openDirectory=(id:string,details=true)=>{if(!visible.some(n=>n.id===id)){switchFolder(nodes.find(n=>n.id===id)?.groupId||null);setQuery(query);}setFocused(id);setHighlighted([id]);if(details)void open(id);else{request.current++;trail.clear();setNode(null);setSelected(null);setEdge(null);}};
  const beginBatch=()=>{request.current++;trail.clear();setNode(null);setSelected(null);setBatch(true);setChecked([]);};
  const endBatch=()=>{setBatch(false);setChecked([]);};
  const connect=(from:string,to:string)=>setEdge({from,to,name:'',content:''});
  const connectDirect=(from:string,to:string)=>run(()=>call('edge.create',{novelId,from,to,name:'',content:'',requestId:crypto.randomUUID()}));
  const saveLayout=(points:Record<string,Point>,revisions:Record<string,number>={},requestId:string=crypto.randomUUID())=>run(()=>call('graph.layout',{novelId,requestId,positions:Object.entries(points).filter(([id])=>nodes.some(n=>n.id===id)).map(([nodeId,position])=>({nodeId,position,expectedRevision:revisions[nodeId]??nodes.find(n=>n.id===nodeId)?.revision})),folders:Object.entries(points).filter(([id])=>groups.some(g=>g.id===id)).map(([groupId,position])=>({groupId,position,expectedRevision:revisions[groupId]??groups.find(g=>g.id===groupId)?.revision}))}));
  const arrangeLayout=async(ids:string[],foldedIds:string[]=[])=>{const chosen=nodes.filter(n=>ids.includes(n.id)||groups.some(g=>ids.includes(g.id)&&groupMatches(groups,g.id)(n)));if(!chosen.length)return {};const result=await call('graph.layout.get',{novelId,scopeGroupId:folderId,mode:'all',grouped:true,foldedIds,members:chosen.map(n=>({id:n.id,expectedRevision:n.revision}))});return result.positions as Record<string,Point>;};
- const disconnect=(items:SettingEdge[])=>run(()=>call('edge.disconnect',{novelId,requestId:crypto.randomUUID(),confirm:true,edges:items.map(e=>({id:e.id,expectedRevision:e.revision}))}));
+ const disconnect=(items:(SettingEdge&{id:string;revision:number})[])=>run(()=>call('edge.disconnect',{novelId,requestId:crypto.randomUUID(),confirm:true,edges:items.map(e=>({id:e.id,expectedRevision:e.revision}))}));
  const removeNodes=async(ids:string[])=>{if(ids.length&&!busy&&await confirm(`删除选中的 ${ids.length} 张设定卡片及其关系？`))await run(()=>call('graph.remove',{novelId,requestId:crypto.randomUUID(),confirm:true,members:ids.map(id=>({id,expectedRevision:nodes.find(n=>n.id===id)?.revision}))}));};
  const duplicateNodes=(ids:string[],points:Record<string,Point>={})=>run(()=>call('graph.duplicate',{novelId,requestId:crypto.randomUUID(),members:ids.map(id=>({id,expectedRevision:nodes.find(n=>n.id===id)?.revision,...(points[id]?{position:points[id]}:{})}))}));
  const moveNodes=(ids:string[],groupId:string|null)=>run(()=>call('graph.move',{novelId,requestId:crypto.randomUUID(),pageId:null,groupId,members:ids.map(id=>({id,expectedRevision:nodes.find(n=>n.id===id)?.revision}))}));
  const createFolder=async(ids:string[],position?:Point)=>{const name=await ask('文件夹名称');if(!name?.trim())return;const members=nodes.filter(n=>ids.includes(n.id)),parentId=members.length&&members.every(n=>(n.groupId??null)===(members[0].groupId??null))?members[0].groupId??folderId:folderId;await run(async()=>{const group=await call('graph.group.create',{novelId,requestId:crypto.randomUUID(),name,parentId,pageId:null,position:position||canvas.current?.()||{x:40,y:60},members:members.map(n=>({id:n.id,expectedRevision:n.revision}))});await resource.reload();setFocused(group.id);});};
- return {batch,focused,setFocused,highlighted,setHighlighted,directoryNodes,openDirectory,creating,setCreating,saveCreation,node,edge,setEdge,query,setQuery,checked,setChecked,error,canvas,trail,resource,nodes,edges,groups,canvasGroups,folderId,pageReady,switchFolder,open,create,saved,allNodes:nodes,related:edges.filter(e=>e.from===node?.id||e.to===node?.id),visible,batchItems,beginBatch,endBatch,clear:()=>setQuery(''),close,connect,connectDirect,saveLayout,arrangeLayout,disconnect,removeNodes,duplicateNodes,moveNodes,createFolder};
+ return {batch,focused,setFocused,highlighted,setHighlighted,openDirectory,creating,setCreating,saveCreation,node,edge,setEdge,query,setQuery,checked,setChecked,error,canvas,trail,resource,nodes,edges,groups,canvasGroups,folderId,pageReady,switchFolder,open,create,saved,allNodes:nodes,related:edges.filter(e=>e.from===node?.id||e.to===node?.id),visible,beginBatch,endBatch,clear:()=>setQuery(''),close,connect,connectDirect,saveLayout,arrangeLayout,disconnect,removeNodes,duplicateNodes,moveNodes,createFolder};
 }

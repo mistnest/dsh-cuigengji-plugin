@@ -66,6 +66,13 @@ export function copyInto(source: Novel, target: Novel, options: ImportOptions): 
   }
   if (n.tavernSources) {target.tavernSources ??= {}; for (const [id, value] of Object.entries(n.tavernSources)) if (!own(target.tavernSources, id)) target.tavernSources[id] = copy(value);}
   if (n.preset) mergePreset(target, n.preset, options.presetPolicy || 'append');
+  if(n.variables){
+    const state=copy(n.variables),ids=new Map(state.commits.map(c=>[c.id,randomUUID() as string]));
+    state.enabled=false;
+    state.definitions=state.definitions.map(d=>({...d,...(d.resourceId?{resourceId:nodeIds.get(d.resourceId)}:{})}));
+    state.commits=state.commits.map(c=>({...c,id:ids.get(c.id)!,parentId:c.parentId?ids.get(c.parentId)!:null,actor:{kind:'human'},anchor:c.anchor.kind==='chapter'?{...c.anchor,chapterId:chapterIds.get(c.anchor.chapterId)!}:c.anchor}));
+    target.variables=state;
+  }
   if (n.planning || n.plan) {
     const board = ensurePlanning(n), draft = ensurePlanning(target);
     draft.pages ??= {}; draft.decorations ??= {};
@@ -99,12 +106,13 @@ export function copyInto(source: Novel, target: Novel, options: ImportOptions): 
   target.revision++; target.updatedAt = time;
 }
 function mergePreset(target: Novel, preset: PresetData, policy: 'append' | 'replace') {
-  const previous = target.preset, value = copy(preset), used = new Set(policy === 'append' ? previous?.blocks.map(b => b.identifier) : []);
+  const previous = target.preset, value = copy(preset), append = policy === 'append' && previous;
+  const used = new Set(append ? previous.blocks.map(b => b.identifier) : []);
   for (const b of value.blocks) {if (used.has(b.identifier)) b.identifier = randomUUID(); used.add(b.identifier);}
-  target.preset = {...value, id: previous?.id || randomUUID(), name: policy === 'append' && previous ? previous.name : value.name,
-    blocks: policy === 'append' && previous ? [...copy(previous.blocks), ...value.blocks] : value.blocks,
-    enabled: false, revision: (previous?.revision || 0) + 1, updatedAt: new Date().toISOString(),
-    ...(policy === 'append' && previous?.raw !== undefined ? {raw: {previous: previous.raw, imported: value.raw ?? null}} : {})};
+  target.preset = {...value, id: previous?.id || randomUUID(), name: append ? previous.name : value.name,
+    blocks: append ? [...copy(previous.blocks), ...value.blocks] : value.blocks,
+    enabled: append ? previous.enabled : false, revision: (previous?.revision || 0) + 1, updatedAt: new Date().toISOString(),
+    ...(append && previous.raw !== undefined ? {raw: {previous: previous.raw, imported: value.raw ?? null}} : {})};
   validatePreset(target.preset);
 }
 export function copyWork(source: Novel, options: ImportOptions): Novel {

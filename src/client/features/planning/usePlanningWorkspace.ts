@@ -4,7 +4,6 @@ import {useWorkspacePreference,useWorkspaceResource,type FeatureServices} from '
 import {useDialog} from '../../dialog.tsx';
 import {newDecoration} from './Decorations.tsx';
 import {readPlanningSnapshot,readDecorations} from './data.js';
-import {statusNames} from './model.ts';
 import type {NodeIndex,PlanningNode,PlanningEdge,PlanningGroup,Decoration,Point,Operation,Transaction} from '../../../contracts/planning.ts';
 import type {PageIndex} from './Pages.tsx';
 import type {CanvasCreation,CanvasDraftValue} from './CanvasDraft.tsx';
@@ -84,11 +83,8 @@ export function usePlanningWorkspace({call,novelId,tick,run,busy}:FeatureService
    if(legacy)operations.push({op:'decoration.delete',id:legacy.id,expectedRevision:legacy.revision,confirm:true});
    await transact(operations,legacy?'将旧讨论框转换为文件夹':'收纳到文件夹');
  };
- const directoryNodes=nodes.filter(n=>!query||`${n.title} ${n.summary} ${n.threads.join(' ')}`.toLowerCase().includes(query.toLowerCase()));
  const visible=nodes;
- const matchingDecorations=decorations.filter(d=>!query||`${d.title} ${d.content}`.toLowerCase().includes(query.trim().toLowerCase()));
  const openDirectory=(id:string,details=true)=>{setCreated(id);setHighlighted([id]);if(details)open(id);else close();};
- const batchItems=directoryNodes.map(n=>({id:n.id,title:n.title,summary:n.summary,meta:[statusNames[n.status],groups.find(g=>g.id===n.groupId)?.name].filter(Boolean).join(' · ')}));
  const beginBatch=()=>{close();setBatch(true);setChecked([]);};
  const endBatch=()=>{setBatch(false);setChecked([]);};
  const openHistory=()=>run(async()=>{let result=await call('planning.history',{novelId,offset:0,limit:200});setChanges(result);setHistoryOpen(true);});
@@ -104,5 +100,5 @@ export function usePlanningWorkspace({call,novelId,tick,run,busy}:FeatureService
    }
    await refreshWritten();setQuery('');setPoll(n=>n+1);
  });
- return {canvas,creating,created,batch,selected,query,setQuery,checked,setChecked,highlighted,setHighlighted,directoryNodes,openDirectory,historyOpen,setHistoryOpen,changes,setChanges,pageId,pageReady,snapshot,nodes,edges,groups,pages,decorations,matchingDecorations,seen,setSeen,sequence,trail,open,close,back,refreshWritten,transact,connect,beginCreation,beginChild,continueFrom,disconnect,add,decorate,switchPage,moveToPage,saveDecoration,saveLayout,arrangeLayout,removeObjects,duplicateObjects,moveObjects,setStage,createStage,createFolder,visible,batchItems,beginBatch,endBatch,openHistory,saveCreation,resource,decoration,setDecoration,setCreating,setCreated,confirm};
+ return {canvas,creating,created,batch,selected,query,setQuery,checked,setChecked,highlighted,setHighlighted,openDirectory,historyOpen,setHistoryOpen,changes,setChanges,pageId,pageReady,snapshot,nodes,edges,groups,pages,decorations,seen,setSeen,sequence,trail,open,close,back,refreshWritten,transact,connect,beginCreation,beginChild,continueFrom,disconnect,add,decorate,switchPage,moveToPage,saveDecoration,saveLayout,arrangeLayout,removeObjects,duplicateObjects,moveObjects,setStage,createStage,createFolder,visible,beginBatch,endBatch,openHistory,saveCreation,resource,decoration,setDecoration,setCreating,setCreated,confirm};
 }

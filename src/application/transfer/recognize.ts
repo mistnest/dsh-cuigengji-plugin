@@ -98,10 +98,13 @@ function manuscript(file: TransferFile): Recognized {
   const md = /\.md$/i.test(file.name);
   const lines = text.split('\n'), headings: {at: number; title: string}[] = [];
   let fence = false;
+  // Chinese volume/chapter headings, or Latin "Chapter/Chap." forms in TXT.
+  const chineseHeading = /^\s*(第[零〇一二三四五六七八九十百千万两\d]+[章节回](?:\s*[:：、.．-]?\s*[^\n]{0,100}))\s*$/;
+  const latinHeading = /^\s*((?:chapter|chap\.?|prologue|epilogue|序章|终章)\s*[.:\-—]?\s*(?:[零〇一二三四五六七八九十百千万两\d]+|[a-z]+)?[.:\-—]?\s*[^\n]{0,100})\s*$/i;
   for (let at = 0; at < lines.length; at++) {
     if (md && /^\s*(```|~~~)/.test(lines[at])) fence = !fence;
     if (fence) continue;
-    const match = md ? /^##\s+(.+?)\s*#*\s*$/.exec(lines[at]) : /^\s*(第[零〇一二三四五六七八九十百千万两\d]+[章节回](?:\s*[:：、.．-]?\s*[^\n]{0,100}))\s*$/.exec(lines[at]);
+    const match = md ? /^##\s+(.+?)\s*#*\s*$/.exec(lines[at]) : chineseHeading.exec(lines[at]) || latinHeading.exec(lines[at]);
     if (match) headings.push({at, title: match[1].trim()});
   }
   const sections: {title: string; content: string}[] = [];

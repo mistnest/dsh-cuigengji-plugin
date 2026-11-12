@@ -91,10 +91,13 @@ try {
   await page.evaluate(()=>{document.documentElement.style.cssText='--dsw-alias-bg-base:#17191f;--dsw-alias-label-primary:#e8eaf0;--dsw-alias-label-secondary:#a1a6b3;--dsw-alias-border-l1:#343946;--dsw-alias-state-business-primary:#6c8aff;';});
   await capture('recycle-dark');
   await row().getByRole('button',{name:`永久删除《${book.title}》`,exact:true}).click();
-  await expect(page.getByRole('dialog')).toContainText('无法从回收站恢复');
+  await expect(page.getByRole('dialog')).toContainText('删除后无法恢复');
   await page.getByRole('button',{name:'取消',exact:true}).click();await expect(row()).toBeVisible();
   await row().getByRole('button',{name:`永久删除《${book.title}》`,exact:true}).click();
-  await page.getByRole('button',{name:'确定',exact:true}).click();await expect(row()).toHaveCount(0);
+  const cleanup=page.getByRole('dialog',{name:'永久删除回收站内容',exact:true});
+  await expect(cleanup.getByLabel('删除前备份',{exact:true})).toHaveCount(0);
+  await cleanup.getByRole('button',{name:'永久删除 1 项',exact:true}).click();
+  await expect(cleanup.getByRole('status')).toContainText('已删除 1');await cleanup.getByRole('button',{name:'完成',exact:true}).click();await expect(row()).toHaveCount(0);
   expect((await call('novel.list',{includeArchived:true})).map(n=>n.id)).toEqual(expect.arrayContaining([other.id,extra.id]));
   expect((await call('novel.list',{includeArchived:true})).some(n=>n.id===book.id)).toBe(false);
   // The last live work can be recycled and the empty home still exposes its bin.

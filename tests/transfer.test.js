@@ -114,14 +114,14 @@ test('empty main canvases remain selectable and duplicate imported page names ar
   pages = Object.values((await s.target.load()).novels[s.targetNovel.id].planning.pages);
   assert.equal(new Set(pages.map(p => p.name)).size, pages.length);
 });
-test('preset export uses edited text; appending or replacing preserves order and disables the imported preset', async t => {
+test('preset export uses edited text; appending preserves the switch and replacing defaults to disabled', async t => {
   const s = await setup(t), file = await s.packet({kind: 'preset', novelId: s.n.id});
   await s.target.dispatch('preset.set', {novelId: s.targetNovel.id, expectedRevision: 0, preset: {name: '原有要求', enabled: true, blocks: [{identifier: 'voice', name: '原有', content: '原有文本', enabled: true}]}}, actor);
   await s.importFile(file, {mode: 'copy', targetId: s.targetNovel.id});
   let preset = (await s.target.load()).novels[s.targetNovel.id].preset;
-  assert.equal(preset.blocks.length, 2); assert.equal(preset.blocks[1].content, '使用修改后的写作要求。'); assert.notEqual(preset.blocks[0].identifier, preset.blocks[1].identifier); assert.equal(preset.enabled, false);
+  assert.equal(preset.blocks.length, 2); assert.equal(preset.blocks[1].content, '使用修改后的写作要求。'); assert.notEqual(preset.blocks[0].identifier, preset.blocks[1].identifier); assert.equal(preset.enabled, true);
   await s.importFile(file, {mode: 'copy', targetId: s.targetNovel.id, presetPolicy: 'replace'});
-  preset = (await s.target.load()).novels[s.targetNovel.id].preset; assert.equal(preset.blocks.length, 1); assert.equal(preset.name, '作者要求');
+  preset = (await s.target.load()).novels[s.targetNovel.id].preset; assert.equal(preset.blocks.length, 1); assert.equal(preset.name, '作者要求'); assert.equal(preset.enabled, false);
 });
 test('Tavern worldbook and preset recognition use existing parsing; subset does not leak other entries through raw sources', async t => {
   const s = await setup(t), file = {name: 'world.json', json: {entries: [{comment: '城市', content: '城市信息'}, {comment: '秘密', content: '不应导入的秘密'}]}};
@@ -163,6 +163,18 @@ test('TXT and Markdown export/import preserve chapters and body text, and raw te
   }
   const result = await s.importFile({name: '片段.txt', text: '　　这是一个保留缩进的片段。\n\n　　第二段。'}, {mode: 'copy', title: '新作品'});
   assert.equal(Object.values((await s.target.load()).novels[result.novelIds[0]].chapters).length, 1);
+});
+test('Latin chapter headings split TXT import into chapters like Chinese ones', async t => {
+  const s = await setup(t);
+  const file = {name: 'novel.txt', text: 'Chapter 1 The Letter\n\nShe opened it.\n\nChapter 2: The Reply\n\nHe wrote back.'};
+  const inspection = s.to.inspect({file});
+  assert.equal(inspection.catalog.books[0].chapters.length, 2);
+  assert.equal(inspection.catalog.books[0].chapters[0].title, 'Chapter 1 The Letter');
+  const result = await s.importFile(file, {mode: 'copy', title: '拉丁标题作品'});
+  const chapters = Object.values((await s.target.load()).novels[result.novelIds[0]].chapters).sort((a, b) => a.order - b.order);
+  assert.equal(chapters.length, 2);
+  assert.equal(chapters[0].title, 'Chapter 1 The Letter');
+  assert.equal(chapters[1].content, 'He wrote back.');
 });
 test('legacy JSON import is identified and requires no separate migration page', async t => {
   const s = await setup(t), file = {name: 'legacy.json', json: {project: {name: '旧版作品'}, chapters: [{title: '开篇', content: '旧正文'}]}};

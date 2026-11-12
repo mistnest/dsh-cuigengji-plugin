@@ -1,7 +1,7 @@
 import {portPoint,anchorVector,type AnchorSide,type Box,type CanvasEdge} from './model.ts';
 import type {Point} from '../../contracts/planning.ts';
 interface JunctionRef {id:string;point:Point;kind:'split'|'merge'}
-export interface Route {id:string;from:string;to:string;points:Point[];path:string;blocked:boolean;startSide:AnchorSide;endSide:AnchorSide;junctions?:JunctionRef[];labelPoints?:Point[];hitPath?:string}
+export interface Route {id:string;from:string;to:string;points:Point[];path:string;blocked:boolean;startSide:AnchorSide;endSide:AnchorSide;junctions?:JunctionRef[];labelPoints?:Point[];labelAnchors?:Point[];hitPath?:string}
 const near=(a:number,b:number)=>Math.abs(a-b)<.01;
 export function segmentClear(a:Point,b:Point,boxes:Box[],padding=0):boolean {
   return !boxes.some(r=>near(a.x,b.x)?a.x>r.x-padding+.01&&a.x<r.x+r.width+padding-.01&&Math.max(a.y,b.y)>r.y-padding+.01&&Math.min(a.y,b.y)<r.y+r.height+padding-.01

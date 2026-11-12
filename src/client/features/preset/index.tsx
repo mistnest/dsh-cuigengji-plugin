@@ -42,7 +42,7 @@ function PresetEditor({call, novelId, run, busy, initial, onTransfer, onBack, ba
     setOnlyUnsupported(false); setSelected(value.blocks.length);
     change((current: PresetDocument) => ({...current, blocks: [...current.blocks, {identifier: crypto.randomUUID(), name: '新提示词', content: '', role: 'system', enabled: true}]}));
   };
-  return <ManagementPage title="写作预设" description={value.name + ' · ' + (value.enabled ? '已启用，保存后从下一次回复生效' : '整套停用，条目仍保留')} {...{onBack, backLabel}}
+  return <ManagementPage title="写作预设" description={value.name + ' · ' + (value.enabled ? '已启用' : '整套停用') + ' · 保存后，新会话使用新版'} {...{onBack, backLabel}}
     documentClass="preset-management"
     actions={<>{!!value.blocks.length&&<label className="switch-control"><input type="checkbox" aria-label="启用" disabled={busy} checked={value.enabled} onChange={event => change({...value, enabled: event.target.checked})}/>启用预设</label>}<button disabled={busy} onClick={() => onTransfer({mode: 'import', selection: {kind: 'preset', novelId}})}>导入预设</button>{!!value.blocks.length&&<button disabled={busy || dirty} title={dirty ? '先保存当前预设后导出' : undefined} onClick={() => onTransfer({mode: 'export', selection: {kind: 'preset', novelId}})}>导出预设</button>}</>}
     footer={(dirty||!!value.blocks.length)&&<SaveBar {...{dirty, busy}} error={cacheError} invalid={invalid || (!value.name.trim() ? '请填写预设名称' : '')} onSave={save} label="保存预设" children={null}/>}
@@ -72,6 +72,6 @@ function PresetEditor({call, novelId, run, busy, initial, onTransfer, onBack, ba
       {value.raw !== undefined && !value.importFormat && <p>旧版导入的停用状态已保留；重新导入原文件可按新的内容优先规则解析。</p>}
       {!!warnings.length && <details><summary>导入说明 · {warnings.length} 项</summary>{warnings.map((warning, i) => <p key={i}>{warning}</p>)}</details>}
     </details>
-    {!!candidate.trim()&&<details className="management-disclosure"><summary>当前草稿的生效文本预览 · {preview.length} 字符</summary><pre>{preview || '预设未启用或没有启用的文本条目。'}</pre><p>保存并启用后，这些文本会在下次请求时加入当前作品绑定会话的系统提示词。酒馆的触发、角色与装填规则不执行，宏保留为原文。</p></details>}
+    {!!candidate.trim()&&<details className="management-disclosure"><summary>当前草稿的生效文本预览 · {preview.length} 字符</summary><pre>{preview || '预设未启用或没有启用的文本条目。'}</pre><p>会话首次读取这本书的预设时使用当时的保存版本。续聊时沿用同一份预设，剧情变量按当前状态取值。</p></details>}
   </ManagementPage>;
 }

@@ -95,6 +95,8 @@ function selectProjects(source, selection) {
   delete result.collaboration;
   delete result.collaborationProgress;
   delete result.story;
+  delete result.variables;
+  if (n.variables?.enabled) warnings.push("\u5C40\u90E8\u6570\u636E\u5305\u4E0D\u643A\u5E26\u6574\u672C\u4E66\u7684\u5267\u60C5\u53D8\u91CF\u548C\u4F1A\u8BDD\u8349\u7A3F\uFF1B\u542B\u53D6\u503C\u5B8F\u7684\u6587\u672C\u4FDD\u7559\u539F\u6587\uFF0C\u53EF\u5728\u76EE\u6807\u4F5C\u54C1\u521D\u59CB\u5316\u53D8\u91CF\u3002\u5B8C\u6574\u4F5C\u54C1\u5907\u4EFD\u4F1A\u4FDD\u7559\u53D8\u91CF\u8F68\u8FF9\u3002");
   const volumes = /* @__PURE__ */ new Set();
   for (const ch of Object.values(result.chapters)) {
     if (ch.volumeId) volumes.add(ch.volumeId);

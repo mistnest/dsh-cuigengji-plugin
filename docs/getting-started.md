@@ -1,6 +1,6 @@
 # 安装与开始使用
 
-催更姬使用 DSH 自带的插件管理安装，普通用户无需另装 Git、Node.js 或 pnpm。当前正式版 **0.5.1**，最低声明为 DSH **0.2.0-rc.2**；本版实际验收 Windows 桌面版 **0.2.1-rc.5** 及 **0.2.2-alpha.2 官方标签源码构建桌面**。alpha.2 暂无官方 Windows 成品安装包，具体实测范围见[更新记录](CHANGELOG.md)。后续版本允许安装不等于已经逐一测试。
+催更姬使用 DSH 自带的插件管理安装，普通用户无需另装 Git、Node.js 或 pnpm。当前正式版 **0.6.0**，最低声明为 DSH **0.2.0-rc.2**；本版以 Windows 桌面版 **0.2.1-rc.5** 内置运行时验收隔离安装、升级与工作台，具体范围见[更新记录](CHANGELOG.md)。后续版本允许安装不等于已经逐一测试。
 
 ## 安装或更新
 
@@ -9,16 +9,16 @@
 3. 安装后按提示保存编辑、完整退出 DSH（包括托盘）并重启，从左侧「催更姬」进入。
 
 ```text
-dsh-cuigengji-plugin@0.5.1
+dsh-cuigengji-plugin@0.6.0
 ```
 
 请保留版本号，避免宿主选择较旧版本。安装源是依赖下载地址，不填 GitHub 仓库网址。镜像尚未同步时可使用官方源，或使用同一输入框里的备用成品包地址：
 
 ```text
-https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.5.1/dsh-cuigengji-plugin-0.5.1.tgz
+https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.6.0/dsh-cuigengji-plugin-0.6.0.tgz
 ```
 
-也可先从 [Release](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.5.1) 下载，再填本地 `.tgz` 绝对路径。GitHub 与 npm 使用同一份包，Release 的 `SHA256SUMS` 可核对下载。GitHub 的源码 ZIP 不能代替成品包。
+也可先从 [Release](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.6.0) 下载，再填本地 `.tgz` 绝对路径。GitHub 与 npm 使用同一份包，Release 的 `SHA256SUMS` 可核对下载。GitHub 的源码 ZIP 不能代替成品包。
 
 仓库也支持直接安装 `https://github.com/mistnest/dsh-cuigengji-plugin`，编译文件已提交，无需安装时构建。仓库引用解析可能需要 Git，重复安装同地址还可能沿用旧提交；没有 Git 或更新已有插件时优先用精确包名或成品包。
 
@@ -26,11 +26,11 @@ https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.5.1/dsh-cu
 
 把 [Windows Agent 安装指南](agent-installation.md)链接交给它：
 
-> 请按指南安装或更新催更姬到0.5.1，保留配置和小说数据，完整重启后确认实际版本、原数据目录及作品，核对自动迁移结果。
+> 请按指南安装或更新催更姬到0.6.0，保留配置和小说数据，完整重启后确认实际版本、原数据目录及作品，核对自动迁移结果。
 
 首次安装是空白工作库。旧版自动备份、迁移、校验，Agent 负责确认结果；无需重新导入作品。若仍安装着旧名 `dsh-cuigengji`，先按[名称迁移](package-name-migration.md)转接配置，不同时启用两个包。
 
-0.5.1 的作品存储布局已更新。**不要用0.4.x直接打开迁移后的库**；需要回退时保留新增内容，使用升级前快照恢复到另一目录，详见[迁移与恢复](upgrade.md)。
+0.6.0 沿用作品存储布局 5。**不要用0.4.x直接打开迁移后的库**；需要回退时保留新增内容，使用升级前快照恢复到另一目录，详见[迁移与恢复](upgrade.md)。
 
 ## 开始一起写
 
@@ -60,6 +60,6 @@ https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.5.1/dsh-cu
 - **一直加载或 HTTP 404**：等待插件准备后重试；仍失败时保留插件版本、宿主版本及错误，不删小说目录。
 - **找不到旧作品**：先在设置核对当前库路径和原作品 ID，不急着新建空库或覆盖恢复。
 - **人机修改冲突**：不同位置可自动合并；重叠修改保留草稿并展示对照，确认后再保存，不通过改版本号强行覆盖。
-- **酒馆导入效果不同**：导入内容和提示词，不执行酒馆宏、MVU或触发装填；核对后再启用，见[酒馆资料导入](tavern-import.md)。
+- **酒馆导入效果不同**：导入内容和提示词；可选剧情变量支持部分取值宏与字面量补丁，不执行任意脚本或酒馆触发装填。核对后再启用，见[酒馆资料导入](tavern-import.md)与[剧情变量](variables.md)。
 
 源码预览、构建与隔离测试见[开发说明](development.md)，正式渠道交付见[发布流程](release-process.md)。源码与安装目录不用于存放小说。

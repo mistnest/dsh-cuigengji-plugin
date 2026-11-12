@@ -42,7 +42,7 @@ for (const [name, input, expected] of [
   assert.deepEqual(result.novelIds, [s.books[0].id]);
   assert.equal(result.counts.chapters, 0); assert.equal(result.counts.memory, 0); assert.equal(result.counts.presets, 1);
   const preset = after.novels[s.books[0].id].preset;
-  assert.equal(preset.blocks.length, 2); assert.equal(preset.blocks[1].content, expected); assert.equal(preset.enabled, false);
+  assert.equal(preset.blocks.length, 2); assert.equal(preset.blocks[1].content, expected); assert.equal(preset.enabled, true);
   await s.importFile(file); assert.equal((await s.store.load()).novels[s.books[0].id].preset.blocks.length, 2);
 });
 
@@ -59,7 +59,7 @@ test('preset entry extracts only the selected preset from complete work and work
     const before = await s.store.load();
     const result = await s.importFile(file, {selection: {kind: 'preset', novelId: s.books[1].id}, presetPolicy: 'replace'});
     const after = await s.store.load(); unchangedBooks(before, after, s.books[0].id);
-    assert.equal(after.novels[s.books[0].id].preset.blocks[0].content, '作品乙原有的文风。'); assert.equal(result.counts.chapters, 0); assert.equal(result.counts.memory, 0);
+    assert.equal(after.novels[s.books[0].id].preset.blocks[0].content, '作品乙原有的文风。'); assert.equal(after.novels[s.books[0].id].preset.enabled, false); assert.equal(result.counts.chapters, 0); assert.equal(result.counts.memory, 0);
   }
 });
 

@@ -10,7 +10,7 @@ async function fixture(t) {
   const ctx={tools:{register:tool=>tools.set(tool.name,tool)},skills:{register(){}},connection:{fetch:{register(){}}},
     on:(name,fn)=>handlers.set(name,fn),effect:fn=>effects.push(fn()),provide:(name,value)=>{ctx[name]=value;}};
   t.after(async()=>{for(const dispose of effects)await dispose();await rm(root,{recursive:true,force:true});});
-  await apply(ctx,{dataRoot:root});
+  await apply(ctx,{dataRoot:root,usageRoot:join(root,'test-usage')});
   let callId=0;
   const invoke=async(name,input,sessionId='writer')=>JSON.parse(await tools.get(name).execute(input,{agent:{id:sessionId},callId:`contract-${++callId}`,signal:new AbortController().signal}));
   const run=(name,action,args={},sessionId)=>invoke(name,{action,args},sessionId);
@@ -72,7 +72,7 @@ test('disabled guidance has resolvable references, unbound rules and explicit-wo
   await human('preset.set',{novelId:b.id,expectedRevision:0,preset:{enabled:true,name:'乙',blocks:[{identifier:'b',name:'文风',enabled:true,content:'目标书文风'}]}});
   await human('guidance.set',{enabled:false});
   const unbound=await invoke('cuigengji_guidance',{section:'all'},'unbound');
-  assert.equal(unbound.modules.length,7);assert.equal(unbound.preset.unavailable,true);
+  assert.equal(unbound.modules.length,8);assert.ok(unbound.modules.some(m=>m.id==='variables'));assert.ok(unbound.modules.some(m=>m.id==='story'));assert.equal(unbound.preset.unavailable,true);
   for(const section of ['plan','memory']){
     const guide=await invoke('cuigengji_guidance',{section});assert.equal(guide.modules.length,1);assert.equal(guide.preset,undefined);
     const resource=guide.modules[0].resourceBase;assert.equal(resource.kind,'directory');
@@ -92,4 +92,27 @@ test('disabled guidance has resolvable references, unbound rules and explicit-wo
     const parameters=advertised.tools.find(tool=>tool.name===name).inputSchema.properties;
     assert.equal(parameters.novelId.type,'string');assert.ok(parameters.groupId.oneOf.some(type=>type.type==='null'));
   }
+});
+
+test('DSH and direct MCP both expose and apply setting patch edits, no-ops and explicit deletes in the target work',async t=>{
+  const {ctx,run,a,b}=await fixture(t);
+  await run('cuigengji_project','novel.focus',{novelId:a.id});
+  const memory=(action,args={})=>run('cuigengji_memory',action,{novelId:b.id,...args});
+  const card=await memory('graph.create',{type:'character_card',name:'林舟',summary:'十八岁的店主。',content:'她十八岁。她会炼丹。她经营书铺。',position:{x:20,y:60}});
+  const {client}=await ctx.cuigengji.memory.connection('writer'),advertised=await client.listTools();
+  const schema=advertised.tools.find(tool=>tool.name==='memory_graph_update').inputSchema;
+  assert.deepEqual(schema.properties.patch.required,['oldText','newText']);assert.equal(schema.properties.patch.additionalProperties,false);
+  const changed=await memory('graph.update',{nodeId:card.id,expectedRevision:1,patch:{oldText:'她十八岁。',newText:'她十九岁。'},summary:'十九岁的店主。'});
+  assert.equal(changed.changed,true);assert.deepEqual(changed.changedFields,['summary','content']);
+  const deletedPassage=await ctx.cuigengji.memory.call('writer','graph.update',{novelId:b.id,nodeId:card.id,expectedRevision:2,patch:{oldText:'她会炼丹。',newText:''},requestId:'mcp-remove-passage'});
+  assert.equal(deletedPassage.content,'她十九岁。她经营书铺。');assert.equal(deletedPassage.deleted,false);
+  const unchanged=await memory('graph.update',{nodeId:card.id,expectedRevision:3,content:deletedPassage.content});
+  assert.equal(unchanged.changed,false);assert.equal(unchanged.revision,3);
+  await assert.rejects(memory('graph.update',{nodeId:card.id,expectedRevision:3,summary:'不能部分保存',summery:'无效参数'}),{code:'INVALID_INPUT'});
+  await assert.rejects(memory('graph.update',{nodeId:card.id,expectedRevision:3,patch:{oldText:'不存在',newText:'新'}}),{code:'PATCH_CONFLICT'});
+  const removed=await memory('graph.delete',{nodeId:card.id,expectedRevision:3,confirm:true});assert.equal(removed.deleted,true);
+  assert.deepEqual(await memory('graph.list',{query:'林舟'}),[]);
+  assert.equal((await memory('graph.get',{nodeId:card.id})).deleted,true);
+  assert.deepEqual(await run('cuigengji_memory','graph.list',{novelId:a.id}),[]);
+  assert.equal((await run('cuigengji_context','binding.get')).novelId,a.id,'editing the target book does not switch the conversation focus');
 });

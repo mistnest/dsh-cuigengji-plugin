@@ -30,12 +30,13 @@ function createSessionPolicy({ store, audit, ready = async () => void 0 }) {
       if (!libraryActions.has(action)) args = { ...args, novelId: await resolveNovel(actor.sessionId, args.novelId) };
       rememberTarget(actor.sessionId, args.novelId);
     }
-    const guard = action === "binding.set" || recyclesNovel(action, args) ? (state) => {
+    const purgesWorks = action === "cleanup.apply" && args.scope === "novel-trash";
+    const guard = action === "binding.set" || recyclesNovel(action, args) || purgesWorks ? (state) => {
       if (action === "binding.set" && active.has(actor.sessionId)) throw new Error("\u4F1A\u8BDD\u6B63\u5728\u8FD0\u884C\uFF0C\u8BF7\u505C\u6B62\u540E\u5207\u6362\u5C0F\u8BF4\u6216\u7AE0\u8282");
-      if (recyclesNovel(action, args)) {
-        const novelId = args.novelId || state.bindings[sessionKey(actor.sessionId)]?.novelId;
-        for (const sessionId of active) if (novelId && (state.bindings[sessionKey(sessionId)]?.novelId === novelId || workingBooks.get(sessionId)?.has(novelId))) {
-          throw Object.assign(new Error("\u8FD9\u90E8\u4F5C\u54C1\u4ECD\u6709 AI \u5199\u4F5C\u4EFB\u52A1\u5728\u8FD0\u884C\uFF0C\u8BF7\u5148\u505C\u6B62\u76F8\u5173\u4F1A\u8BDD\uFF0C\u518D\u79FB\u5165\u56DE\u6536\u7AD9"), { code: "NOVEL_BUSY" });
+      if (recyclesNovel(action, args) || purgesWorks) {
+        const targets = purgesWorks ? Object.values(state.novels).filter((n) => n.archived && (args.ids === void 0 || Array.isArray(args.ids) && args.ids.includes(n.id))).map((n) => n.id) : [args.novelId || state.bindings[sessionKey(actor.sessionId)]?.novelId];
+        for (const sessionId of active) if (targets.some((novelId) => novelId && (state.bindings[sessionKey(sessionId)]?.novelId === novelId || workingBooks.get(sessionId)?.has(novelId)))) {
+          throw Object.assign(new Error(`\u8FD9\u90E8\u4F5C\u54C1\u4ECD\u6709 AI \u5199\u4F5C\u4EFB\u52A1\u5728\u8FD0\u884C\uFF0C\u8BF7\u5148\u505C\u6B62\u76F8\u5173\u4F1A\u8BDD\uFF0C\u518D${purgesWorks || action === "novel.purge" ? "\u6C38\u4E45\u5220\u9664" : "\u79FB\u5165\u56DE\u6536\u7AD9"}`), { code: "NOVEL_BUSY" });
         }
       }
     } : void 0;

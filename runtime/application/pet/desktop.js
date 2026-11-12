@@ -28,9 +28,18 @@ class DesktopPet {
   launch;
   root;
   dispatch;
+  usage;
+  unsubscribe;
+  usageReading = false;
+  bubbleIndex = 0;
+  usageQueued = [];
   constructor(root, dispatch, options = {}) {
     this.root = root;
     this.dispatch = dispatch;
+    this.usage = options.usage;
+    this.unsubscribe = this.usage?.subscribe(() => {
+      void this.refreshUsage();
+    });
     this.supported = options.supported ?? (process.platform === "win32" && Boolean(process.versions.electron || process.env.DSH_DESKTOP_NODE_EXECUTABLE));
     this.launch = options.launch || (() => spawn(join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), [
       "-NoLogo",
@@ -145,7 +154,12 @@ class DesktopPet {
           } else if (event.type === "preferences") {
             this.updatePreferences({ ...this.preferences, ...event });
             this.send();
-          } else if (event.type === "details") this.details = { sequence: ++this.sequence, sessionId: this.sessionId };
+          } else if (event.type === "details" || event.type === "conversation") this.details = { sequence: ++this.sequence, sessionId: typeof event.sessionId === "string" ? event.sessionId : this.sessionId, action: event.type === "conversation" ? "conversation" : "records" };
+          else if (event.type === "interact") {
+            if (event.kind === "next") this.bubbleIndex++;
+            void this.refreshUsage(event.kind === "next" ? void 0 : event.kind);
+          } else if ((event.type === "ack" || event.type === "delivered") && typeof event.id === "string") void this.usage?.dispatch("usage." + event.type, { id: event.id }).catch(() => {
+          });
         } catch {
         }
       });
@@ -187,9 +201,10 @@ class DesktopPet {
           date,
           novelId,
           title: typeof title === "string" ? title.slice(0, 512) : null,
-          stats: { proseAdded: stats.proseAdded, settingAdded: stats.settingAdded, planningChanges: stats.planningChanges }
+          stats: { proseAdded: stats.proseAdded, settingAdded: stats.settingAdded, planningChanges: stats.planningChanges, conversationInput: stats.conversationInput || 0 }
         }, error: "" };
         this.send();
+        void this.refreshUsage();
       } catch {
         if (generation === this.generation && !this.closed) {
           this.snapshot = { ...this.snapshot, error: "\u6682\u65F6\u8BFB\u4E0D\u5230\u4ECA\u65E5\u8FDB\u5EA6" };
@@ -206,6 +221,30 @@ class DesktopPet {
       }, generation !== this.generation ? 0 : 15e3);
     });
     return this.reading;
+  }
+  async refreshUsage(kind) {
+    if (!this.usage || this.closed || !this.ready) return;
+    if (this.usageReading) {
+      this.usageQueued.push(kind || "");
+      this.usageQueued = this.usageQueued.slice(-4);
+      return;
+    }
+    this.usageReading = true;
+    const generation = this.generation, sessionId = this.sessionId;
+    try {
+      const presentation = await this.usage.presentation({ index: this.bubbleIndex, kind, sessionId, prose: this.snapshot.activity?.stats?.proseAdded, setting: this.snapshot.activity?.stats?.settingAdded });
+      if (!this.closed && generation === this.generation) {
+        this.snapshot.presentation = presentation;
+        this.send();
+      } else if (!this.closed) this.usageQueued.push("");
+    } catch {
+    } finally {
+      this.usageReading = false;
+      if (this.usageQueued.length) {
+        const next = this.usageQueued.shift();
+        void this.refreshUsage(next || void 0);
+      }
+    }
   }
   async sync(args) {
     if (!this.supported || args.desktop !== true) return { supported: false, available: false };
@@ -236,6 +275,7 @@ class DesktopPet {
     this.generation++;
     this.cancelRead?.();
     clearTimeout(this.poll);
+    this.unsubscribe?.();
     const child = this.child;
     this.child = null;
     this.ready = false;

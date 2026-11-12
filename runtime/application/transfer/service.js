@@ -81,7 +81,7 @@ class TransferService {
     } else {
       warnings.push("\u5BFC\u5165\u8BBE\u5B9A\u9700\u8981\u91CD\u65B0\u786E\u8BA4\uFF1B\u5199\u4F5C\u9884\u8BBE\u6574\u4F53\u505C\u7528\uFF0C\u6838\u5BF9\u540E\u518D\u542F\u7528\u3002");
       if (slice.projects.some((n) => n.planning || n.plan)) warnings.push("\u89C4\u5212\u4F1A\u52A0\u5165\u4E3A\u72EC\u7ACB\u753B\u5E03\uFF0C\u4FDD\u7559\u8282\u70B9\u3001\u8FDE\u7EBF\u3001\u8BA8\u8BBA\u6846\u548C\u4FBF\u7B7E\u3002");
-      if (options.targetId && slice.projects.some((n) => n.preset) && state.novels[options.targetId].preset) warnings.push(options.presetPolicy === "replace" ? "\u5F53\u524D\u9884\u8BBE\u5C06\u88AB\u66FF\u6362\uFF0C\u65E7\u5185\u5BB9\u4FDD\u7559\u5728\u5BFC\u5165\u524D\u5907\u4EFD\u4E2D\u3002" : "\u63D0\u793A\u8BCD\u5C06\u8FFD\u52A0\u5230\u5F53\u524D\u9884\u8BBE\u672B\u5C3E\uFF0C\u539F\u6709\u6761\u76EE\u4FDD\u7559\u3002");
+      if (options.targetId && slice.projects.some((n) => n.preset) && state.novels[options.targetId].preset) warnings.push(options.presetPolicy === "replace" ? "\u5F53\u524D\u9884\u8BBE\u5C06\u88AB\u66FF\u6362\uFF0C\u65E7\u5185\u5BB9\u4FDD\u7559\u5728\u5BFC\u5165\u524D\u5907\u4EFD\u4E2D\u3002" : "\u63D0\u793A\u8BCD\u5C06\u8FFD\u52A0\u5230\u5F53\u524D\u9884\u8BBE\u672B\u5C3E\uFF0C\u4FDD\u7559\u539F\u6709\u6761\u76EE\u548C\u5F00\u5173\u3002");
       if (!options.targetId) target += `\uFF1A${options.title || slice.projects.map((n) => n.title).join("\u3001")}`;
       try {
         if (options.targetId) {
@@ -133,9 +133,10 @@ class TransferService {
       const requestKey = hash(requestId), receiptKey = hash(`transfer:${recognized.fingerprint}:${JSON.stringify(normalized)}`);
       if (own(state.requests, requestKey)) {
         if (state.requests[requestKey].signature !== signature) fail("requestId \u5DF2\u7528\u4E8E\u5176\u4ED6\u8BF7\u6C42", "REQUEST_ID_REUSED");
+        if (state.requests[requestKey].cleaned) fail("\u6B64\u5BFC\u5165\u7ED3\u679C\u5DF2\u968F\u6E05\u7406\u79FB\u9664\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8\u540E\u53D1\u8D77\u65B0\u7684\u5BFC\u5165", "REQUEST_EXPIRED");
         return { ...copy(state.requests[requestKey].result), repeated: true };
       }
-      if (normalized.mode === "copy" && own(state.requests, receiptKey)) return { ...copy(state.requests[receiptKey].result), repeated: true };
+      if (normalized.mode === "copy" && own(state.requests, receiptKey) && !state.requests[receiptKey].cleaned) return { ...copy(state.requests[receiptKey].result), repeated: true };
       const plan = await this.plan(state, file, options);
       if (!plan.preview.valid) fail("\u5B58\u5728\u51B2\u7A81\uFF0C\u672A\u5BFC\u5165\uFF1A" + plan.preview.conflicts.join("\uFF1B"), "IMPORT_CONFLICT");
       if (proof !== plan.preview.proof) fail("\u9884\u89C8\u540E\u5185\u5BB9\u6216\u76EE\u6807\u4F5C\u54C1\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u6838\u5BF9\u5BFC\u5165\u9884\u89C8", "CONFLICT");

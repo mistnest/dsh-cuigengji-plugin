@@ -19,7 +19,8 @@ export interface Decoration {
 export type NodeIndex = Omit<PlanningNode, 'content'>;
 export type PlanningEntity = PlanningNode | PlanningEdge | PlanningGroup | PlanningPage | Decoration;
 export type Collection = 'nodes' | 'edges' | 'groups' | 'pages' | 'decorations';
-export interface Change { collection: Collection; id: string; before: PlanningEntity | null; after: PlanningEntity }
+export interface PrunedPlanningSnapshot {id:string;revision:number;pruned:true}
+export interface Change { collection: Collection; id: string; before: PlanningEntity | PrunedPlanningSnapshot | null; after: PlanningEntity | PrunedPlanningSnapshot }
 export interface Transaction { id: string; sequence: number; lastSequence: number; updatedAt: string; actor: {kind: string; sessionId: string | null}; reason: string; changes: Change[] }
 export interface Board {
   formatVersion: number; nodes: Record<string, PlanningNode>; edges: Record<string, PlanningEdge>;
@@ -63,4 +64,5 @@ export interface PlanningArgs {
   nodeId?:string;groupId?:string|null;pageId?:string|null;name?:string;summary?:string;expectedRevision?:number;confirm?:boolean;
   query?:string;includeDeleted?:boolean;parentId?:string|null;status?:string;thread?:string;
   after?:number;offset?:number;limit?:number;resourceOffset?:number;side?:'in'|'out';
+  revision?:number;includeContent?:boolean;targetRevision?:number;
 }

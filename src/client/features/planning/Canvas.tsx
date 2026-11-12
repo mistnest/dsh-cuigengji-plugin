@@ -6,11 +6,12 @@ import type {GraphContext} from '../../shared/graph.tsx';
 import {DecorationCard} from './Decorations.tsx';
 import {planningStructure} from '../../../domain/planning/hierarchy.ts';
 import {folderObjects} from '../../../domain/canvas/folders.ts';
-import {FolderRegion,FolderSelectionTools} from '../../shared/FolderRegion.tsx';
+import {FolderRegion} from '../../shared/FolderRegion.tsx';
 import {GraphLinks,GraphViewTools} from '../../shared/GraphLinks.tsx';
 import {useWorkspacePreference} from '../../shared/workspace-state.ts';
 import {frameMembers,foldProjection,directNeighborhood,objectBox,type LayoutPoint} from '../../../domain/canvas/model.ts';
-import {routeEdges} from '../../../domain/canvas/routing.ts';
+import {canvasLinkRoutes} from '../../../domain/canvas/link-style.ts';
+import {useWorkbenchPreferences} from '../../shared/settings/preferences-state.tsx';
 import {CanvasMenu} from './CanvasMenu.tsx';
 import type {MenuItem} from './CanvasMenu.tsx';
 import type {Decoration,NodeIndex,PlanningEdge,PlanningGroup,Point} from '../../../contracts/planning.ts';
@@ -18,7 +19,6 @@ import {CanvasDraft} from './CanvasDraft.tsx';
 import type {CanvasCreation,CanvasDraftValue} from './CanvasDraft.tsx';
 import {SceneCard} from './SceneCard.tsx';
 import {DecorationInlineEditor} from './DecorationInlineEditor.tsx';
-import {CanvasSelectionTools} from '../../shared/CanvasSelectionTools.tsx';
 import {CanvasExport} from '../../shared/CanvasExport.tsx';
 import type {CanvasImageScene,ImageObject} from '../../shared/canvas-image.ts';
 import {statusNames} from './model.ts';
@@ -47,6 +47,7 @@ interface Props {
   onHighlightChange?:(ids:string[])=>void;
 }
 export function PlanningCanvas(props:Props){
+  const {preferences:{canvasLinkStyle}}=useWorkbenchPreferences();
   const {nodes,allNodes,edges,groups,decorations,busy,filtered,onSelect,onLayout,onConnect,onDisconnect,onNew,onDecorate,onEditDecoration}=props;
   const [menu,setMenu]=useState<GraphContext|null>(null),[focusId,setFocusId]=useState<string|null>(null);
   const [folded,setFolded]=useWorkspacePreference(`${props.scopeKey}:folders-folded`,[] as string[]);
@@ -71,12 +72,11 @@ export function PlanningCanvas(props:Props){
   const visibleFolders=folders.filter(f=>!projection.owner.has(f.id)&&(!nearby||nearby.has(f.id)||!folded.includes(f.id)&&f.members?.some(id=>nearby.has(id))));
   const ids=new Set([...visibleNodes,...visibleDecorations,...visibleFolders].map(n=>n.id)),links=projection.edges.filter(e=>ids.has(e.from)&&ids.has(e.to));
   const drawn=[...visibleNodes,...visibleDecorations,...visibleFolders],boxes=drawn.filter(n=>!('kind' in n)||n.kind!=='frame'||folded.includes(n.id)||('stage' in n&&n.stage)).map(n=>{const box=objectBox({...n,folded:folded.includes(n.id)},points);return 'stage' in n&&n.stage&&!folded.includes(n.id)?{...box,height:48}:box;});
-  const routes=useMemo(()=>routeEdges(boxes,links),[JSON.stringify(boxes),JSON.stringify(links)]);
-  const boundsBoxes=drawn.map(n=>objectBox({...n,folded:folded.includes(n.id)},points));
-  const left=Math.min(-200,...boundsBoxes.map(n=>n.x-260)),top=Math.min(-200,...boundsBoxes.map(n=>n.y-260)),right=Math.max(800,...boundsBoxes.map(n=>n.x+n.width+260)),bottom=Math.max(600,...boundsBoxes.map(n=>n.y+n.height+260));
+  const routes=useMemo(()=>canvasLinkRoutes(boxes,links,'flow',canvasLinkStyle),[JSON.stringify(boxes),JSON.stringify(links),canvasLinkStyle]);
+  const boundsBoxes=drawn.map(n=>objectBox({...n,folded:folded.includes(n.id)},points)),routePoints=routes.flatMap(route=>route.points);
+  const left=Math.min(-200,...boundsBoxes.map(n=>n.x-260),...routePoints.map(p=>p.x-24)),top=Math.min(-200,...boundsBoxes.map(n=>n.y-260),...routePoints.map(p=>p.y-24)),right=Math.max(800,...boundsBoxes.map(n=>n.x+n.width+260),...routePoints.map(p=>p.x+24)),bottom=Math.max(600,...boundsBoxes.map(n=>n.y+n.height+260),...routePoints.map(p=>p.y+24));
   const related=graph.selected.length?new Set(graph.selected.flatMap(id=>[...directNeighborhood(id,links)])):null;
   const toggleFold=(id:string)=>{if(graph.saving||graph.failed)return;setFocusId(null);graph.select([]);setFolded(folded.includes(id)?folded.filter(v=>v!==id):[...folded,id]);};
-  const selectedStage=graph.selected.length===1&&structure.stageIds.has(graph.selected[0])?allNodes.find(n=>n.id===graph.selected[0]):undefined;
   const stage=menu?.hit.kind==='decoration'&&structure.stageIds.has(menu.hit.id!)?allNodes.find(n=>n.id===menu.hit.id):undefined;
   const selectedFolder=graph.selected.length===1?groups.find(g=>g.id===graph.selected[0]):undefined;
   const folder=menu?.hit.kind==='decoration'?groups.find(g=>g.id===menu.hit.id):undefined;
@@ -90,7 +90,7 @@ export function PlanningCanvas(props:Props){
   const exportScene=():CanvasImageScene=>{
     const full=foldProjection([...baseObjects,...folders],edges,folded,points),selected=new Set(graph.selected);
     for(const d of [...decorations,...folders])if(d.kind==='frame'&&selected.has(d.id))for(const id of frameMembers(d,[...baseObjects,...folders],points))selected.add(id);
-    return {title:props.title,directed:true,visibleIds:drawn.map(n=>n.id),selectedIds:[...selected],viewport:{x:-graph.camera.x/zoom,y:-graph.camera.y/zoom,width:(graph.scroll.current?.clientWidth||800)/zoom,height:(graph.scroll.current?.clientHeight||600)/zoom},objects:full.objects.map(object=>{
+    return {title:props.title,directed:true,linkStyle:canvasLinkStyle,visibleIds:drawn.map(n=>n.id),selectedIds:[...selected],viewport:{x:-graph.camera.x/zoom,y:-graph.camera.y/zoom,width:(graph.scroll.current?.clientWidth||800)/zoom,height:(graph.scroll.current?.clientHeight||600)/zoom},objects:full.objects.map(object=>{
       const node=allNodes.find(n=>n.id===object.id),d=decorations.find(d=>d.id===object.id)||folders.find(f=>f.id===object.id)!;
       return {...objectBox(object,points),role:structure.stageIds.has(object.id)?'stage':undefined,kind:structure.stageIds.has(object.id)?folded.includes(object.id)?'fold':'frame':node?'card':folded.includes(d.id)?'fold':d.kind,title:node?.title||d.title,summary:node?.summary||d?.content,meta:node?statusNames[node.status]:folded.includes(d.id)?`${'folder' in d?d.count:frameMembers(d,[...baseObjects,...folders],points).length} 项内容`:undefined,tone:node?.status||('color' in d?d.color:'sky')} as ImageObject;
     }),edges:full.edges.map(e=>({id:e.id,from:e.from,to:e.to,type:e.type,label:edges.find(edge=>edge.id===e.id)?.label}))};
@@ -116,11 +116,7 @@ export function PlanningCanvas(props:Props){
       {props.creation&&<CanvasDraft key={props.creation.key} creation={props.creation} draftKey={`${props.scopeKey}:create:${props.creation.kind}:${props.creation.source?.id||'new'}`} busy={busy} save={props.saveCreation} close={props.cancelCreation} ensureVisible={graph.ensurePanelVisible} screenPoint={graph.screenPoint(props.creation.position)}/>}
       {props.editingDecoration&&points[props.editingDecoration.id]&&<DecorationInlineEditor key={props.editingDecoration.id} initial={props.editingDecoration} latest={decorations.find(d=>d.id===props.editingDecoration!.id)} point={points[props.editingDecoration.id]} scopeKey={props.scopeKey} busy={busy} save={props.saveDecoration} close={props.closeDecoration} ensureVisible={graph.ensurePanelVisible} screenPoint={graph.screenPoint(points[props.editingDecoration.id])}/>}
     {!drawn.length&&!props.creation&&<p className="canvas-empty">{props.emptyMessage||'右键开始新的情节'}</p>}
-    <GraphViewTools focus={Boolean(focusId)} title={allNodes.find(n=>n.id===focusId)?.title} count={drawn.length} total={objects.length} edges={links.length} clear={()=>{setFocusId(null);graph.select([]);}} choose={!props.multiSelect&&graph.selected.length===1?()=>setFocusId(graph.selected[0]):undefined} exporter={<><GraphArrangeButton graph={graph} busy={busy||Boolean(props.loading)}/><CanvasExport scene={exportScene} busy={busy||props.loading||graph.saving||graph.failed||!objects.length}/></>}>
-      {!props.multiSelect&&!graph.selectedEdge&&!graph.wire&&(selectedStage?<div className="canvas-selection-tools" data-canvas-actions role="toolbar" aria-label="阶段操作" onPointerDown={event=>event.stopPropagation()} onKeyDown={event=>{if(event.key!=='Escape')event.stopPropagation();}}><span>{selectedStage.title}</span><button disabled={busy||graph.saving||graph.failed} onClick={()=>toggleFold(selectedStage.id)}>{folded.includes(selectedStage.id)?'展开':'收纳'}</button><button disabled={busy} onClick={()=>onSelect(selectedStage.id)}>详情</button><button disabled={busy} onClick={()=>props.onAddChild(selectedStage.id)}>＋ 子情节</button><button aria-label="取消画布选择" onClick={()=>graph.select([])}>×</button></div>:selectedFolder?<FolderSelectionTools group={selectedFolder} folded={folded.includes(selectedFolder.id)} busy={busy||graph.saving||graph.failed} toggle={()=>toggleFold(selectedFolder.id)} rename={()=>props.onRenameFolder(selectedFolder)} dissolve={()=>props.onDissolveFolder(selectedFolder)} clear={()=>graph.select([])}/>:<CanvasSelectionTools selected={graph.selected.filter(id=>baseObjects.some(n=>n.id===id))} nodeIds={graph.selected.filter(id=>nodes.some(n=>n.id===id))} groups={groups} busy={busy||graph.saving||graph.failed} clear={()=>graph.select([])} move={groupId=>props.onMove(graph.selected.filter(id=>nodes.some(n=>n.id===id)),groupId)} duplicate={()=>props.onDuplicate(graph.selected.filter(id=>nodes.some(n=>n.id===id)),points)} remove={()=>props.onRemove(graph.selected.filter(id=>baseObjects.some(n=>n.id===id)))} frame={()=>createFrame(graph.selected)}/>)}
-
-    </GraphViewTools>
-    {routes.some(r=>r.blocked)&&<span className="graph-route-note" role="status">部分卡片重叠，移动或整理后可显示连线</span>}
+    <GraphViewTools focus={Boolean(focusId)} title={allNodes.find(n=>n.id===focusId)?.title} count={drawn.length} total={objects.length} edges={links.length} clear={()=>{setFocusId(null);graph.select([]);}} exporter={<><GraphArrangeButton graph={graph} busy={busy||Boolean(props.loading)}/><CanvasExport scene={exportScene} busy={busy||props.loading||graph.saving||graph.failed||!objects.length}/></>}/>
     {graph.lasso&&<div className="graph-lasso" style={{left:graph.lasso.x,top:graph.lasso.y,width:graph.lasso.width,height:graph.lasso.height}}/>}
     <GraphControls graph={graph} busy={busy}/>
   </div>{menu&&<CanvasMenu {...menu} items={items} close={()=>{setMenu(null);graph.scroll.current?.focus({preventScroll:true});}}/>}</>;

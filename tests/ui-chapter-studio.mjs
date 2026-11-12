@@ -1,0 +1,126 @@
+// Production frontend + persisted synthetic library. No user profile or model calls.
+import {spawn} from 'node:child_process';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {resolve,join} from 'node:path';
+import {chromium,expect} from '@playwright/test';
+const root=resolve(import.meta.dirname,'..'),out=join(root,'test-results','chapter-studio');
+await mkdir(out,{recursive:true});
+const host=spawn(process.execPath,['scripts/preview-workbench.mjs'],{cwd:root,stdio:['ignore','pipe','pipe']});
+let browser,page;
+try{
+  const {url}=await new Promise((resolve,reject)=>{let output='',errors='';const timer=setTimeout(()=>reject(Error(errors||'Preview timeout')),25000);host.stderr.on('data',c=>errors+=c);host.once('exit',()=>{clearTimeout(timer);reject(Error(errors));});host.stdout.on('data',c=>{output+=c;const line=output.split('\n').find(l=>l.startsWith('{'));if(line){clearTimeout(timer);resolve(JSON.parse(line));}});});
+  const call=async(action,args={})=>{const r=await fetch(new URL('/dispatch',url),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,args})});if(!r.ok)throw Error(await r.text());return r.json();};
+  const novelId=(await call('novel.list'))[0].id,a=(await call('chapter.list',{novelId}))[0];
+  const original=['第一行：雨夜来信。','她推开门，走进旧港。','第三行未变。','她在桌前犹豫了很久。','第五行未变。',...Array.from({length:90},(_,i)=>`第${i+6}行。${'她将来信放好，点亮窗边的灯。'.repeat(i%3+1)}`)].join('\n');
+  await call('chapter.update',{novelId,chapterId:a.id,expectedRevision:a.revision,content:original});
+  const revised=original.replace('走进旧港','走进雾中的旧港').replace('她在桌前犹豫了很久。','她的手在桌沿停了一瞬，随即拆开来信。');
+  await call('chapter.update',{novelId,chapterId:a.id,expectedRevision:2,content:revised,reason:'润色动作与细节'});
+  const b=await call('chapter.create',{novelId,title:'第二章 · 旧港的回声',content:'这是第二章自己的正文。\n第二行。'});
+  const c=await call('chapter.create',{novelId,title:'第三章 · 一个用于检查长章节标题显示的很长章节名称',content:'这是第三章，尚未被编辑。'});
+  browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1280,height:900},reducedMotion:'reduce'});
+  const errors=[],historyReads=[],writes=[];page.on('pageerror',error=>errors.push(error.message));
+  page.on('request',request=>{if(request.method()==='POST'){const {action,args}=request.postDataJSON();if(action==='chapter.update')writes.push(args);if(action==='chapter.history')historyReads.push(args);}});
+  await page.goto(url);
+  const active=()=>page.locator('.chapter-document:not([hidden])'),editor=()=>page.getByRole('textbox',{name:'正文',exact:true});
+  const openComparison=async()=>{await active().getByLabel('章节设置',{exact:true}).click();await active().getByRole('button',{name:'改动对比',exact:true}).click();};
+  const select=async id=>{
+    const row=page.locator(`[data-chapter-id="${id}"] .chapter-open`);
+    if(!await row.isVisible())await page.getByRole('button',{name:/^(‹ 目录|打开目录)$/}).click();
+    await row.click();
+    await expect(page.locator('.chapter-document')).toHaveCount(1);
+  };
+  await select(a.id);await expect(editor()).toHaveValue(revised);
+  await select(b.id);await expect(editor()).toHaveValue('这是第二章自己的正文。\n第二行。');
+  await select(c.id);await expect(editor()).toHaveValue('这是第三章，尚未被编辑。');
+  await expect(page.getByRole('tablist',{name:'已打开的章节'})).toHaveCount(0);
+  await expect(page.locator('.chapter-tab-pin')).toHaveCount(0);
+  await select(a.id);
+  await editor().evaluate(el=>{el.focus({preventScroll:true});el.setSelectionRange(150,150);});await page.keyboard.insertText('作者补充');
+  const edited=revised.slice(0,150)+'作者补充'+revised.slice(150);
+  await expect(editor()).toHaveValue(edited);
+  await editor().focus();await page.keyboard.press('Control+z');await expect(editor()).toHaveValue(revised);
+  await page.keyboard.press('Control+Shift+z');await expect(editor()).toHaveValue(edited);
+  await expect.poll(async()=>(await call('chapter.get',{novelId,chapterId:a.id,maxChars:200000})).content).toBe(edited);
+  // Switching away immediately still flushes this chapter's serialized save queue.
+  const directory=(await call('chapter.list',{novelId})).map(chapter=>({id:chapter.id,order:chapter.order}));
+  await editor().evaluate(el=>{el.focus({preventScroll:true});el.setSelectionRange(el.value.length,el.value.length);});await page.keyboard.insertText('\n切章前输入');
+  await select(b.id);await expect(editor()).toHaveValue('这是第二章自己的正文。\n第二行。');
+  await expect.poll(async()=>(await call('chapter.get',{novelId,chapterId:a.id,maxChars:200000})).content).toBe(edited+'\n切章前输入');
+  await select(a.id);await expect(editor()).toHaveValue(edited+'\n切章前输入');
+  expect((await call('chapter.list',{novelId})).map(chapter=>({id:chapter.id,order:chapter.order}))).toEqual(directory);
+  // Logical line jumps select actual source lines; wrapping only affects gutter height.
+  await active().getByRole('button',{name:/^第 \d+ 行$/}).click();
+  await page.getByRole('spinbutton',{name:'目标行号'}).fill('80');await page.getByRole('button',{name:'跳转',exact:true}).click();
+  expect(await editor().evaluate(el=>el.value.slice(el.selectionStart,el.selectionEnd))).toBe((edited+'\n切章前输入').split('\n')[79]);
+  await expect(active().locator('.manuscript-location')).toHaveText('第 80 行');
+  expect(await active().locator('.editor-scroll').evaluate(el=>el.scrollTop)).toBeGreaterThan(1000);
+  await editor().press('Control+g');await expect(page.getByRole('spinbutton',{name:'目标行号'})).toBeFocused();await page.keyboard.press('Escape');
+  await active().getByRole('button',{name:'行号',exact:true}).click();await expect(active().locator('.manuscript-gutter')).toHaveCount(0);
+  await active().getByRole('button',{name:'行号',exact:true}).click();await expect(active().locator('.manuscript-gutter>span')).toHaveCount(96);
+  // Comparing is read-only, with summary reads and just the selected full snapshot.
+  let saved=await call('chapter.get',{novelId,chapterId:a.id,maxChars:200000});const writeCount=writes.length;
+  expect(historyReads).toEqual([]);
+  await expect(active().locator('.chapter-toolbar').getByRole('button',{name:'改动对比',exact:true})).toHaveCount(0);
+  await expect(active().getByText('版本历史',{exact:true})).toHaveCount(0);
+  await openComparison();await expect(active().locator('.chapter-title-row details.menu')).not.toHaveAttribute('open','');
+  const compare=page.getByRole('region',{name:'修改前后对比',exact:true});
+  await compare.getByRole('combobox',{name:'对照历史版本'}).selectOption('2');
+  await expect(compare.locator('del').filter({hasText:'走进'})).toHaveCount(0);
+  await expect(compare.locator('.prose-diff-side ins').filter({hasText:'雾中的'})).toBeVisible();
+  expect(await compare.locator('textarea').count()).toBe(0);
+  await compare.getByRole('button',{name:'下一处改动'}).click();await expect(compare.locator('[data-change="1"]')).toHaveAttribute('data-current','true');
+  await compare.getByRole('button',{name:'行内',exact:true}).click();await expect(compare).toHaveAttribute('data-layout','inline');
+  await compare.getByRole('button',{name:'并排',exact:true}).click();await page.screenshot({path:join(out,'comparison-wide.png')});
+  for(const width of [420,320]){
+    await page.setViewportSize({width,height:900});await expect(compare).toHaveAttribute('data-layout','inline');
+    expect(await compare.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+    expect(await compare.locator('.chapter-diff-scroll').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+    await page.screenshot({path:join(out,`comparison-${width}.png`)});
+  }
+  await compare.getByRole('button',{name:'返回正文',exact:true}).click();await expect(editor()).toHaveValue(saved.content);
+  expect(writes.length).toBe(writeCount);expect((await call('chapter.get',{novelId,chapterId:a.id,maxChars:200000})).revision).toBe(saved.revision);
+  expect(historyReads.filter(args=>args.includeContent).every(args=>Number.isSafeInteger(args.revision))).toBe(true);
+  await page.setViewportSize({width:1280,height:900});
+  await editor().evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const currentSelection=await editor().evaluate(el=>({start:el.selectionStart,end:el.selectionEnd,top:el.closest('.editor-scroll').scrollTop}));
+  const prefix='AI 在开头补充的信息。\n';
+  await call('chapter.update',{novelId,chapterId:a.id,expectedRevision:saved.revision,content:prefix+saved.content});
+  await expect(editor()).toHaveValue(prefix+saved.content,{timeout:10000});
+  expect(await editor().evaluate(el=>({start:el.selectionStart,end:el.selectionEnd,top:el.closest('.editor-scroll').scrollTop}))).toEqual({start:currentSelection.start+prefix.length,end:currentSelection.end+prefix.length,top:currentSelection.top});
+  saved=await call('chapter.get',{novelId,chapterId:a.id,maxChars:200000});
+  await page.reload();
+  await expect(page.locator('.chapter-document')).toHaveCount(1);
+  await expect(page.getByRole('tablist',{name:'已打开的章节'})).toHaveCount(0);await expect(editor()).toHaveValue(saved.content);
+  await expect(page.locator('.chapter-item')).toHaveCount(3);
+  await active().locator('.editor-scroll').evaluate(el=>el.scrollTop=0);
+  await page.screenshot({path:join(out,'writing-wide.png')});
+  await page.evaluate(()=>document.documentElement.style.cssText='--dsw-alias-bg-base:#181a20;--dsw-alias-label-primary:#e9edf5;--dsw-alias-label-secondary:#aab2c1;--dsw-alias-border-l1:#353a46;--dsw-alias-state-business-primary:#94b0ff;');
+  await page.screenshot({path:join(out,'writing-dark.png')});
+  await page.evaluate(()=>document.documentElement.removeAttribute('style'));
+  // The existing manual conflict resolver must stay separate from read-only history comparison.
+  await editor().fill('作者自己选择的走向。');
+  await call('chapter.update',{novelId,chapterId:a.id,expectedRevision:saved.revision,content:'AI 提出的另一走向。'});
+  await expect(active().getByRole('button',{name:'比较最新正文',exact:true})).toBeVisible({timeout:10000});
+  await active().getByRole('button',{name:'比较最新正文',exact:true}).click();
+  await active().getByRole('textbox',{name:'合并正文',exact:true}).fill('双方确认的合并走向。');
+  await active().getByRole('button',{name:'已合并，更新保存基准',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'确定',exact:true}).click();
+  await expect.poll(async()=>(await call('chapter.get',{novelId,chapterId:a.id,maxChars:200000})).content).toBe('双方确认的合并走向。');
+  // One comparison entry also restores earlier drafts; concurrent edits require a fresh comparison.
+  saved=await call('chapter.get',{novelId,chapterId:a.id,maxChars:200000});
+  await openComparison();await compare.getByRole('combobox',{name:'对照历史版本'}).selectOption('2');
+  const remote=await call('chapter.update',{novelId,chapterId:a.id,expectedRevision:saved.revision,content:'恢复前收到的新正文。'});
+  await expect(compare.getByRole('button',{name:'重新比较',exact:true})).toBeVisible({timeout:10000});
+  await expect(compare.getByRole('button',{name:'恢复此版',exact:true})).toBeDisabled();
+  await compare.getByRole('button',{name:'重新比较',exact:true}).click();
+  await compare.getByRole('combobox',{name:'对照历史版本'}).selectOption('2');
+  await expect(compare.getByRole('button',{name:'恢复此版',exact:true})).toBeEnabled();
+  await compare.getByRole('button',{name:'恢复此版',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'确定',exact:true}).click();
+  await expect(compare).toHaveCount(0);await expect(editor()).toHaveValue(original);
+  const restored=await call('chapter.get',{novelId,chapterId:a.id,maxChars:200000});expect(restored.revision).toBe(remote.revision+1);
+  expect((await call('chapter.history',{novelId,chapterId:a.id,revision:remote.revision,includeContent:true}))[0].content).toBe('恢复前收到的新正文。');
+  expect(errors).toEqual([]);
+  const checks=['directory opens one chapter without preview/pinned tabs or extra open controls','switching chapters preserves drafts and pending autosave without reordering the directory','native undo and redo remain available while editing','logical line numbers, Ctrl+G and long-document jump','comparison is only in chapter menu; duplicate history entry is removed','read-only diff with insertions/deletions, navigation and narrow layouts','history bodies load one revision at a time, only after opening comparison','AI updates preserve the mapped selection and scroll','current chapter restores after reload','manual conflict resolution remains available','comparison restores earlier drafts with confirmation and preserves the replaced revision','concurrent updates disable restore until the comparison is refreshed'];
+  await writeFile(join(out,'report.json'),JSON.stringify({ok:true,checks,errors},null,2));console.log(JSON.stringify({ok:true,checks,output:out}));
+}catch(error){if(page)await page.screenshot({path:join(out,'failure.png')}).catch(()=>{});throw error;}finally{await browser?.close();host.kill();}

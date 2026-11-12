@@ -25,7 +25,8 @@ try {
   expect((await call('preset.read',{novelId})).content).toBe('请保持 {{char}} 的叙述视角。');
   expect((await call('preset.get',{novelId})).importFormat).toBe('chat-completion');
   await expect(page.getByText('旧版导入的停用状态已保留；重新导入原文件可按新的内容优先规则解析。',{exact:true})).toHaveCount(0);
-  await expect(page.getByText('含酒馆宏或占位符：按原文保留，不执行替换；可在下方改成明确的写作要求。',{exact:true})).toBeVisible();
+  await expect(page.getByText(/此作品启用剧情变量后，可替换常见取值宏/)).toBeVisible();
+  await expect(page.getByText(/保存后，新会话使用新版/)).toBeVisible();
   await page.getByText('预设设置',{exact:true}).click();const download=page.waitForEvent('download');await page.getByRole('button',{name:'下载原始文件（不含编辑）'}).click();const file=await download;expect(JSON.parse(await readFile(await file.path(),'utf8'))).toEqual(input);
   await page.screenshot({path:join(shots,'content-first.png')});
   const envelope={version:1,type:'full',data:{prompts:[{identifier:'a',content:'平缓叙事。',role:'user'}],prompt_order:[{identifier:'chatHistory',enabled:true},{identifier:'a',enabled:true}]}};

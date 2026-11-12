@@ -52,11 +52,6 @@ export const navigationStyles = `
 .cuigengji .prose-display label:last-child {margin-bottom:0;}
 .cuigengji .prose-display select {width:100%;color:var(--cg-ink);}
 .cuigengji .chapter-toolbar>.prose-display {margin-left:auto;}
-.cuigengji .canvas-selection-tools {display:flex;align-items:center;gap:4px;flex-wrap:wrap;max-width:100%;padding:5px 7px;border:1px solid var(--cg-line);border-radius:10px;background:var(--cg-paper);box-shadow:0 4px 16px color-mix(in srgb,var(--cg-ink) 7%,transparent);pointer-events:auto;}
-.cuigengji .canvas-selection-tools>span {font-size:11px;color:var(--cg-muted);padding:0 7px;white-space:nowrap;}
-.cuigengji .canvas-selection-tools button,.cuigengji .canvas-selection-tools .menu>summary {border:0;background:none;min-height:30px;padding:5px 8px;font-size:11px;white-space:nowrap;}
-.cuigengji .canvas-selection-tools .selection-clear {font-size:17px;padding-inline:7px;color:var(--cg-muted);}
-.cuigengji .canvas-selection-tools .menu-panel {left:0;right:auto;width:160px;}
 .cuigengji .graph-control-divider {height:16px;width:1px;background:var(--cg-line);margin:0 3px;}
 @container(max-width:759px) {
  .cuigengji .workbench-header.workbench-navigation {grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:8px 16px;min-height:56px;}

@@ -32,6 +32,8 @@
 
 导入前自动生成 `backups/before-transfer-*/workspace.json`，这个文件本身是可识别的全库备份。内容、运行记录、日志附件使用同一个可恢复事务提交，中断后先恢复，再允许下一次读取或重试。DSH 的聊天、附件和 API 配置由 DSH 管理，不在小说数据包中。
 
+历史和回收站清理确认后直接永久删除，不生成清理备份。需要保留副本时，请先通过「数据与备份」主动导出。此前已保存的备份仍可按现有导入流程恢复。
+
 ## 维护边界
 
 `src/contracts/transfer.ts` 定义共享契约；`application/transfer/recognize.ts` 识别文件并复用既有解析器，`packages.ts` 负责范围及关联，`copy.ts` 负责新 ID 与引用重映射，`service.ts` 负责锁、预览、备份和事务提交。业务数据仍通过 ProjectStore 保存，不绕过索引直接修改文件。

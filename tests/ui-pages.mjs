@@ -1,4 +1,4 @@
-import {selectPlanningPage,selectedPlanningPage,showOrganization} from './helpers/navigation.mjs';
+import {selectPlanningPage,selectedPlanningPage,showOrganization,moveBatch} from './helpers/navigation.mjs';
 import {spawn} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
@@ -65,7 +65,7 @@ try{
  await expect(dialog).toHaveCount(0);await expect.poll(async()=>(await call('planning.decorations',{novelId,pageId})).items.find(d=>d.id===note.id).content).toBe('作者未保存的讨论\nAI 补充了另一条疑问');await expect(page.locator('.decoration-note')).toContainText('作者未保存的讨论');
  await page.setViewportSize({width:420,height:850});await context(390,380);const menu=await page.getByRole('menu',{name:'画布操作'}).boundingBox();expect(menu.x).toBeGreaterThanOrEqual(0);expect(menu.x+menu.width).toBeLessThanOrEqual(420);await page.screenshot({path:join(shots,'planning-context-narrow.png')});await page.keyboard.press('Escape');await expect(page.getByRole('menu')).toHaveCount(0);
  await page.evaluate(()=>{document.documentElement.style.cssText='--dsw-alias-bg-base:#20251f;--dsw-alias-label-primary:#e4e8de;--dsw-alias-label-secondary:#a8b0a0;--dsw-alias-border-l1:#404a3b;--dsw-alias-state-success-primary:#a4c195';});await page.setViewportSize({width:1100,height:900});await page.screenshot({path:join(shots,'planning-page-dark.png')});
- await page.getByRole('button',{name:'多选',exact:true}).click();await page.locator('.scene-card').filter({hasText:'抵达港口'}).click();await page.getByLabel('批量移动目标',{exact:true}).selectOption('page:');await page.getByRole('region',{name:'批量管理',exact:true}).getByRole('button',{name:'移动',exact:true}).click();
+ await page.getByRole('button',{name:'多选',exact:true}).click();await page.locator('.scene-card').filter({hasText:'抵达港口'}).click();await moveBatch(page,'page:');
  await expect(page.locator('.planning-card')).toHaveCount(2);expect((await call('planning.list',{novelId,pageId})).total).toBe(0);expect((await call('planning.decorations',{novelId,pageId})).total).toBe(2);
  await page.getByRole('button',{name:'新建画布',exact:true}).click();dialog=page.getByRole('dialog',{name:'新建画布',exact:true});await dialog.getByLabel('画布名称').fill('临时页');await dialog.getByRole('button',{name:'保存画布'}).click();await page.getByRole('button',{name:'画布设置',exact:true}).click();await page.getByRole('dialog',{name:'画布设置',exact:true}).getByRole('button',{name:'删除空画布',exact:true}).click();
  await expect(page.getByLabel('规划画布',{exact:true})).not.toContainText('临时页');

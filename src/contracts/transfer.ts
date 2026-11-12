@@ -2,6 +2,7 @@ import type {Board} from './planning.ts';
 import type {CollaborationData,CollaborationProgress} from './collaboration.ts';
 import type {Group} from '../domain/memory/groups.ts';
 import type {MemoryPage} from '../domain/memory/pages.ts';
+import type {VariableState} from '../domain/variables/model.ts';
 
 export type ContentKind = 'works' | 'chapters' | 'memory' | 'planning' | 'preset';
 export type ExportKind = ContentKind | 'workspace';
@@ -24,7 +25,10 @@ export interface MemoryVersion {
   actor?: {kind: string; sessionId: string | null}; [key: string]: unknown;
 }
 export interface MemoryNode extends MemoryFields {type: 'character_card' | 'world_entry' | 'world_book'; versions?: MemoryVersion[]}
-export interface MemoryEdge extends MemoryFields {from: string; to: string}
+/** Optional typed relation between two settings. `''` keeps the untyped legacy
+ * behavior: free-text name stays the source, the kind only styles and groups. */
+export type RelationKind = '' | 'family' | 'alliance' | 'hostile' | 'location' | 'membership' | 'other';
+export interface MemoryEdge extends MemoryFields {from: string; to: string; kind?: RelationKind}
 export interface PresetBlock {identifier: string; name: string; content: string; enabled: boolean; [key: string]: unknown}
 export interface PresetData {id?: string; revision?: number; name: string; enabled: boolean; blocks: PresetBlock[]; raw?: unknown; importFormat?: string; warnings?: string[]; [key: string]: unknown}
 export interface Novel extends Entity {
@@ -34,12 +38,13 @@ export interface Novel extends Entity {
   memoryPages?:Record<string,MemoryPage>;
   memoryPageFolders?:Record<string,string>;memoryFolderWorkspace?:boolean;
   planning?: Board; plan?: Board['legacy'] | null; preset?: PresetData;
+  variables?:VariableState;
   collaboration?: CollaborationData;
   collaborationProgress?: CollaborationProgress;
   tavernSources?: Record<string, {format: string; raw: unknown}>;
   transferScope?: {mainPage: boolean};
 }
-export interface Workspace {schemaVersion: number; guidance?:Record<string,boolean>; novels: Record<string, Novel>; bindings: Record<string, Record<string, unknown>>; requests: Record<string, {signature: string; result?: unknown; timestamp?: string; novelId?: string}>}
+export interface Workspace {schemaVersion: number; guidance?:Record<string,boolean>; novels: Record<string, Novel>; bindings: Record<string, Record<string, unknown>>; requests: Record<string, {signature: string; result?: unknown; timestamp?: string; novelId?: string; cleaned?: boolean}>}
 
 /** Omitted IDs select all active content; [] explicitly selects nothing. */
 export interface Selection {

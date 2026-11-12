@@ -1,4 +1,4 @@
-import {selectPlanningPage,selectedPlanningPage,showOrganization} from './helpers/navigation.mjs';
+import {selectPlanningPage,selectedPlanningPage,showOrganization,clearCanvasSelection} from './helpers/navigation.mjs';
 // Real browser exercise of the shipped component against the production Store.
 import { chromium, expect } from '@playwright/test';
 import { build } from 'esbuild';
@@ -219,7 +219,7 @@ try {
     const box=await handle.boundingBox();
     await page.mouse.move(box.x+20,box.y+10);await page.mouse.down();await page.mouse.move(box.x+20+(title==='敲门'?-150:150),box.y+10+(title==='敲门'?-40:40),{steps:5});await page.mouse.up();
     await expect(page.getByText('正在保存…',{exact:true})).toHaveCount(0);
-    await page.getByLabel('取消画布选择',{exact:true}).click();await page.getByRole('button',{name:'适应视图',exact:true}).click();
+    await clearCanvasSelection(page);await page.getByRole('button',{name:'适应视图',exact:true}).click();
     await page.locator('.planning-card').getByRole('button',{name:title,exact:true}).dblclick();
     await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
     if(title==='敲门')await capture('planning-detail');

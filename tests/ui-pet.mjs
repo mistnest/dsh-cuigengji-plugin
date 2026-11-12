@@ -10,13 +10,18 @@ import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 import { Store } from '../src/core/store.js';
 import { DesktopPet } from '../src/application/pet/desktop.ts';
+import { UsageService } from '../src/application/usage/service.ts';
 import { spawn } from 'node:child_process';
 
 const root = resolve(import.meta.dirname, '..'), directory = await mkdtemp(join(tmpdir(), 'cuigengji-pet-ui-'));
 const shots = join(root, 'test-results', 'pet'); await mkdir(shots, { recursive: true });
-const store = new Store(directory), books = {};
+const store = new Store(directory), books = {},usage=new UsageService(join(directory,'usage'));
+const usageConfig=await usage.configuration();
+await usage.configure({expectedRevision:usageConfig.revision,prices:[...usageConfig.prices,{id:'pet-fixture',provider:'synthetic',model:'fixture-model',currency:'CNY',input:'2',output:'2',cacheRead:'2',revision:1}]});
+await usage.ingest('pet-a',[{seq:0,time:Date.now(),type:'assistant/message',data:{turn:0,step:0,message:{source:{provider:'synthetic',model:'fixture-model'}},usage:{inputTokens:48210,cacheReadTokens:192810,outputTokens:45400,totalTokens:286420}}}]);
+await usage.store.run(meta=>{meta.balances.deepseek={balance:'86.244999',at:Date.now()};},true);
 let nativeProcess, nativeOutput = '';
-const desktopPet = new DesktopPet(directory, (action, args, actor) => store.dispatch(action, args, actor), { supported: process.platform === 'win32', launch() {
+const desktopPet = new DesktopPet(directory, (action, args, actor) => store.dispatch(action, args, actor), { usage,supported: process.platform === 'win32', launch() {
   const child = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', resolve(root, 'src/desktop/pet.ps1'), '-StateDirectory', directory, '-AssetsDirectory', resolve(root, 'src/client/assets/pets'), '-ParentProcessId', String(process.pid), '-Headless'], { windowsHide: true });
   child.stdout.on('data', value => nativeOutput += value); nativeProcess = child; return child;
 } });
@@ -35,6 +40,7 @@ const mounted=source('pet-a'),panel=source(null),counter=source(0),status=source
 const registrations=[],disposers=[],retired=[],requests=[],opened=[],held=new Map(),pending=[],failures=new Map();let statusFault=false;
 const statusSource={subscribe:status.subscribe,getSnapshot(){if(statusFault)throw Error('测试：宿主状态暂不可读');return status.getSnapshot()}};
 const ctx={effect:fn=>{const off=fn();if(typeof off==='function')disposers.push(off)},slots:{inject:(_,fn)=>fn(),register:(options,Component)=>{registrations.push({options,Component});return()=>{}}},
+uiWorkspace:{openSession:id=>{opened.push({sessionId:id,kind:'conversation'});mounted.set(id)}},layout:{selectPanel:()=>panel.set(null)},
 sidebarRightTabs:{register:options=>{if(options.kind==='cuigengji-pet')throw Error('不能再注册独立陪伴页');return()=>{}}},sidebarRight:{mounted,openResource:address=>{const sessionId=decodeURIComponent(address.slice(address.lastIndexOf('/')+1));opened.push({sessionId,kind:'cuigengji'});panel.set({sessionId,visible:true})}},
 sessions:{list:source({byId:{'pet-b':{id:'pet-b',retainedBy:{mainView:1}},'pet-a':{id:'pet-a',retainedBy:{mainView:1}}}})},uiSession:{sessionStatus:statusSource},workspaces:{list:source({items:[]})}};
 applyWithRPC(ctx,async(action,args,sessionId)=>{
@@ -65,7 +71,12 @@ const server = createServer(async (req, res) => {
     }
     if (req.url === '/dispatch') {
       let body = ''; for await (const chunk of req) body += chunk;
-      const request = JSON.parse(body), value = request.action === 'settings.get' ? {dataRoot:directory} : request.action === 'pet.desktop' ? await desktopPet.sync({ ...request.args, sessionId: request.sessionId }) : await store.dispatch(request.action, request.args || {}, { kind: 'human', sessionId: request.sessionId });
+      const request = JSON.parse(body), value = request.action.startsWith('usage.') ? await usage.dispatch(request.action,request.args||{}) : request.action === 'settings.get' ? {dataRoot:directory} : request.action === 'pet.desktop' ? await desktopPet.sync({ ...request.args, sessionId: request.sessionId }) : await store.dispatch(request.action, request.args || {}, { kind: 'human', sessionId: request.sessionId });
+      if (request.action === 'usage.presentation' && value.event?.id.startsWith('ui-waiting-')) {
+        // Simulate an older server still asking the client to open a reminder.
+        value.showBubble = true;
+        value.ttl = 1;
+      }
       res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(value)); return;
     }
     res.setHeader('content-type', 'text/html'); res.end('<!doctype html><html><meta charset="utf-8"><style>html,body,#root{margin:0;height:100%;font:14px system-ui;background:#e9edf4}header{position:relative;z-index:2;padding:8px}</style><div id="root"></div><script src="/bundle.js"></script></html>');
@@ -98,7 +109,22 @@ try {
   // Portal escapes a clipped/transformed 220x200 host column.
   let box = await avatar.boundingBox(); expect(box.x).toBeGreaterThan(900); expect(box.y).toBeGreaterThan(650);
   await avatar.click(); await expect(dialog.locator('.pet-companion-scope')).toContainText('甲作品');
-  await dialog.getByRole('button', { name: '查看详情', exact: true }).click();
+  await expect(dialog.locator('.pet-quick-token-line strong')).toHaveText('286,420');
+  await expect(dialog.locator('.pet-quick-amounts').nth(0)).toHaveText('¥ 0.57');
+  await expect(dialog.locator('.pet-quick-amounts').nth(1)).toHaveText('¥ 86.24');
+  await expect(dialog.getByText('作者聊天',{exact:true})).toBeHidden();
+  await page.screenshot({path:join(shots,'compact-overview.png'),animations:'disabled'});
+  await dialog.getByRole('button',{name:/今日写作/}).click();
+  await expect(dialog.getByText('作者聊天',{exact:true})).toBeVisible();
+  await dialog.getByLabel('今日 Token 构成',{exact:true}).click();
+  await expect(dialog.locator('.pet-quick-breakdown')).toContainText('192,810');
+  await dialog.getByLabel('账户余额来源',{exact:true}).click();
+  await expect(dialog.locator('.pet-quick-accounts')).toContainText('DeepSeek');
+  await page.screenshot({path:join(shots,'expanded-overview.png'),animations:'disabled'});
+  await avatar.click();await expect(dialog).toHaveCount(0);
+  await avatar.click();await expect(dialog.getByText('作者聊天',{exact:true})).toBeVisible();
+  await dialog.getByRole('button',{name:/今日写作/}).click();
+  await dialog.getByRole('button', { name: '查看记录', exact: true }).click();
   const records=page.getByRole('dialog', { name: '写作记录', exact: true });
   await expect(records).toBeVisible();expect(await records.evaluate(el=>el.matches(':modal'))).toBe(true);await expect(page.locator('.workbench-base')).toBeVisible();await expect(records.getByLabel('统计范围')).toHaveValue(books['pet-a']);
   expect((await page.evaluate(() => fixture.stats())).opened.at(-1)).toEqual({ sessionId: 'pet-a', kind: 'cuigengji' });
@@ -173,8 +199,9 @@ try {
   expect((await page.evaluate(() => fixture.stats())).requests.some(r => r.action === 'activity.today' && r.sessionId === 'broken')).toBe(false);
   await expect(dialog.getByRole('button', { name: '进度未连接，点击重试' })).toBeVisible();
   await page.evaluate(() => { fixture.fail('binding.get', 'broken', null); fixture.session(undefined); fixture.clear(); });
-  await avatar.click(); await expect(dialog).toContainText('打开一个对话'); await expect(dialog.getByRole('button', { name: '查看详情', exact: true })).toBeDisabled();
-  expect((await page.evaluate(() => fixture.stats())).requests).toEqual([]);
+  await avatar.click(); await expect(dialog).toContainText('打开一个对话'); await expect(dialog.getByRole('button', { name: '查看记录', exact: true })).toBeDisabled();
+  // Device usage remains available without binding a writing conversation.
+  expect((await page.evaluate(() => fixture.stats())).requests.filter(r=>!r.action.startsWith('usage.'))).toEqual([]);
   await page.getByRole('button', { name: /聊天继续/ }).click(); await expect(dialog).toHaveCount(0);
 
   // A render failure stays inside the companion and the host keeps working.
@@ -182,6 +209,35 @@ try {
   await expect(page.getByRole('button', { name: '恢复桌宠', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /聊天继续/ }).click();
   await page.evaluate(() => fixture.fault(false)); await page.getByRole('button', { name: '恢复桌宠', exact: true }).click(); await expect(avatar).toBeVisible();
+  // A menu defers delivery. A pending notice is visible on click and stays
+  // pending until DSH resolves it, even if the author closes the quick view.
+  await avatar.click({button:'right'});await expect(menu).toBeVisible();
+  await usage.notification({id:'ui-waiting-a',kind:'question',sessionId:'pet-a',time:Date.now(),pending:true,text:'合成提醒：请确认这段情节'});
+  await page.clock.fastForward(4100);
+  await expect.poll(async()=> (await page.evaluate(()=>fixture.stats())).requests.filter(r=>r.action==='usage.presentation').length).toBeGreaterThan(0);
+  await expect(menu).toBeVisible();expect((await usage.dispatch('usage.export')).meta.events.find(e=>e.id==='ui-waiting-a').deliveredAt).toBeUndefined();
+  await page.keyboard.press('Escape');
+  await expect.poll(async()=>!!(await usage.dispatch('usage.export')).meta.events.find(e=>e.id==='ui-waiting-a').deliveredAt).toBe(true);
+  await expect(dialog).toHaveCount(0);
+  await avatar.click();
+  await expect(dialog).toContainText('合成提醒：请确认这段情节');
+  await page.clock.runFor(1500);
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button',{name:'收起桌宠对话'}).click();await expect(dialog).toHaveCount(0);
+  await page.clock.fastForward(4100);await expect(dialog).toHaveCount(0);
+  expect((await usage.dispatch('usage.export')).meta.events.find(e=>e.id==='ui-waiting-a').pending).toBe(true);
+  await usage.resolveNotification('ui-waiting-a');
+  await usage.notification({id:'ui-waiting-b',kind:'approval',sessionId:'pet-b',time:Date.now(),pending:true,text:'合成提醒：另一对话等待确认'});
+  await page.clock.fastForward(4100);
+  await expect.poll(async()=>!!(await usage.dispatch('usage.export')).meta.events.find(e=>e.id==='ui-waiting-b').deliveredAt).toBe(true);
+  await expect(dialog).toHaveCount(0);
+  await avatar.click();
+  await expect(dialog).toContainText('合成提醒：另一对话等待确认');
+  await dialog.getByRole('button',{name:'回到待处理对话',exact:true}).click();
+  await expect.poll(async()=> (await page.evaluate(()=>fixture.stats())).opened.filter(e=>e.kind==='conversation').at(-1)?.sessionId).toBe('pet-b');
+  expect((await usage.dispatch('usage.export')).meta.events.find(e=>e.id==='ui-waiting-b').pending).toBe(true);
+  await usage.resolveNotification('ui-waiting-b');
+  await page.evaluate(()=>fixture.session('pet-a'));
   // The intentional render exception is caught by our boundary, never pageerror.
   expect((await page.evaluate(() => fixture.stats())).retired).toEqual([]); expect(errors).toEqual([]);
   await page.evaluate(() => fixture.show(false)); await expect(pet).toHaveCount(0);
@@ -233,8 +289,8 @@ try {
     await nativePage.screenshot({ path: join(shots, 'desktop-bridge.png'), animations: 'disabled' });
     await nativePage.close();
   }
-  console.log(JSON.stringify({ ok: true, checks: ['real DSH overlay/tab registration and selected-session targeting', 'shared stats, role sync and actual host running/waiting status', 'accurate multi-step drag without accidental clicks, persistence and blur cleanup', 'four edges, narrow viewports and live resize', 'persistent hide and restore', 'late response ignored and binding error stays scoped', 'no-session behavior and click-through shell', 'render recovery without retiring host slots', 'real WPF process through desktop bridge: two-way roles and visibility, fallback on exit and manual restart'] }));
+  console.log(JSON.stringify({ ok: true, checks: ['real DSH overlay/tab registration and selected-session targeting', 'shared stats, role sync and actual host running/waiting status', 'accurate multi-step drag without accidental clicks, persistence and blur cleanup', 'four edges, narrow viewports and live resize', 'persistent hide and restore', 'late response ignored and binding error stays scoped', 'no-session behavior and click-through shell', 'click-only quick view despite legacy reminder flags; pending navigation preserved', 'render recovery without retiring host slots', 'real WPF process through desktop bridge: two-way roles and visibility, fallback on exit and manual restart'] }));
 } finally {
-  await browser?.close(); await desktopPet.close(); await new Promise(resolve => server.close(resolve));
+  await browser?.close(); await desktopPet.close(); await usage.close(); await new Promise(resolve => server.close(resolve));
   assert.equal(resolve(directory), directory); assert.ok(basename(directory).startsWith('cuigengji-pet-ui-')); await rm(directory, { recursive: true, force: true });
 }

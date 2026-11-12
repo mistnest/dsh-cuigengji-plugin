@@ -91,7 +91,7 @@ export function ManuscriptSearch(props:Props) {
         try {
           await latest.current.prepare();
           const result=await call('chapter.replace',{novelId,query:preview.options.query,replacement:preview.options.replacement,matchCase:preview.options.matchCase,expectedSnapshot:preview.result.snapshot,requestId:preview.requestId,confirm:true});
-          setNotice(`已替换 ${result.count} 处，涉及 ${result.chapters.length} 章 · 可从章节版本历史恢复`);
+          setNotice(`已替换 ${result.count} 处，涉及 ${result.chapters.length} 章 · 可从「改动对比」恢复旧稿`);
           setPreview(null);setRemote(null);edit({offset:0});props.refresh();
         } catch(error) {
           setError(message(error));

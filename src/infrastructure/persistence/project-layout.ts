@@ -68,7 +68,7 @@ export const bookPath = (id: string, directories: ProjectDirectories) => {
 };
 export const legacyBookPath = (id: string) => 'novels/' + fileId(id);
 export const pageKey = (id: string | null) => id === null ? '~main' : fileId(id);
-export const sections = ['chapters', 'nodes', 'edges', 'memoryGroups', 'planning', 'preset', 'plan', 'tavernSources', 'collaboration', 'collaborationProgress'] as const;
+export const sections = ['chapters', 'nodes', 'edges', 'memoryGroups', 'planning', 'preset', 'plan', 'tavernSources', 'collaboration', 'collaborationProgress','variables'] as const;
 export const libraryRow = (novel: Row) => ({...Object.fromEntries(['id', 'title', 'description', 'revision', 'archived', 'archivedAt', 'createdAt', 'updatedAt'].filter(key => own(novel, key)).map(key => [key, novel[key]])),
   ...((novel.hasCollaboration||collaborationIndex(novel))?{hasCollaboration:true}:{}),
   ...((novel.collaboration?.sharedPlan||collaborationIndex(novel)?.sharedPlan||novel.sharedPlan)?{sharedPlan:novel.collaboration?.sharedPlan||collaborationIndex(novel)?.sharedPlan||novel.sharedPlan}:{}),
@@ -226,7 +226,7 @@ export function splitNovel(id: string, novel: Row, directories: ProjectDirectori
       for (const transaction of novel.planning.transactions) put('history/planning/' + fileId(transaction.id) + '.json', transaction);
     }
   }
-  for (const [field, path] of [['preset', 'preset.json'], ['plan', 'planning/legacy.json'], ['tavernSources', 'imports/originals.json'], ['collaboration', 'collaboration.json'], ['collaborationProgress','collaboration-progress.json']]) if (own(novel, field)) put(path, novel[field]);
+  for (const [field, path] of [['variables', 'variables.json'], ['preset', 'preset.json'], ['plan', 'planning/legacy.json'], ['tavernSources', 'imports/originals.json'], ['collaboration', 'collaboration.json'], ['collaborationProgress','collaboration-progress.json']]) if (own(novel, field)) put(path, novel[field]);
   const collaboration=projectCollaboration(novel);if(collaboration)put('collaboration-index.json',collaboration);
   return files;
 }

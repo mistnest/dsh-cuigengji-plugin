@@ -4,6 +4,7 @@ import {useWorkspacePreference} from '../../shared/workspace-state.ts';
 import {saveShortcut} from '../../shared/ui.jsx';
 import {useDialog} from '../../dialog.tsx';
 import {Badge, DraftFooter, useStoryDraft} from './shared.tsx';
+import {LineTimeline} from './LineTimeline.tsx';
 import {chapterTitle} from './model.ts';
 import type {StoryActions} from './useStoryWorkspace.ts';
 
@@ -46,6 +47,7 @@ export function VolumeBoard(props:Props) {
   if(lineEditing!==null)return <StorylineEditor snapshot={snapshot} busy={busy} save={save} line={lineEditing?snapshot.story.storylines[lineEditing]:undefined} onClose={()=>setLineEditing(null)}/>;
   const nothingYet=!snapshot.volumes.length&&!snapshot.chapters.length;
   return <div className="story-visual-stack story-unit-workspace">
+    <LineTimeline snapshot={snapshot} onChapter={onChapter}/>
     <section className="story-figure" aria-label="卷纲与单元">
       <div className="story-figure-heading"><div><h3>卷 → 剧情单元 → 章</h3><p>单元是卷内一个完整弧线，不是一章。点开单元核对它是否兑现了承诺读者的事。</p></div>{!nothingYet&&<button disabled={busy||!snapshot.volumes.length} onClick={()=>setEditing({volumeId:snapshot.volumes[0]?.id??null})}>＋ 新增剧情单元</button>}</div>
       {snapshot.diagnostics.overdueUnitIds.length>0&&<div className="story-warning" role="status"><p>有 {snapshot.diagnostics.overdueUnitIds.length} 个单元的章节范围已经写完，但契约仍是“需补强”或“已破坏”。请在下方标红的单元里回到正文核对承诺。</p></div>}

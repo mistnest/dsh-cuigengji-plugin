@@ -10,6 +10,8 @@
 | 让 Agent 帮忙安装或更新 | [Windows Agent 安装指南](agent-installation.md) |
 | 更新旧版并保留作品 | [更新与数据迁移](upgrade.md) |
 | 正文查找替换、桌宠、写作记录与设置 | [工作台常用功能](workbench.md) |
+| 桌宠显示 Token、费用、余额与自定义气泡 | [桌宠用量与记账](pet-usage.md) |
+| 可选的剧情状态与常见酒馆变量 | [剧情变量](variables.md) |
 | 从旧包名迁移 | [包名迁移](package-name-migration.md) |
 | 一起整理大纲、推演剧情和资源 | [规划与设定工作台](planning-board.md) |
 | 按章规划、追踪伏笔与审稿问题 | [创作工作台](story-workbench.md) |

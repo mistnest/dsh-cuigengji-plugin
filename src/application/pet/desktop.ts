@@ -3,11 +3,13 @@ import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type {UsageService} from '../usage/service.ts';
 
 type Row = Record<string, any>;
 interface Options {
   supported?: boolean;
   launch?: () => ChildProcessWithoutNullStreams;
+  usage?: UsageService;
 }
 const moods = new Set(['idle', 'thinking', 'writing', 'waiting', 'sleepy', 'error']);
 
@@ -27,7 +29,7 @@ export class DesktopPet {
   private loading: Promise<void> | null = null;
   private revision = 0;
   private sequence = 0;
-  private details: { sequence: number; sessionId: string } | null = null;
+  private details: { sequence: number; sessionId: string; action?:string } | null = null;
   private snapshot: Row = {};
   private poll: ReturnType<typeof setTimeout> | undefined;
   private reading: Promise<void> | null = null;
@@ -38,8 +40,10 @@ export class DesktopPet {
   private launch: () => ChildProcessWithoutNullStreams;
   private root: string;
   private dispatch: (action: string, args: Row, actor: Row) => Promise<any>;
+  private usage?:UsageService;private unsubscribe?:()=>void;private usageReading=false;private bubbleIndex=0;private usageQueued:string[]=[];
   constructor(root: string, dispatch: (action: string, args: Row, actor: Row) => Promise<any>, options: Options = {}) {
     this.root = root; this.dispatch = dispatch;
+    this.usage=options.usage;this.unsubscribe=this.usage?.subscribe(()=>{void this.refreshUsage();});
     // Newer DSH scopes the launcher variable to package installation. Its Host
     // still runs in Electron's Node mode; the client separately requires the desktop preload.
     this.supported = options.supported ?? (process.platform === 'win32' && Boolean(process.versions.electron || process.env.DSH_DESKTOP_NODE_EXECUTABLE));
@@ -110,7 +114,9 @@ export class DesktopPet {
           const event = JSON.parse(line);
           if (event.type === 'ready' && event.protocol === 1) { this.ready = true; this.failed = ''; this.send(); done(); }
           else if (event.type === 'preferences') { this.updatePreferences({ ...this.preferences, ...event }); this.send(); }
-          else if (event.type === 'details') this.details = { sequence: ++this.sequence, sessionId: this.sessionId };
+          else if (event.type === 'details'||event.type==='conversation') this.details = { sequence: ++this.sequence, sessionId: typeof event.sessionId==='string'?event.sessionId:this.sessionId,action:event.type==='conversation'?'conversation':'records' };
+          else if(event.type==='interact'){if(event.kind==='next')this.bubbleIndex++;void this.refreshUsage(event.kind==='next'?undefined:event.kind);}
+          else if((event.type==='ack'||event.type==='delivered')&&typeof event.id==='string')void this.usage?.dispatch('usage.'+event.type,{id:event.id}).catch(()=>{});
         } catch { /* Ignore non-protocol diagnostics. */ }
       });
       child.stderr.on('data', chunk => { errors = (errors + String(chunk)).slice(-1600); });
@@ -146,7 +152,8 @@ export class DesktopPet {
         // library, silently dropping every update until the scope changes.
         const { date, novelId, title, stats } = result;
         this.snapshot = { ...this.snapshot, activity: { date, novelId, title: typeof title === 'string' ? title.slice(0, 512) : null,
-          stats: { proseAdded: stats.proseAdded, settingAdded: stats.settingAdded, planningChanges: stats.planningChanges } }, error: '' }; this.send();
+          stats: { proseAdded: stats.proseAdded, settingAdded: stats.settingAdded, planningChanges: stats.planningChanges, conversationInput: stats.conversationInput || 0 } }, error: '' }; this.send();
+        void this.refreshUsage();
       } catch {
         if (generation === this.generation && !this.closed) { this.snapshot = { ...this.snapshot, error: '暂时读不到今日进度' }; this.send(); }
       }
@@ -156,6 +163,11 @@ export class DesktopPet {
       if (!this.closed && this.ready && this.preferences.visible) this.poll = setTimeout(() => { void this.refresh(); }, generation !== this.generation ? 0 : 15_000);
     });
     return this.reading;
+  }
+  private async refreshUsage(kind?:string){
+    if(!this.usage||this.closed||!this.ready)return;if(this.usageReading){this.usageQueued.push(kind||'');this.usageQueued=this.usageQueued.slice(-4);return;}this.usageReading=true;
+    const generation=this.generation,sessionId=this.sessionId;
+    try{const presentation=await this.usage.presentation({index:this.bubbleIndex,kind,sessionId,prose:this.snapshot.activity?.stats?.proseAdded,setting:this.snapshot.activity?.stats?.settingAdded});if(!this.closed&&generation===this.generation){this.snapshot.presentation=presentation;this.send();}else if(!this.closed)this.usageQueued.push('');}catch{/* Accounting cannot interrupt the companion or novel operations. */}finally{this.usageReading=false;if(this.usageQueued.length){const next=this.usageQueued.shift();void this.refreshUsage(next||undefined);}}
   }
   async sync(args: Row) {
     if (!this.supported || args.desktop !== true) return { supported: false, available: false };
@@ -178,6 +190,7 @@ export class DesktopPet {
   }
   async close() {
     this.closed = true; this.generation++; this.cancelRead?.(); clearTimeout(this.poll);
+    this.unsubscribe?.();
     const child = this.child; this.child = null; this.ready = false;
     if (child && !child.stdin.destroyed) child.stdin.end('{"type":"quit"}\n');
     if (child) { const timer = setTimeout(() => { if (child.exitCode === null) child.kill(); }, 1500); timer.unref(); child.once('exit', () => clearTimeout(timer)); }

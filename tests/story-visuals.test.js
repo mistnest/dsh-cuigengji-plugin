@@ -9,6 +9,7 @@ import {Store} from '../src/application/store.js';
 import {scanProse} from '../src/domain/story/detect/engine.js';
 import {castMatrix} from '../src/client/features/story/cast-model.ts';
 import {clockLayout} from '../src/client/features/story/clock-model.ts';
+import {lineTimeline} from '../src/client/features/story/line-timeline-model.ts';
 
 const actor = {kind: 'human', sessionId: 'visual-test-author'};
 async function setup(t) {
@@ -127,6 +128,42 @@ test('legacy story data without the new plan fields stays readable', async t => 
   assert.deepEqual(normalized.storylines, {});
   assert.deepEqual(normalized.rhythms, {});
   assert.equal(normalized.style.targetSentence, null);
+});
+
+test('the line timeline projects saved storylines and unit coverage, never infers', async t => {
+  const s = await setup(t);
+  const c1 = await s.call('chapter.create', {title: '第一章 雨夜', content: '雨停了。'});
+  const c2 = await s.call('chapter.create', {title: '第二章 钟楼', content: '灯亮了。'});
+  const c3 = await s.call('chapter.create', {title: '第三章 码头', content: '船到了。'});
+  await s.apply([
+    {op: 'storyline.upsert', value: {title: '寻父主线', kind: 'main', canCarryChapter: 'yes'}},
+    {op: 'storyline.upsert', value: {title: '钟楼支线', kind: 'subplot', canCarryChapter: 'half'}},
+    {op: 'unit.upsert', value: {volumeId: null, title: '雨夜来信', chapterIds: [c1.id, c2.id], lineIds: [], contractRisk: ''}},
+  ]);
+  const snapshot = await s.call('story.get');
+  const lines = Object.values(snapshot.story.storylines);
+  const main = lines.find(line => line.title === '寻父主线'), sub = lines.find(line => line.title === '钟楼支线');
+  const units = Object.values(snapshot.story.units);
+  // Attach the unit to both lines: main covers chapters 1–2, sub only chapter 2.
+  await s.apply([{op: 'unit.upsert', value: {id: units[0].id, lineIds: [main.id]}}]);
+  await s.apply([
+    {op: 'unit.upsert', value: {volumeId: null, title: '钟楼暗流', chapterIds: [c2.id, c3.id], lineIds: [sub.id], contractRisk: 'broken'}},
+  ]);
+  const model = lineTimeline(await s.call('story.get'));
+  assert.equal(model.rows.length, 2, 'lines without unit coverage never enter the chart');
+  const mainRow = model.rows.find(row => row.line.id === main.id);
+  const subRow = model.rows.find(row => row.line.id === sub.id);
+  assert.equal(mainRow.points.length, 2);
+  assert.ok(mainRow.x1 < mainRow.x2, 'the span runs from first to last covered chapter');
+  assert.equal(subRow.points.length, 2);
+  assert.deepEqual(subRow.brokenUnits, ['钟楼暗流']);
+  assert.ok(subRow.points.every(point => point.contractRisk === 'broken'), 'broken contract nodes are flagged');
+  // Main lane sits above the subplot lane, matching the kind order.
+  assert.ok(model.lanes.main.y < model.lanes.subplot.y);
+  // A line no unit references yet stays off the chart entirely.
+  await s.apply([{op: 'storyline.upsert', value: {title: '悬置线', kind: 'subplot', canCarryChapter: 'no'}}]);
+  const after = lineTimeline(await s.call('story.get'));
+  assert.equal(after.rows.length, 2, 'a storyline without covered chapters is not inferred into rows');
 });
 
 test('a reference book folder imports as a project-scoped 对标 copy', async t => {

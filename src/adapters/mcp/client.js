@@ -7,6 +7,9 @@ import { assertMemoryAction, toolName } from './actions.js';
 import { errorInfo } from '../../contracts/errors.ts';
 
 const MAX_BODY_BYTES = 1024 * 1024;
+// Presets archive up to 2M characters of import metadata, which can exceed
+// 1 MiB on the wire. Keep the existing cap for other memory operations.
+const MAX_PRESET_BODY_BYTES = 8 * 1024 * 1024;
 
 export function memoryRuntime(options = {}, runtime = process) {
   const command = options.nodeCommand ?? runtime.env.CUIGENGJI_DSH_NODE ?? runtime.execPath;
@@ -65,11 +68,12 @@ export class MemoryBridge {
       const chunks = [];
       for await (const chunk of request) {
         size += chunk.length;
-        if (size > MAX_BODY_BYTES) return reply(413, { error: '记忆请求过大' });
+        if (size > MAX_PRESET_BODY_BYTES) return reply(413, { error: '记忆请求过大' });
         chunks.push(chunk);
       }
       const { action, args = {} } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       assertMemoryAction(action);
+      if (!action.startsWith('preset.') && size > MAX_BODY_BYTES) return reply(413, {error:'记忆请求过大'});
       if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('参数必须是对象');
       const actor = { kind: 'agent', sessionId };
       const onDemandGuidance = action === 'guidance.read';

@@ -66,7 +66,8 @@ test('each registered task skill includes the operational guide with one metadat
       assert.match(skill.content, /preset.read/);
       assert.match(skill.content, /nextStart/);
       assert.match(skill.content, /expectedRevision/);
-      assert.equal(skill.content.split(shared).length, 2, 'include the complete shared guide exactly once');
+      const guide = skill.name === 'cuigengji-project' ? shared : shared.replace(/\]\(references\//g, '](../cuigengji-project/references/');
+      assert.equal(skill.content.split(guide).length, 2, 'include the complete shared guide exactly once with usable relative links');
     } else {
       assert.match(skill.content, /cuigengji_maintenance/);
       assert.doesNotMatch(skill.content, /小说正文.*按需读取/);

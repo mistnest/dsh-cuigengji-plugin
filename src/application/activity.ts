@@ -1,4 +1,7 @@
 import { countManuscript } from '../domain/manuscript.ts';
+import { manuscriptProgress } from './manuscript-progress.ts';
+import { localDay } from '../domain/activity/date.ts';
+export { localDay } from '../domain/activity/date.ts';
 
 type Row = Record<string, any>;
 
@@ -59,21 +62,15 @@ export function normalizeActivity(value: unknown): ActivityState {
 }
 
 function normalizeBucket(value: Row): ActivityBucket {
-  const number = (key: string) => Number.isSafeInteger(value[key]) && value[key] >= 0 ? value[key] : 0;
+  const number = (key: string) => Number.isSafeInteger(value[key]) && (key === 'proseAdded' || value[key] >= 0) ? value[key] : 0;
   const bucket = emptyBucket();
   for (const key of ['conversationInput', 'proseAdded', 'settingAdded', 'planningChanges', 'chaptersTouched', 'settingsTouched'] as const) bucket[key] = number(key);
   for (const actor of ['human', 'agent'] as const) {
     const row = value.byActor?.[actor];
     if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
-    for (const key of ['conversationInput', 'proseAdded', 'settingAdded', 'planningChanges', 'chaptersTouched', 'settingsTouched'] as const) bucket.byActor[actor][key] = Number.isSafeInteger(row[key]) && row[key] >= 0 ? row[key] : 0;
+    for (const key of ['conversationInput', 'proseAdded', 'settingAdded', 'planningChanges', 'chaptersTouched', 'settingsTouched'] as const) bucket.byActor[actor][key] = Number.isSafeInteger(row[key]) && (key === 'proseAdded' || row[key] >= 0) ? row[key] : 0;
   }
   return bucket;
-}
-
-export function localDay(date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
-  const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function insertedCount(before: unknown, after: unknown): number {
@@ -120,13 +117,15 @@ function bucketFor(state: Row, day: string, novelId: string): ActivityBucket {
 }
 
 function add(bucket: ActivityBucket, actor: 'human' | 'agent', key: keyof Omit<ActivityBucket, 'byActor'>, amount: number) {
-  if (!Number.isFinite(amount) || amount <= 0) return;
-  const value = Math.max(0, Math.floor(amount));
+  if (!Number.isFinite(amount) || amount === 0 || key !== 'proseAdded' && amount < 0) return;
+  const value = Math.trunc(amount);
   bucket[key] += value;
   bucket.byActor[actor][key] += value;
 }
 
-const writingActions = new Set(['chapter.create', 'chapter.update', 'chapter.replace', 'graph.create', 'graph.update', 'graph.continue',
+const proseActions = new Set(['chapter.create','chapter.update','chapter.replace','chapter.delete','chapter.restore','volume.delete','novel.archive','novel.restore','novel.purge']);
+export const tracksProse = (action:string):boolean => proseActions.has(action);
+const writingActions = new Set([...proseActions, 'graph.create', 'graph.update', 'graph.continue',
   'planning.apply', 'planning.page.create', 'planning.page.update', 'planning.group.create', 'planning.group.update', 'planning.continue']);
 
 export const tracksActivity = (action: string): boolean => writingActions.has(action);
@@ -141,35 +140,42 @@ function planningContent(board: Row | undefined): string {
     .map(([id, value]) => [id, Object.fromEntries(Object.entries(value as Row).filter(([field]) => !ignored.has(field)).sort(([a], [b]) => a.localeCompare(b)))])));
 }
 
-/** Record only successful, persisted mutations. This intentionally ignores imports,
- * layout changes and deletes so the desktop pet reflects writing activity rather
- * than maintenance noise. */
-export function recordActivity(state: Row, action: string, args: Row, actor: Row, beforeNovel: Row | null, result: unknown) {
+/** Prose is the signed change in the adopted manuscript, charged to the day of
+ * the successful save. Older days are immutable even when their text changes.
+ * Imports/layout are not new writing; other activity counters remain cumulative. */
+export function recordActivity(state: Row, action: string, args: Row, actor: Row, beforeNovel: Row | null, result: unknown, beforeProse?:number) {
   if (!tracksActivity(action)) return;
   const novelId = typeof args.novelId === 'string' ? args.novelId : null;
-  if (!novelId || !state.novels?.[novelId] || state.novels[novelId].archived) return;
+  if (!novelId || !tracksProse(action) && (!state.novels?.[novelId] || state.novels[novelId].archived)) return;
   const afterNovel = state.novels[novelId] as Row;
   const actorKey: 'human' | 'agent' = actor.kind === 'human' ? 'human' : 'agent';
   const delta: Partial<Omit<ActivityBucket, 'byActor'>> = {};
+  if (tracksProse(action)) {
+    const previous = beforeProse ?? manuscriptProgress({novels:beforeNovel?{[novelId]:beforeNovel}:{}},novelId).words;
+    delta.proseAdded = manuscriptProgress(state,novelId).words - previous;
+  }
   const actionNode = (id: string | undefined) => id && afterNovel.nodes?.[id];
   if (action === 'chapter.create') {
-    const amount = countManuscript(args.content || '');
-    if (amount) { delta.proseAdded = amount; delta.chaptersTouched = 1; }
+    if (countManuscript(args.content || '')) delta.chaptersTouched = 1;
   } else if (action === 'chapter.update') {
     const before = beforeNovel?.chapters?.[args.chapterId];
     const after = afterNovel.chapters?.[args.chapterId];
     if (before && after && before.content !== after.content) {
-      delta.proseAdded = insertedCount(before.content, after.content);
       delta.chaptersTouched = 1;
     }
   } else if (action === 'chapter.replace') {
     for (const after of Object.values(afterNovel.chapters || {}) as Row[]) {
       const before = beforeNovel?.chapters?.[after.id];
       if (before && before.content !== after.content) {
-        delta.proseAdded = (delta.proseAdded || 0) + insertedCount(before.content, after.content);
         delta.chaptersTouched = (delta.chaptersTouched || 0) + 1;
       }
     }
+  } else if (tracksProse(action)) {
+    const previous = beforeNovel?.chapters || {};
+    delta.chaptersTouched = (Object.values(previous) as Row[]).filter(before => {
+      const after = afterNovel?.chapters?.[before.id];
+      return after && (!before.deleted || !after.deleted) && (before.content !== after.content || before.deleted !== after.deleted || Boolean(beforeNovel?.archived) !== Boolean(afterNovel?.archived));
+    }).length;
   } else if (action === 'graph.create') {
     delta.settingAdded = countManuscript(args.content || '');
     delta.settingsTouched = 1;
@@ -188,7 +194,7 @@ export function recordActivity(state: Row, action: string, args: Row, actor: Row
     if (action === 'planning.apply' && operations.every((op: Row) => String(op.op || op.action).endsWith('.delete'))) return;
     if (planningContent(beforeNovel?.planning) !== planningContent(afterNovel.planning)) delta.planningChanges = 1;
   }
-  if (!Object.values(delta).some(value => value > 0)) return;
+  if (!Object.values(delta).some(value => value !== 0)) return;
   const bucket = bucketFor(state, localDay(), novelId);
   for (const [key, amount] of Object.entries(delta)) add(bucket, actorKey, key as keyof typeof delta, amount);
   void result;
@@ -207,7 +213,7 @@ function sumBuckets(buckets: ActivityBucket[]): ActivityBucket {
 export function todayActivity(state: Row, novelId?: string | null) {
   const date = localDay();
   const result = rangeActivity(state, {from:date,to:date,novelId});
-  return {date,novelId:result.novelId,title:result.title,stats:result.stats,novels:result.novels};
+  return {date,novelId:result.novelId,title:result.title,stats:result.stats,novels:result.novels,manuscript:result.manuscript};
 }
 
 export function activityRange(args: Row = {}) {
@@ -224,6 +230,8 @@ export function activityRange(args: Row = {}) {
 export function rangeActivity(state: Row, args: Row = {}) {
   const {from,to} = activityRange(args), novelId = args.novelId || null;
   const activity = normalizeActivity(state.activity);
+  // Daily net changes are saved on mutation, never recomputed from today's
+  // manuscript. A later deletion cannot rewrite a completed day's statistics.
   const days = Object.values(activity.daily).filter(day=>day.date>=from&&day.date<=to).sort((a,b)=>a.date.localeCompare(b.date));
   const title = (id:string) => id === LIBRARY_DISCUSSION ? '作品库讨论' : state.novels?.[id]?.title || [...days].reverse().find(day=>day.titles?.[id])?.titles?.[id] || '已移除作品';
   const row = (id:string,stats:ActivityBucket)=>({novelId:id,title:title(id),archived:Boolean(state.novels?.[id]?.archived),removed:id!==LIBRARY_DISCUSSION&&!Object.hasOwn(state.novels||{},id),stats});
@@ -233,14 +241,15 @@ export function rangeActivity(state: Row, args: Row = {}) {
   }).filter(day=>day.novels.length>0);
   const ids = [...new Set(daily.flatMap(day=>day.novels.map(novel=>novel.novelId)))];
   const novels = ids.map(id=>row(id,sumBuckets(daily.flatMap(day=>day.novels.filter(novel=>novel.novelId===id).map(novel=>novel.stats)))));
-  return {from,to,novelId,title:novelId?title(novelId):null,stats:sumBuckets(novels.map(novel=>novel.stats)),novels,daily,activeDays:daily.length};
+  return {from,to,novelId,title:novelId?title(novelId):null,stats:sumBuckets(novels.map(novel=>novel.stats)),novels,daily,activeDays:daily.length,manuscript:manuscriptProgress(state,novelId)};
 }
 
 /** Backup restore merges disjoint days and identical/superset counters without
  * duplicating saves. Divergent same-day histories must be resolved explicitly. */
 export function mergeActivity(local:unknown,incoming:unknown) {
   const result=normalizeActivity(local), other=normalizeActivity(incoming), conflicts:string[]=[];
-  const values=(bucket:ActivityBucket)=>[bucket.conversationInput,bucket.proseAdded,bucket.settingAdded,bucket.planningChanges,bucket.chaptersTouched,bucket.settingsTouched,...Object.values(bucket.byActor).flatMap(row=>Object.values(row))];
+  const values=(bucket:ActivityBucket)=>[bucket.conversationInput,bucket.settingAdded,bucket.planningChanges,bucket.chaptersTouched,bucket.settingsTouched,...Object.values(bucket.byActor).flatMap(({proseAdded,...row})=>Object.values(row))];
+  const sameProse=(a:ActivityBucket,b:ActivityBucket)=>a.proseAdded===b.proseAdded&&a.byActor.human.proseAdded===b.byActor.human.proseAdded&&a.byActor.agent.proseAdded===b.byActor.agent.proseAdded;
   for(const [date,day] of Object.entries(other.daily)) {
     const target=result.daily[date];
     if(!target){result.daily[date]=day;continue;}
@@ -248,8 +257,11 @@ export function mergeActivity(local:unknown,incoming:unknown) {
       const previous=target.novels[id];
       if(!previous){target.novels[id]=bucket;continue;}
       const a=values(previous),b=values(bucket);
-      if(b.every((n,i)=>n>=a[i]))target.novels[id]=bucket;
-      else if(!a.every((n,i)=>n>=b[i]))conflicts.push(`${date} · ${day.titles?.[id]||target.titles?.[id]||id}`);
+      const incoming=b.every((n,i)=>n>=a[i]),existing=a.every((n,i)=>n>=b[i]),same=sameProse(previous,bucket);
+      // A newer chapter-operation count can accompany a smaller (or negative)
+      // net value. Equal/divergent histories never silently take the maximum.
+      if(incoming&&(same||bucket.chaptersTouched>previous.chaptersTouched))target.novels[id]=bucket;
+      else if(!(existing&&(same||previous.chaptersTouched>bucket.chaptersTouched)))conflicts.push(`${date} · ${day.titles?.[id]||target.titles?.[id]||id}`);
     }
     target.titles={...day.titles,...target.titles};
     if(day.updatedAt>target.updatedAt)target.updatedAt=day.updatedAt;

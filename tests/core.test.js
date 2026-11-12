@@ -39,6 +39,32 @@ test('unnamed relationships retain optional metadata, CAS and archive roundtrip'
   assert.equal(restored.name,''); assert.equal(restored.content,'城南');
 });
 
+test('relation kinds are optional, validated and survive the backup roundtrip', async t => {
+  const {run} = await fixture(t);
+  const a = await run('graph.create', {type:'character_card', name:'林澈'});
+  const b = await run('graph.create', {type:'world_entry', name:'雨城旧港'});
+  // Legacy edges without a kind keep working and default to untyped.
+  const legacy = await run('edge.create', {from:a.id,to:b.id,name:'居住于'});
+  assert.equal(legacy.kind, '');
+  const typed = await run('edge.update', {edgeId:legacy.id,expectedRevision:legacy.revision,kind:'location'});
+  assert.equal(typed.kind, 'location');
+  // Untouched fields survive a kind-only update.
+  assert.equal(typed.name, '居住于');
+  await assert.rejects(run('edge.update', {edgeId:typed.id,expectedRevision:typed.revision,kind:'nemesis'}), {code:'INVALID_INPUT'});
+  const cleared = await run('edge.update', {edgeId:typed.id,expectedRevision:typed.revision,kind:''});
+  assert.equal(cleared.kind, '');
+  const hostile = await run('edge.create', {from:a.id,to:b.id,name:'对峙',kind:'hostile'});
+  assert.equal(hostile.kind, 'hostile');
+  await assert.rejects(run('edge.create', {from:a.id,to:b.id,kind:'friendship'}), {code:'INVALID_INPUT'});
+  const backup = await run('novel.export');
+  const destination = await mkdtemp(join(tmpdir(),'cuigengji-relation-kinds-'));
+  t.after(()=>rm(destination,{recursive:true,force:true}));
+  const store = new Store(destination);
+  const imported = await store.dispatch('novel.import',{backup});
+  const restored = await store.dispatch('edge.get',{novelId:imported.id,edgeId:hostile.id});
+  assert.equal(restored.kind, 'hostile');
+});
+
 test('memory is available through search and explicit read but never auto-injected', async t => {
   const { run } = await fixture(t);
   await run('chapter.create', { title:'未请求章节', content:'不得隐式塞入的正文' });

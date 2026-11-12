@@ -8,7 +8,7 @@ const TIMEOUT = 20_000;
 
 function validResult(value: any, novelId?: string | null): ActivityResult {
   const fields: (keyof Omit<ActivityStats, 'byActor'>)[] = ['proseAdded', 'settingAdded', 'planningChanges', 'chaptersTouched', 'settingsTouched'];
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value.date) || !value.stats || fields.some(field => !Number.isSafeInteger(value.stats[field]) || value.stats[field] < 0)
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value.date) || !value.stats || fields.some(field => !Number.isSafeInteger(value.stats[field]) || field!=='proseAdded'&&value.stats[field] < 0)
     || (novelId ? value.novelId !== novelId : value.novelId !== null)) throw new Error('今日进度的数据格式不正确，请刷新后重试。');
   return value;
 }

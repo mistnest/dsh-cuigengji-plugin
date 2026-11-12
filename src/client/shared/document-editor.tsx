@@ -18,21 +18,25 @@ export function useDocumentDraft(options:Options) {
   const fresh=options.fresh||options.initial;
   const [conflict,setConflict]=useState<{local:Document;remote:Document;merged:Document;fields:string[]}|null>(null);
   useEffect(()=>{if(!options.busy&&!dirty&&fresh.revision>base.revision)accept(fresh);},[fresh,options.busy,dirty,base.revision]);
-  const commit=(local:Document,baseline:Document)=>options.run(async()=>{
-    for(let attempt=0;attempt<2;attempt++){
-      const remote=await options.load();
-      if(remote.deleted)throw new Error('这条内容已经被删除，草稿仍保留；请返回核对。');
-      const merged=mergeDocument(baseline,local,remote,options.fields);
-      if(merged.conflicts.length){setConflict({local,remote,merged:merged.value,fields:merged.conflicts});return;}
-      try {
-        const result=Object.keys(merged.patch).length?await options.persist(merged.patch,remote):remote;
-        accept(result);options.saved?.(result);return;
-      } catch(error) {
-        if(attempt===1||!/(CONFLICT|版本.*变|已.*新版本)/.test(error instanceof Error?error.message:String(error)))throw error;
+  const commit=async(local:Document,baseline:Document):Promise<Document|null>=>{
+    let committed:Document|null=null;
+    await options.run(async()=>{
+      for(let attempt=0;attempt<2;attempt++){
+        const remote=await options.load();
+        if(remote.deleted)throw new Error('这条内容已经被删除，草稿仍保留；请返回核对。');
+        const merged=mergeDocument(baseline,local,remote,options.fields);
+        if(merged.conflicts.length){setConflict({local,remote,merged:merged.value,fields:merged.conflicts});return;}
+        try {
+          const result=Object.keys(merged.patch).length?await options.persist(merged.patch,remote):remote;
+          accept(result);options.saved?.(result);committed=result;return;
+        } catch(error) {
+          if(attempt===1||!/(CONFLICT|版本.*变|已.*新版本)/.test(error instanceof Error?error.message:String(error)))throw error;
+        }
       }
-    }
-  });
-  const save=()=>{if(!options.busy)void commit(value,base);};
+    });
+    return committed;
+  };
+  const save=()=>options.busy?Promise.resolve(null):commit(value,base);
   const remoteChanged=Boolean(dirty&&fresh.revision>base.revision&&options.fields.some(key=>JSON.stringify(fresh[key])!==JSON.stringify(base[key])));
   return {...draft,save,remoteChanged,conflictDialog:conflict&&<ConflictDialog key={conflict.remote.revision} {...conflict} busy={options.busy} close={()=>setConflict(null)} save={choices=>{
     const next={...conflict.merged};for(const key of conflict.fields)next[key]=choices[key]==='local'?conflict.local[key]:conflict.remote[key];

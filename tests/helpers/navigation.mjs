@@ -29,8 +29,28 @@ export async function showOrganization(page) {
   await page.waitForFunction(()=>{const root=document.querySelector('.organized-workspace');return root&&root.dataset.narrow===String(root.clientWidth<560);});
   if (!await page.locator('.workspace-sidebar').isVisible()) await page.getByRole('button', {name:'显示组织侧栏',exact:true}).click();
 }
-export function selectedPlanningPage(page) {return page.getByRole('listbox',{name:'规划画布',exact:true}).getByRole('option',{selected:true});}
+export function selectedPlanningPage(page) {return page.getByRole('combobox',{name:'规划画布',exact:true}).locator('option:checked');}
 export async function selectPlanningPage(page,id) {
   await showOrganization(page);
-  await page.getByRole('listbox',{name:'规划画布',exact:true}).locator(`[data-page-id="${id||''}"]`).click();
+  await page.getByRole('combobox',{name:'规划画布',exact:true}).selectOption(id||'');
+}
+
+export async function chooseBatchDestination(page,target) {
+  const batch=page.getByRole('region',{name:'批量管理',exact:true});
+  const menu=batch.locator('.batch-move-menu');
+  if(!await menu.evaluate(element=>element.open))await menu.locator('summary').click();
+  if(target!==undefined)await batch.getByRole('combobox',{name:'批量移动目标',exact:true}).selectOption(target);
+  return batch;
+}
+export async function moveBatch(page,target) {
+  const batch=await chooseBatchDestination(page,target);
+  await batch.getByRole('button',{name:'确认移动',exact:true}).click();
+}
+export async function batchCommand(page,name) {
+  const batch=page.getByRole('region',{name:'批量管理',exact:true});
+  await batch.getByLabel('批量更多操作',{exact:true}).click();
+  await batch.getByRole('button',{name,exact:true}).click();
+}
+export async function clearCanvasSelection(page) {
+  await page.locator('.planning-canvas-scroll').focus();await page.keyboard.press('Escape');
 }

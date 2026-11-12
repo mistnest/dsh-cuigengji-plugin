@@ -14,16 +14,16 @@ export const retryNativePet = () => window.dispatchEvent(new Event('cuigengji:pe
 /** Renderless desktop bridge. Only the DSH desktop preload can opt in; ordinary
  * Web clients retain the same tested in-window companion. Native errors always
  * restore that surface rather than leave an invisible pet. */
-export function NativeCompanion({ rpc, sessionId, statusSource, openDetails, children }: {
-  rpc: PetRPC; sessionId?: string; statusSource?: PetStatusSource; openDetails: () => void; children: React.ReactNode;
+export function NativeCompanion({ rpc, sessionId, statusSource, openDetails, openConversation, children }: {
+  rpc: PetRPC; sessionId?: string; statusSource?: PetStatusSource; openDetails: () => void; openConversation?:(id:string)=>void; children: React.ReactNode;
 }) {
   const desktop = Boolean((globalThis as any).dshDesktop?.protocolVersion);
   const preferences = usePetPreferences();
   const [systemReduced, setSystemReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => { const media = window.matchMedia('(prefers-reduced-motion: reduce)'); const change = () => setSystemReduced(media.matches); media.addEventListener('change', change); return () => media.removeEventListener('change', change); }, []);
   const { mood } = usePetMood(null, false, '', sessionId, statusSource);
-  const latest = useRef({ sessionId, ...preferences, reduced: preferences.reduced || systemReduced, mood, openDetails });
-  latest.current = { sessionId, ...preferences, reduced: preferences.reduced || systemReduced, mood, openDetails };
+  const latest = useRef({ sessionId, ...preferences, reduced: preferences.reduced || systemReduced, mood, openDetails,openConversation });
+  latest.current = { sessionId, ...preferences, reduced: preferences.reduced || systemReduced, mood, openDetails,openConversation };
   const request = useRef<(() => void) | null>(null);
   const [available, setAvailable] = useState<boolean | null>(desktop ? null : false);
   useEffect(() => {
@@ -61,7 +61,7 @@ export function NativeCompanion({ rpc, sessionId, statusSource, openDetails, chi
           hasEventBaseline = true;
         } else if (value.details?.sequence > eventSequence) {
           eventSequence = value.details.sequence;
-          if (latest.current.sessionId && value.details.sessionId === latest.current.sessionId) { try { latest.current.openDetails(); } catch { /* host tab may still be restoring */ } }
+          try{if(value.details.action==='conversation'&&value.details.sessionId)latest.current.openConversation?.(value.details.sessionId);else if(latest.current.sessionId&&value.details.sessionId===latest.current.sessionId)latest.current.openDetails();}catch{/* host tab may still be restoring */}
         }
       } catch (error) {
         if (alive) { setAvailable(false); publish({ mode: 'window', error: error instanceof Error ? error.message : String(error) }); }

@@ -54,7 +54,7 @@ try {
       if(await page.locator('.organized-workspace').evaluate(el=>el.clientWidth>=1060))await expect(page.locator('.workspace-detail-size')).toBeVisible();
       const expand=page.getByRole('button',{name:'展开详情',exact:true});
       if(await expand.isVisible())await expand.click();
-      await expect(page.locator('.organized-workspace')).toHaveAttribute('data-detail','full');
+      await expect(page.locator('.organized-workspace')).toHaveAttribute('data-detail','side');
       await expect(detail).toBeVisible();
       await expect(page.locator('.overview-page')).toBeHidden();
       await expect(page.getByRole('button',{name:'列表',exact:true})).toHaveCount(0);

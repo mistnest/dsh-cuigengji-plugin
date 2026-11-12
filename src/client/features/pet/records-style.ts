@@ -4,6 +4,7 @@ export const recordsStyles=`
 .cuigengji .records-heading {display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:28px;}
 .cuigengji .records-eyebrow {font-size:11px;color:var(--cg-accent);}
 .cuigengji .records-heading h3 {font-size:23px;font-weight:500;line-height:1.6;margin:8px 0 0;}
+.cuigengji .records-current {margin:8px 0 0;color:var(--cg-muted);font-size:12px;font-variant-numeric:tabular-nums;}
 .cuigengji .records-controls {display:flex;align-items:flex-end;gap:8px;flex-shrink:0;max-width:240px;}
 .cuigengji .records-heading label {display:flex;flex-direction:column;gap:6px;min-width:0;flex:1;margin:0;font-size:11px;color:var(--cg-muted);}
 .cuigengji .records-heading select {width:100%;font-size:12px;}
@@ -48,8 +49,10 @@ export const recordsStyles=`
 .cuigengji .records-chart-bars {display:grid;gap:3px;min-width:100%;height:170px;background:linear-gradient(var(--cg-line),var(--cg-line)) 0 0/100% 1px no-repeat,linear-gradient(var(--cg-line),var(--cg-line)) 0 74px/100% 1px no-repeat,linear-gradient(var(--cg-line),var(--cg-line)) 0 148px/100% 1px no-repeat;}
 .cuigengji button.records-chart-day {display:flex;flex-direction:column;align-items:center;justify-content:end;gap:7px;min-width:0;height:170px;border:0;border-radius:5px;padding:0 1px;background:transparent;position:relative;}
 .cuigengji button.records-chart-day:hover,.cuigengji button.records-chart-day.is-selected {background:color-mix(in srgb,var(--cg-accent) 8%,transparent);}
-.cuigengji .records-bar-pair {height:148px;width:100%;max-width:24px;display:flex;align-items:end;justify-content:center;gap:2px;}
-.cuigengji .records-bar-pair i {width:28%;border-radius:3px 3px 0 0;display:block;background:var(--cg-accent);opacity:.8;transition:opacity .15s;}
+.cuigengji .records-bar-pair {height:148px;width:100%;max-width:24px;position:relative;}
+.cuigengji .records-bar-pair i {position:absolute;left:3%;width:28%;border-radius:3px 3px 0 0;display:block;background:var(--cg-accent);opacity:.8;transition:opacity .15s;}
+.cuigengji .records-bar-pair i:nth-child(2){left:36%;}
+.cuigengji .records-bar-pair i:nth-child(3){left:69%;}
 .cuigengji .records-bar-pair .records-bar-setting {background:#a689d8;}
 .cuigengji .records-chart-day:hover i,.cuigengji .records-chart-day.is-selected i {opacity:1;}
 .cuigengji .records-day-label {height:15px;line-height:15px;font-size:9px;color:var(--cg-muted);white-space:nowrap;}

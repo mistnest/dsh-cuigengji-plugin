@@ -1,3 +1,4 @@
+import {VariablesDialog} from './features/variables/index.tsx';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {PreferencesProvider, PreferencesDialog, AboutDialog, useWorkbenchPreferences} from './shared/preferences.tsx';
 import { styles } from './style.ts';
@@ -8,8 +9,8 @@ import { TransferPage } from './features/transfer/index.tsx';
 import {Welcome} from './features/welcome/index.tsx';
 import { Chapters } from './features/chapters/index.jsx';
 import { Planning } from './features/planning/index.tsx';
-import { Story } from './features/story/index.tsx';
 import { Preset } from './features/preset/index.tsx';
+import { Story } from './features/story/index.tsx';
 import { SessionScope,LibraryScope } from './shared/state.js';
 import { ResourceState } from './shared/ui.jsx';
 import {WorkbenchHeader} from './shared/WorkbenchHeader.tsx';
@@ -61,7 +62,7 @@ function WorkbenchContent({ sessionId, rpc, recordsNavigation }:WorkbenchProps) 
   const hostActive=useSurfaceActivity();
   const {preferences}=useWorkbenchPreferences();
   const {refresh}=useWorkbenchRefresh();
-  const [utility,setUtility]=useState<'settings'|'about'|null>(null);
+  const [utility,setUtility]=useState<'settings'|'about'|'variables'|null>(null);
   const [settingsChild,setSettingsChild]=useState<'preset'|'data'|null>(null);
   const [viewedNovelId,setViewedNovelId]=useWorkspacePreference<string|null>('view-novel',null);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [tick, setTick] = useState(0);
@@ -135,7 +136,7 @@ function WorkbenchContent({ sessionId, rpc, recordsNavigation }:WorkbenchProps) 
       {!novelId ? (tab==='manage'?<Manage {...manageProps}/>:<Welcome {...welcomeProps}/>) : <div className="workbench-body" key={novelId}>
         {referenceReturn&&<div className="return-strip"><button onClick={()=>{navigation.backFromReference();}}>‹ 返回{({story:'创作',chapters:'正文',plan:'规划',memory:'设定'})[referenceReturn]||'上一页'}</button></div>}
         {tab==='story' && <Story {...{call,novelId,tick,run,busy}} onChapter={(id?:string)=>id?jump('chapters','chapter',id):jump('chapters','chapter','')} />}
-        {tab==='chapters' && <Chapters {...{call,novelId,tick,run,busy}} onTransfer={openTransfer}/>}
+        {tab==='chapters' && <Chapters {...{call,novelId,tick,run,busy}} onTransfer={openTransfer} onLocate={(kind:string,id:string)=>kind==='memory'?jump('memory','memory-selected',id):jump('plan','planning-selected',id)}/>}
         {tab==='memory' && <Memory {...{call,novelId,tick,run,busy}} novelTitle={novel?.title} onTransfer={openTransfer}/>}
         {tab==='plan' && <Planning {...{call,novelId,tick,run,busy}} novelTitle={novel?.title} onTransfer={openTransfer} onMemory={(id:string)=>jump('memory','memory-selected',id)} onChapter={(id:string)=>jump('chapters','chapter',id)}/>}
         {tab==='preset' && <Preset {...{call,novelId,run,busy}} {...childBack} onTransfer={openTransfer}/>}
@@ -143,8 +144,9 @@ function WorkbenchContent({ sessionId, rpc, recordsNavigation }:WorkbenchProps) 
       </div>}
       </>}
     </ResourceState></SurfaceActivity.Provider>
-    {utility==='settings'&&<PreferencesDialog close={()=>setUtility(null)} call={call} guidance={{enabled:guidance.value?.enabled,disabled:busy||guidance.loading,onToggle:toggleGuidance}} onData={()=>{setUtility(null);setSettingsChild('data');openTransfer({mode:'export',selection:{kind:'workspace'}});}} novelTitle={novel?.title} onPreset={novelId?()=>{setUtility(null);setSettingsChild('preset');openManagement('preset');}:undefined} onRecords={()=>openRecords(novelId||null,true)}/>}
+    {utility==='settings'&&<PreferencesDialog onVariables={novelId?()=>setUtility('variables'):undefined} close={()=>setUtility(null)} call={call} guidance={{enabled:guidance.value?.enabled,disabled:busy||guidance.loading,onToggle:toggleGuidance}} onData={()=>{setUtility(null);setSettingsChild('data');openTransfer({mode:'export',selection:{kind:'workspace'}});}} novelTitle={novel?.title} onPreset={novelId?()=>{setUtility(null);setSettingsChild('preset');openManagement('preset');}:undefined} onRecords={()=>openRecords(novelId||null,true)}/>}
     {utility==='about'&&<AboutDialog close={()=>setUtility(null)}/>}
+    {utility==='variables'&&novelId&&<VariablesDialog rpc={call} novelId={novelId} title={novel?.title} onClose={()=>setUtility('settings')}/>}
     </div></SurfaceActivity.Provider>
     {recordsOpen&&<WritingRecords rpc={rpc} sessionId={sessionId} novels={library} initialNovelId={recordsScope} onClose={closeRecords}/>}
   </section>;
