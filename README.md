@@ -35,14 +35,14 @@
 3. 安装后按提示重启，从左侧「催更姬」进入，创建或选择作品。
 
 ```text
-dsh-cuigengji-plugin@0.6.0
+dsh-cuigengji-plugin@0.6.1
 ```
 
 请保留版本号，避免宿主将不带版本的包名解析到旧版。「安装源」用于下载依赖，保持为包源即可。
 
-[详细安装步骤](docs/getting-started.md) · [备用成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.6.0/dsh-cuigengji-plugin-0.6.0.tgz) · [更新与数据迁移](docs/upgrade.md)
+[详细安装步骤](docs/getting-started.md) · [备用成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.6.1/dsh-cuigengji-plugin-0.6.1.tgz) · [更新与数据迁移](docs/upgrade.md)
 
-也可以把[安装与更新指南](docs/agent-installation.md)交给 Agent，由它处理安装、备份和升级检查。0.6.0 的发布验收使用 DSH Windows 桌面版 **0.2.1-rc.5** 内置运行时，覆盖隔离安装、升级和工作台操作，具体范围见[更新记录](docs/CHANGELOG.md)。更新插件会自动备份、迁移并校验原有作品。
+也可以把[安装与更新指南](docs/agent-installation.md)交给 Agent，由它处理安装、备份和升级检查。0.6.1 的发布验收使用 DSH Windows 桌面版 **0.2.2-rc.5** 内置运行时，覆盖隔离安装、升级和工作台操作，具体范围见[更新记录](docs/CHANGELOG.md)。更新插件会自动备份、迁移并校验原有作品。
 
 ## 视频与教程
 
