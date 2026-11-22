@@ -56,7 +56,7 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
     const receive=bytes=>{log+=bytes;const match=log.match(/http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+/);if(match){clearTimeout(timer);done(match[0]);}};
     child.stdout.on('data',receive);child.stderr.on('data',receive);child.once('exit',code=>{clearTimeout(timer);reject(new Error('Host exited '+code));});child.once('error',reject);
   });
-  browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1600,height:1000}});
+  browser=await chromium.launch({headless:true});page=await browser.newPage({locale:'zh-CN',viewport:{width:1600,height:1000}});
   const errors=[],failedRpc=[];let sessionId;
   page.on('pageerror',error=>errors.push(error.message));
   page.on('request',request=>{if(request.url().endsWith('/api/cuigengji/dispatch')){const payload=request.postDataJSON()?.payload;if(payload?.sessionId)sessionId=payload.sessionId;}});
@@ -77,7 +77,7 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
   if(await connect.isVisible())await connect.click();
   await expect(workbench).toBeVisible({timeout:30000});
   await workbench.getByRole('button',{name:'＋ 新建作品',exact:true}).click();
-  const dialog=page.getByRole('dialog',{name:'作品名称',exact:true});await dialog.getByLabel('输入值').fill('雾港 · 新宿主兼容验收');await dialog.getByRole('button',{name:'确定',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'作品名称',exact:true});await dialog.getByLabel('输入值').fill('雾港 · 新宿主兼容验收');await dialog.getByRole('button',{name:/^(确定|Confirm)$/}).click();
   await expect(workbench.getByRole('button',{name:'规划',exact:true})).toBeVisible();assert.ok(sessionId);
   const rpc=async(action,args={})=>{
     const result=await page.evaluate(async({action,args,sessionId})=>{
