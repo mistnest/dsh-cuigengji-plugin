@@ -64,15 +64,18 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
   await page.goto(url);const launcher=page.getByRole('button',{name:'打开催更姬',exact:true});await expect(launcher).toBeVisible();
   await expect(launcher.locator('img.cg-launcher-icon')).toHaveJSProperty('naturalWidth',192);
   // DSH's first-run preview notice and optional login prompt, without credentials.
-  const next=page.getByRole('button',{name:'继续',exact:true});await next.waitFor({state:'visible',timeout:2500}).catch(()=>{});if(await next.isVisible())await next.click();
-  const onboarding=page.getByText('开始使用',{exact:true});await onboarding.waitFor({state:'visible',timeout:2500}).catch(()=>{});
-  if(await onboarding.isVisible())await page.getByRole('button',{name:'关闭',exact:true}).last().click();
-  const later=page.getByRole('button',{name:'稍后配置',exact:true});if(await later.isVisible())await later.click();
+  const next=page.getByRole('button',{name:/^(继续|Continue)$/});await next.waitFor({state:'visible',timeout:2500}).catch(()=>{});if(await next.isVisible())await next.click();
+  const onboarding=page.getByText(/^(开始使用|Get started)$/i);await onboarding.waitFor({state:'visible',timeout:2500}).catch(()=>{});
+  if(await onboarding.isVisible())await page.getByRole('button',{name:/^(关闭|Close)$/}).last().click();
+  const later=page.getByRole('button',{name:/^(稍后配置|Configure later|Set up later)$/i});if(await later.isVisible())await later.click();
   const seeded=await page.request.post(new URL('/api/isolated-cuigengji-probe',url).href,{headers:{origin:new URL(url).origin},data:{name:'fixture-workspace',args:{path:join(root,'writing-workspace')}}});
   assert.equal(seeded.status(),200);await expect(page.getByRole('treeitem',{name:'兼容验收',exact:true})).toBeVisible();
   await launcher.click();
-  const connect=page.getByRole('button',{name:'进入工作台',exact:true});if(await connect.isVisible())await connect.click();
-  const workbench=page.getByRole('region',{name:'催更姬小说工作台'});await expect(workbench).toBeVisible();
+  const connect=page.getByRole('button',{name:'进入工作台',exact:true});
+  const workbench=page.getByRole('region',{name:'催更姬小说工作台'});
+  await expect(connect.or(workbench).first()).toBeVisible({timeout:30000});
+  if(await connect.isVisible())await connect.click();
+  await expect(workbench).toBeVisible({timeout:30000});
   await workbench.getByRole('button',{name:'＋ 新建作品',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'作品名称',exact:true});await dialog.getByLabel('输入值').fill('雾港 · 新宿主兼容验收');await dialog.getByRole('button',{name:'确定',exact:true}).click();
   await expect(workbench.getByRole('button',{name:'规划',exact:true})).toBeVisible();assert.ok(sessionId);
