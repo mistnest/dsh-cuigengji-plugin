@@ -1,13 +1,7 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { ActivityResult, PetMood, PetStatusSource, PetSessionStatus } from './model.ts';
+import { useEffect, useRef, useState } from 'react';
+import type { ActivityResult, PetMood, PetSessionStatus } from './model.ts';
 
-const empty: ReadonlyMap<string, PetSessionStatus> = new Map();
-const noSubscribe = () => () => {};
-const noStatus = () => empty;
-export function usePetMood(result: ActivityResult | null, loading: boolean, error: string, sessionId?: string, source?: PetStatusSource) {
-  const subscription = useMemo(() => source ? { subscribe: source.subscribe.bind(source), snapshot: source.getSnapshot.bind(source) } : { subscribe: noSubscribe, snapshot: noStatus }, [source]);
-  const statuses = useSyncExternalStore(subscription.subscribe, subscription.snapshot, noStatus);
-  const status = sessionId ? statuses?.get?.(sessionId) : undefined;
+export function usePetMood(result: ActivityResult | null, loading: boolean, error: string, sessionId?: string, status?: PetSessionStatus) {
   const [reaction, setReaction] = useState(false), [celebration, setCelebration] = useState(false);
   const previous = useRef<ActivityResult | null>(null);
   const reactionTimer = useRef<ReturnType<typeof setTimeout>>();

@@ -55,7 +55,7 @@ export function applyWithRPC(ctx:any, rpc:WorkbenchRPC) {
       // mounted is the public on-screen session even with the sidebar closed.
       // retainedBy.mainView is a lifetime count, not the selected conversation.
       hooks: { mounted: ctx.sidebarRight.mounted },
-      rpc, statusSource: ctx.uiSession?.sessionStatus,
+      rpc,
       openConversation:(id:string)=>{ctx.uiWorkspace.openSession(id);ctx.layout.selectPanel(null);},
       openPet: () => {
         const sessionId = ctx.sidebarRight.mounted.getSnapshot();
@@ -65,7 +65,7 @@ export function applyWithRPC(ctx:any, rpc:WorkbenchRPC) {
         }
       },
     }),
-  }, (props:any) => <PetBoundary><PetOverlay useMounted={props.useMounted} openPet={props.openPet} openConversation={props.openConversation} rpc={props.rpc} statusSource={props.statusSource}/></PetBoundary>));
+  }, (props:any) => <PetBoundary><PetOverlay useMounted={props.useMounted} openPet={props.openPet} openConversation={props.openConversation} rpc={props.rpc} useSessionStatus={props.useSessionStatus}/></PetBoundary>));
 }
 
 function WorkbenchTab(props:any) {

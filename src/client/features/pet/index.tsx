@@ -13,7 +13,7 @@ import { usePetPreferences, setPetRole, setPetVisible } from './preferences.ts';
 import { usePetMood } from './mood.ts';
 import { NativeCompanion } from './native.tsx';
 import {useCompanionPresentation,UsageAsset,playCompanionSound} from './usage.tsx';
-import { emptyStats, moodLabels, roles, type PetMood, type PetRole, type PetRPC, type PetStatusSource } from './model.ts';
+import { emptyStats, moodLabels, roles, type PetMood, type PetRole, type PetRPC, type PetSessionStatus } from './model.ts';
 export type { PetRole } from './model.ts';
 function PetAvatar({ role, mood, onClick, floating = false, children,...props }: {
   role: PetRole; mood: PetMood; floating?: boolean;
@@ -27,10 +27,10 @@ function PetAvatar({ role, mood, onClick, floating = false, children,...props }:
   </button>;
 }
 
-function Companion({ rpc, sessionId, openDetails, openConversation,statusSource }: { rpc: PetRPC; sessionId?: string; openDetails: () => void; openConversation?:(id:string)=>void;statusSource?: PetStatusSource }) {
+function Companion({ rpc, sessionId, openDetails, openConversation,sessionStatus }: { rpc: PetRPC; sessionId?: string; openDetails: () => void; openConversation?:(id:string)=>void;sessionStatus?: PetSessionStatus }) {
   const { role, reduced } = usePetPreferences();
   const { result, loading, error, refresh } = usePetActivity(rpc, sessionId);
-  const { mood, interact } = usePetMood(result, loading, error, sessionId, statusSource);
+  const { mood, interact } = usePetMood(result, loading, error, sessionId, sessionStatus);
   const stats = result?.stats || emptyStats;
   const [open, setOpen] = useState<'bubble' | 'menu' | null>(null);
   const [bubbleIndex,setBubbleIndex]=useState(0);
@@ -133,9 +133,14 @@ export function PetCompanion(props: React.ComponentProps<typeof Companion>) {
   const { visible } = usePetPreferences();
   return visible ? <PetBoundary key={props.sessionId || 'no-session'}><Companion {...props}/></PetBoundary> : null;
 }
-export function PetOverlay({ useMounted, openPet, openConversation,rpc, statusSource }: {
-  useMounted: SnapshotSelectorHook<string | undefined>; openPet: () => void;openConversation?:(id:string)=>void; rpc: PetRPC; statusSource?: PetStatusSource;
+// Both generations of DSH expose this selector to slot components.
+// A host without the optional status provider still renders the companion.
+const emptyStatuses: ReadonlyMap<string, PetSessionStatus> = new Map();
+const useEmptyStatus = <T,>(select: (statuses: ReadonlyMap<string, PetSessionStatus>) => T) => select(emptyStatuses);
+export function PetOverlay({ useMounted, openPet, openConversation,rpc, useSessionStatus }: {
+  useMounted: SnapshotSelectorHook<string | undefined>; openPet: () => void;openConversation?:(id:string)=>void; rpc: PetRPC; useSessionStatus?: SnapshotSelectorHook<ReadonlyMap<string, PetSessionStatus>>;
 }) {
   const sessionId = useMounted(value => value);
-  return createPortal(<NativeCompanion rpc={rpc} sessionId={sessionId} statusSource={statusSource} openDetails={openPet} openConversation={openConversation}><PetCompanion rpc={rpc} sessionId={sessionId} openDetails={openPet} openConversation={openConversation} statusSource={statusSource}/></NativeCompanion>, document.body);
+  const sessionStatus = (useSessionStatus ?? useEmptyStatus)(values => sessionId ? values.get(sessionId) : undefined);
+  return createPortal(<NativeCompanion rpc={rpc} sessionId={sessionId} sessionStatus={sessionStatus} openDetails={openPet} openConversation={openConversation}><PetCompanion rpc={rpc} sessionId={sessionId} openDetails={openPet} openConversation={openConversation} sessionStatus={sessionStatus}/></NativeCompanion>, document.body);
 }

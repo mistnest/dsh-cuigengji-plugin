@@ -24,10 +24,6 @@ export interface WritingRecordResult {
   novels:RecordNovel[];daily:{date:string;stats:ActivityStats;novels:RecordNovel[]}[];activeDays:number;
   manuscript?:ManuscriptProgress;
 }
-export interface PetStatusSource {
-  getSnapshot: () => ReadonlyMap<string, PetSessionStatus>;
-  subscribe: (callback: () => void) => () => void;
-}
 export const roles: Record<PetRole, { name: string; hint: string }> = {
   bigfish: { name: '大肥鱼', hint: '和你一起把故事写下去' },
   cuigengji: { name: '催更姬', hint: '陪你守住今天的写作节奏' },

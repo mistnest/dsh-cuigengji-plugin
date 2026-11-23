@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { usePetMood } from './mood.ts';
 import { setPetRole, setPetVisible, usePetPreferences } from './preferences.ts';
-import type { PetRPC, PetStatusSource } from './model.ts';
+import type { PetRPC, PetSessionStatus } from './model.ts';
 
 interface NativeStatus { mode: 'window' | 'starting' | 'desktop'; error: string }
 let status: NativeStatus = { mode: 'window', error: '' };
@@ -14,14 +14,14 @@ export const retryNativePet = () => window.dispatchEvent(new Event('cuigengji:pe
 /** Renderless desktop bridge. Only the DSH desktop preload can opt in; ordinary
  * Web clients retain the same tested in-window companion. Native errors always
  * restore that surface rather than leave an invisible pet. */
-export function NativeCompanion({ rpc, sessionId, statusSource, openDetails, openConversation, children }: {
-  rpc: PetRPC; sessionId?: string; statusSource?: PetStatusSource; openDetails: () => void; openConversation?:(id:string)=>void; children: React.ReactNode;
+export function NativeCompanion({ rpc, sessionId, sessionStatus, openDetails, openConversation, children }: {
+  rpc: PetRPC; sessionId?: string; sessionStatus?: PetSessionStatus; openDetails: () => void; openConversation?:(id:string)=>void; children: React.ReactNode;
 }) {
   const desktop = Boolean((globalThis as any).dshDesktop?.protocolVersion);
   const preferences = usePetPreferences();
   const [systemReduced, setSystemReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => { const media = window.matchMedia('(prefers-reduced-motion: reduce)'); const change = () => setSystemReduced(media.matches); media.addEventListener('change', change); return () => media.removeEventListener('change', change); }, []);
-  const { mood } = usePetMood(null, false, '', sessionId, statusSource);
+  const { mood } = usePetMood(null, false, '', sessionId, sessionStatus);
   const latest = useRef({ sessionId, ...preferences, reduced: preferences.reduced || systemReduced, mood, openDetails,openConversation });
   latest.current = { sessionId, ...preferences, reduced: preferences.reduced || systemReduced, mood, openDetails,openConversation };
   const request = useRef<(() => void) | null>(null);

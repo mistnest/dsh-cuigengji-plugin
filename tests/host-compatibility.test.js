@@ -6,7 +6,7 @@ import {evaluatePluginCompatibility} from '@deepseek-ai/dsh-app-boot';
 test('DSH accepts the minimum host and later stable or prerelease hosts without exemptions',async()=>{
   const manifest=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
   // Later versions exercise declaration semantics, not an actual future-host certification.
-  for(const version of ['0.2.0-rc.2','0.2.0-rc.3','0.2.0','0.2.1-rc.2','0.2.1','0.2.2-rc.1','0.2.2-rc.5','0.3.0','1.0.0']) {
+  for(const version of ['0.2.0-rc.2','0.2.0-rc.3','0.2.0','0.2.1-rc.2','0.2.1','0.2.2-rc.1','0.2.2-rc.5','0.2.3-alpha.2','0.3.0','1.0.0']) {
     assert.equal(evaluatePluginCompatibility(manifest,{},version),undefined);
     // The older host decides by dsh peers instead of engines.dsh.
     const {engines,...legacy}=manifest;

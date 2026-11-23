@@ -8,27 +8,31 @@ function registerPrompt(ctx, { store, resolveBinding, use = (fn) => fn() } = {})
       if (!context.agent?.id) return result;
       context.signal?.throwIfAborted();
       const actor = { kind: "agent", sessionId: String(context.agent.id) };
+      function present(writing = false, presetText = "") {
+        const sections = result.sections.filter((entry) => !OWN_NAMES.has(entry.name));
+        const sources = [
+          { name: PERSONA_NAME, order: 10300, text: writing ? persona : "", retirement: "\u672C\u4F1A\u8BDD\u5DF2\u5173\u95ED\u50AC\u66F4\u59EC\u5199\u4F5C\u6307\u5F15\u3002" },
+          { name: "cuigengji:preset", order: 10301, text: presetText, retirement: "\u5148\u524D\u7684\u4F5C\u54C1\u9884\u8BBE\u4E0D\u518D\u9002\u7528\u3002" }
+        ];
+        for (const { name, order, text, retirement } of sources) {
+          if (text) sections.push({ name, order, text, interpolate: false });
+          else if (context.session) sections.push({ name, order, text: retirement, retire: true, interpolate: false });
+        }
+        return { ...result, sections, contexts: result.contexts.filter((entry) => !OWN_NAMES.has(entry.name)) };
+      }
       let binding;
       try {
         binding = store && await (resolveBinding ? resolveBinding(actor.sessionId) : store.dispatch("binding.get", {}, actor));
         const guidance = store && await store.dispatch("guidance.get", {}, actor);
-        if (!guidance?.enabled) return { ...result, sections: result.sections.filter((entry) => !OWN_NAMES.has(entry.name)), contexts: result.contexts.filter((entry) => !OWN_NAMES.has(entry.name)) };
+        if (!guidance?.enabled) return present();
       } catch (error) {
         if (error.code !== "UPGRADE_REQUIRED") throw error;
-        return { ...result, sections: result.sections.filter((entry) => !OWN_NAMES.has(entry.name)), contexts: result.contexts.filter((entry) => !OWN_NAMES.has(entry.name)) };
+        return present();
       }
-      const preset = binding ? await store.dispatch("preset.read", {}, actor) : null;
+      const preset = binding && store ? await store.dispatch("preset.read", {}, actor) : null;
       context.signal?.throwIfAborted();
-      return {
-        ...result,
-        sections: [
-          ...result.sections.filter((entry) => !OWN_NAMES.has(entry.name)),
-          { name: PERSONA_NAME, text: persona, interpolate: false },
-          ...preset?.enabled && preset.content ? [{ name: "cuigengji:preset", text: `\u4F5C\u8005\u7684\u5199\u4F5C\u8981\u6C42\uFF1A
-${preset.content}`, interpolate: false }] : []
-        ],
-        contexts: result.contexts.filter((entry) => !OWN_NAMES.has(entry.name))
-      };
+      return present(true, preset?.enabled && preset.content ? `\u4F5C\u8005\u7684\u5199\u4F5C\u8981\u6C42\uFF1A
+${preset.content}` : "");
     });
   });
 }

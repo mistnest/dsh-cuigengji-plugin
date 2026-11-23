@@ -1,12 +1,12 @@
 # 更新与数据迁移
 
-当前正式版 **0.6.1**，最低宿主要求保持 DSH `>=0.2.0-rc.2`；本次使用 Windows 桌面版 **0.2.2-rc.5** 内置运行时验收隔离安装、升级和工作台；具体范围见[更新记录](CHANGELOG.md)。允许安装的范围和实际测试版本分开记录，未来宿主接口变化仍需具体排查。
+当前正式版 **0.6.2**，最低宿主要求保持 DSH `>=0.2.0-rc.2`；本次使用 Windows 桌面版 **0.2.3-alpha.2** 内置运行时验收隔离安装、升级和工作台；具体范围见[更新记录](CHANGELOG.md)。允许安装的范围和实际测试版本分开记录，未来宿主接口变化仍需具体排查。
 
-安装或更新使用 `dsh-cuigengji-plugin@0.6.1`，也可使用 [Release 成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.6.1)。普通用户无需 Git、Node.js 或源码构建。将 [Agent 安装指南](agent-installation.md)交给负责更新的 AI，由它保留配置、重启并验收；已有作品无需重新导入。
+安装或更新使用 `dsh-cuigengji-plugin@0.6.2`，也可使用 [Release 成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.6.2)。普通用户无需 Git、Node.js 或源码构建。将 [Agent 安装指南](agent-installation.md)交给负责更新的 AI，由它保留配置、重启并验收；已有作品无需重新导入。
 
-## 0.6.0 升级到 0.6.1
+## 0.6.0 或 0.6.1 升级到 0.6.2
 
-0.6.1 更新新版 DSH 宿主依赖的兼容声明，沿用存储布局 5。正常更新后继续使用原作品库，由插件启动时核对作品与历史。
+0.6.2 适配新版 DSH 的会话提示词和宿主依赖，沿用存储布局 5。正常更新后继续使用原作品库，由插件启动时核对作品与历史。
 
 ## 0.5.1 升级到 0.6.0
 
@@ -56,7 +56,7 @@
 再使用更新前记下的实际目录与作品 ID：
 
 ```json
-{"action":"verify","args":{"expectedVersion":"0.6.1","expectedDataRoot":"C:\\Users\\用户\\AppData\\Local\\cuigengji","expectedNovelIds":[]}}
+{"action":"verify","args":{"expectedVersion":"0.6.2","expectedDataRoot":"C:\\Users\\用户\\AppData\\Local\\cuigengji","expectedNovelIds":[]}}
 ```
 
 只有 `status.status=ready` 且 `verify.verified=true`，实际版本、数据根和原作品均正确，才报告完成。安装器显示成功或磁盘包已更新，不能代替重启后的核对。
