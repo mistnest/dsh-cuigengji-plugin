@@ -4,8 +4,8 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/application/store.js';
-import {directorySnapshot,checkDirectorySnapshot} from '../src/domain/directory/order.ts';
+import {Store} from '../src/composition/store.ts';
+import {directorySnapshot,checkDirectorySnapshot} from '../src/modules/workspace/cards/directory/order.ts';
 
 test('directory concurrency checks compare placement semantics, not JSON object key or folder enumeration order',()=>{
   const items=[{id:'a',groupId:'child'},{id:'b',groupId:null}],groups=[{id:'root',parentId:null},{id:'child',parentId:'root'}];

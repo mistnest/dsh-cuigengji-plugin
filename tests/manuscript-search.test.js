@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Store} from '../src/application/store.js';
-import {findProse,replaceLiteral} from '../src/domain/chapters/find.ts';
+import {Store} from '../src/composition/store.ts';
+import {findProse,replaceLiteral} from '../src/modules/workspace/chapters/find.ts';
 import {storageSnapshot} from './helpers/storage-snapshot.js';
-import {HUMAN_ACTIONS,TOOL_ACTIONS,changesProse,isReadAction} from '../src/contracts/actions.js';
+import {HUMAN_ACTIONS,TOOL_ACTIONS,changesProse,isReadAction} from '../src/modules/access/catalog/actions.ts';
 
 async function fixture(t) {
   const root=await mkdtemp(join(tmpdir(),'cuigengji-find-'));

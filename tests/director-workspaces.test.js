@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Store} from '../src/core/store.js';
-import {TransferService} from '../src/application/transfer/service.ts';
-import {planningStructure} from '../src/domain/planning/hierarchy.ts';
-import {folderObjects} from '../src/domain/canvas/folders.ts';
-import {foldProjection,objectBox,inside} from '../src/domain/canvas/model.ts';
-import {directorySnapshot} from '../src/domain/directory/order.ts';
+import {Store} from '../src/composition/store.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
+import {planningStructure} from '../src/modules/workspace/planning/rules/hierarchy.ts';
+import {folderObjects} from '../src/modules/workspace/cards/canvas/folders.ts';
+import {foldProjection,objectBox,inside} from '../src/modules/workspace/cards/canvas/model.ts';
+import {directorySnapshot} from '../src/modules/workspace/cards/directory/order.ts';
 
 async function fixture(t){
  const root=await mkdtemp(join(tmpdir(),'cg-director-'));t.after(()=>rm(root,{recursive:true,force:true}));

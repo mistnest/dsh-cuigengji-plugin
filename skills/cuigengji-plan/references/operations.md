@@ -384,3 +384,7 @@ planning.get 返回的 resources 仅为这些引用的有限当前摘要；状�
 ```
 
 完成后回读阶段的 children 或文件夹的 path，向作者说明“已整理到哪张画布、哪一级目录”。展开、折叠及目录同级手动排序仍是界面操作，不向节点写入 folded/order 等虚构字段。需要重排画布时另用布局工具。
+
+## 展示配图
+
+规划配图供作者看场景、地图或分镜，普通推演不需读取图片。仅在作者要求导入、查看或更换图片时，使用现有 `cuigengji_memory` 的 `image.list/read/import/update/delete`，填写 `kind:"planning"` 与规划 nodeId。接口与配图版本的说明见[设定工具示例](../../cuigengji-memory/references/operations.md#展示配图仅按需)。不要把图片编码写进 planning.apply 的正文或摘要。

@@ -36,7 +36,7 @@
 
 ## 维护边界
 
-`src/contracts/transfer.ts` 定义共享契约；`application/transfer/recognize.ts` 识别文件并复用既有解析器，`packages.ts` 负责范围及关联，`copy.ts` 负责新 ID 与引用重映射，`service.ts` 负责锁、预览、备份和事务提交。业务数据仍通过 ProjectStore 保存，不绕过索引直接修改文件。
+`src/modules/workspace/transfer/types.ts` 定义共享契约；`application/transfer/recognize.ts` 识别文件并复用既有解析器，`packages.ts` 负责范围及关联，`copy.ts` 负责新 ID 与引用重映射，`service.ts` 负责锁、预览、备份和事务提交。业务数据仍通过 ProjectStore 保存，不绕过索引直接修改文件。
 
 `client/features/transfer` 集中管理页面、范围选择、文件读取和下载。原作品、设定、预设入口只传递预选范围；旧 `workspace.*`、`novel.import/export` 和酒馆、预设 RPC 保持可用。新增 `transfer.*` 仅用于作者界面，未扩展 Agent 工具或自动上下文。
 

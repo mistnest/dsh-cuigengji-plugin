@@ -3,18 +3,29 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,writeFile,readFile,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {UsageService} from '../src/application/usage/service.ts';
-import {UsageStore} from '../src/infrastructure/persistence/usage-store.ts';
-import {ProviderReader,parseQuota} from '../src/adapters/usage/providers.ts';
-import {usageDay} from '../src/domain/usage/settings.ts';
-import {registerUsage} from '../src/adapters/dsh/usage.ts';
-import {scanCodex} from '../src/adapters/usage/codex.ts';
-import {moveBubbleModule} from '../src/client/features/pet/bubble-layout.ts';
+import {UsageService} from '../src/modules/usage/reports/service.ts';
+import {UsageStore} from '../src/modules/usage/ledger/store.ts';
+import {ProviderReader,parseQuota} from '../src/modules/usage/providers/providers.ts';
+import {usageDay} from '../src/modules/usage/pricing/settings.ts';
+import {registerUsage} from '../src/modules/access/dsh/usage.ts';
+import {scanCodex} from '../src/modules/usage/providers/codex.ts';
+import {moveBubbleModule} from '../src/modules/author-ui/workbench/features/pet/bubble-layout.ts';
 const time=Date.parse('2026-10-31T14:00:00+08:00'),day=usageDay(time);
 const event=(seq,type,data={},stamp=time)=>({seq,type,data,time:stamp});
 const sample={inputTokens:1000,outputTokens:100,cacheReadTokens:2000,cacheWriteTokens:0,totalTokens:3100};
 const route={provider:'deepseek',model:'deepseek-flash'};
 async function fixture(t){const root=await mkdtemp(join(tmpdir(),'cuigengji-usage-'));t.after(()=>rm(root,{recursive:true,force:true}));return root;}
+
+test('closing waits for a scheduled ledger read before disposing the data directory',async t=>{
+  const usage=new UsageService(await fixture(t)),read=Promise.withResolvers();
+  t.mock.timers.enable({apis:['setTimeout']});
+  let started=false,closed=false;
+  usage.refresh=async()=>{started=true;await read.promise;};
+  usage.start();t.mock.timers.tick(2000);assert.ok(started);
+  const stopping=usage.close().then(()=>{closed=true;});
+  await new Promise(done=>setImmediate(done));assert.equal(closed,false);
+  read.resolve();await stopping;assert.ok(closed);
+});
 test('replacement, packed streams, failed retries, multi-step, replay and inherited logs produce one durable ledger',async t=>{
   const root=await fixture(t),service=new UsageService(root);const events=[event(0,'turn/start',{turn:1}),event(1,'step/start',{turn:1,step:1}),event(2,'assistant/attempt',{turn:1,step:1,stream:[{type:'chunk',time,chunk:{type:'usage',usage:sample}}]}),event(3,'assistant/message',{turn:1,step:1,usage:sample,message:{source:route}}),event(4,'llm/retry-started',{turn:1,step:1}),event(5,'assistant/attempt',{turn:1,step:1,usage:{...sample,outputTokens:50,totalTokens:3050}}),event(6,'step/end',{turn:1,step:1}),event(7,'step/start',{turn:1,step:2}),event(8,'assistant/message',{turn:1,step:2,usage:sample,message:{source:route}})];
   await service.ingest('chat',events);await new UsageService(root).ingest('chat',events);await service.ingest('child',events,'dsh',events.length);const report=await service.report({from:day,to:day,details:true});assert.equal(report.total.calls,3);assert.equal(report.total.tokens,9250);assert.equal(report.records.find(r=>r.step===1&&r.attempt===1).model,null);assert.equal(report.total.unpriced,1);assert.equal(report.total.costs.CNY,'0.002880000');assert.equal(report.total.cacheRead,6000);

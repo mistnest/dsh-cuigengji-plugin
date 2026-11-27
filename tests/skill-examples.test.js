@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp, rm, readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {apply} from '../src/index.js';
-import {TOOL_ACTIONS} from '../src/contracts/actions.js';
+import {apply} from '../src/index.ts';
+import {TOOL_ACTIONS} from '../src/modules/access/catalog/actions.ts';
 
 const examples = {};
 for (const skill of ['plan','memory','write']) {
@@ -19,7 +19,7 @@ async function fixture(t, {independentPage = false} = {}) {
     connection:{fetch:{register(){}}}, on(){}, effect:fn=>effects.push(fn()),
     provide:(key,value)=>{ctx[key]=value;}};
   t.after(async()=>{for(const dispose of effects)await dispose();await rm(root,{recursive:true,force:true});});
-  await apply(ctx,{dataRoot:root,usageRoot:join(root,'test-usage')});
+  await apply(ctx,{dataRoot:root,usageRoot:join(root,'test-usage'),externalRoot:join(root,'test-external')});
   const actor = {kind:'human',sessionId:'skill-reader'};
   const seed = (action,args={}) => ctx.cuigengji.dispatch(action,args,actor);
   const novel=await seed('novel.create',{title:'共享写作示例'});
@@ -272,7 +272,7 @@ test('the compact guides expose usable on-demand references and setting layout r
  const positioned=await invoke('graph.arrange',{mode:'missing',requestId:'arrange-settings',members:[{id:ids.CHARACTER_ID,expectedRevision:1},{id:ids.PLACE_ID,expectedRevision:1}]});
  assert.equal(positioned.length,2);
  assert.ok((await invoke('graph.get',{nodeId:ids.CHARACTER_ID})).position);
- const registered=[];const {registerSkills}=await import('../src/adapters/dsh/skills.js');registerSkills({skills:{register:skill=>registered.push(skill)}});
+ const registered=[];const {registerSkills}=await import('../src/modules/access/guidance/skills.ts');registerSkills({skills:{register:skill=>registered.push(skill)}});
  for(const name of ['cuigengji-plan','cuigengji-memory']){
   const skill=registered.find(s=>s.name===name);assert.equal(skill.resourceBase.kind,'directory');
   assert.ok((await readFile(join(skill.resourceBase.path,'references','operations.md'),'utf8')).includes('```json'));

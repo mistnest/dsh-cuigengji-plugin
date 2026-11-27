@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import {resolve, join} from 'node:path';
 import {chromium, expect} from '@playwright/test';
-import {directorySnapshot} from '../src/domain/chapters/order.ts';
+import {directorySnapshot} from '../src/modules/workspace/chapters/order.ts';
 
 const root = resolve(import.meta.dirname, '..'), shots = join(root, 'test-results', 'chapter-order');
 await mkdir(shots, {recursive: true});

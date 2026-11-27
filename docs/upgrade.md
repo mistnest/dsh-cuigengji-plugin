@@ -1,8 +1,16 @@
 # 更新与数据迁移
 
-当前正式版 **0.6.2**，最低宿主要求保持 DSH `>=0.2.0-rc.2`；本次使用 Windows 桌面版 **0.2.3-alpha.2** 内置运行时验收隔离安装、升级和工作台；具体范围见[更新记录](CHANGELOG.md)。允许安装的范围和实际测试版本分开记录，未来宿主接口变化仍需具体排查。
+当前正式版 **0.7.0**，最低宿主要求保持 DSH `>=0.2.0-rc.2`。本次使用 Windows 桌面版 **0.2.3-alpha.2** 内置运行时验收隔离安装、升级和工作台，具体范围见[更新记录](CHANGELOG.md)。
 
-安装或更新使用 `dsh-cuigengji-plugin@0.6.2`，也可使用 [Release 成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.6.2)。普通用户无需 Git、Node.js 或源码构建。将 [Agent 安装指南](agent-installation.md)交给负责更新的 AI，由它保留配置、重启并验收；已有作品无需重新导入。
+安装或更新使用 `dsh-cuigengji-plugin@0.7.0`，也可使用 [Release 成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.7.0)。普通用户无需 Git、Node.js 或源码构建。将 [Agent 安装指南](agent-installation.md)交给负责更新的 AI，由它保留配置、重启并验收。已有作品无需重新导入。
+
+## 0.6.x 升级到 0.7.0
+
+作品存储布局仍为版本 5。继续使用原作品库，启动时由插件备份并核对原作品、历史和引用。
+
+旧预设继续保留。在作品的「记忆」中核对已启用的条目后，可按需点「保存为创作记忆」，具体操作见[创作记忆与旧版预设](presets.md)。
+
+外部 MCP 连接配置和调用审计默认独立保存在 `$DSH_HOME/cuigengji/external`，随原 DSH home 保留。作品库备份和迁移不携带连接授权。切换库后，在「设置 → AI与写作 → MCP 连接管理」核对连接针对的作品库和权限。
 
 ## 0.6.0 或 0.6.1 升级到 0.6.2
 
@@ -39,9 +47,9 @@
 ## 启动时发生什么
 
 1. 读取当前数据根：插件配置 `dataRoot` > `CUIGENGJI_DATA_ROOT` > 系统默认目录。
-2. 在数据根旁建立完整原始快照，包括历史、导入原件和作者放入的额外文件；不复制锁等瞬态文件。
-3. 在同一锁内恢复挂起的文件事务，迁移旧布局，保持业务 ID、内容与引用。
-4. 比较完整逻辑工作库，检查正文哈希、历史、规划、设定关系与会话目标，通过后才开放普通工具。
+2. 同库同插件版本且上次已成功时，先恢复挂起的保存，再检查当前索引。书单成员有变化时，重新从索引统计。
+3. 首次准备、更新插件或继续中断的升级时，有源数据就先建立或核验原始快照，再在同一锁内恢复事务并按需转换旧布局。
+4. 升级时比较前后完整工作库，核对正文、历史和引用。日常使用中，也可以通过维护工具的 `verify` 主动做一次完整校验。
 
 状态保存在 `runtime/upgrade.json`。同版本重复启动复用已完成的备份，不反复迁移。插件不会借迁移把正文或旧设定自动塞进 AI 的上下文。
 
@@ -56,12 +64,20 @@
 再使用更新前记下的实际目录与作品 ID：
 
 ```json
-{"action":"verify","args":{"expectedVersion":"0.6.2","expectedDataRoot":"C:\\Users\\用户\\AppData\\Local\\cuigengji","expectedNovelIds":[]}}
+{"action":"verify","args":{"expectedVersion":"0.7.0","expectedDataRoot":"C:\\Users\\用户\\AppData\\Local\\cuigengji","expectedNovelIds":[]}}
 ```
 
 只有 `status.status=ready` 且 `verify.verified=true`，实际版本、数据根和原作品均正确，才报告完成。安装器显示成功或磁盘包已更新，不能代替重启后的核对。
 
-失败时保留 `failedStage`、错误代码、数据根和 `backupPath`。不要创建空库、删除索引或重新导入来掩盖错误；可完整重启继续恢复。升级快照在数据根旁 `.cuigengji-upgrade-backups/<数据根摘要>/<本次升级>/data`，旁边的 `manifest.json` 包含逐文件校验值。
+市场更新可能先显示新版页面，后台仍沿用启动时加载的旧模块。出现版本不一致或“需要重启”的提示时，先保存编辑，完整退出 DSH（包括托盘）后重新打开；只刷新页面不会更换后台模块。
+
+通过社区市场更新前，先将 DSH Desktop 和 `dshmarket` 更新到最新版，再完整重启。最新版仍报 `already-installed` 等错误时保留市场日志并排查实际失败阶段，见[市场更新说明](market-updates.md)。
+
+失败时保留 `failedStage`、错误代码、数据根和 `backupPath`。不要创建空库、删除索引或重新导入来掩盖错误。修复源文件后可再次调用 `verify` 重新检查，无需反复重装；原始迁移基准和备份继续保留。已识别的旧版空库摘要误报只有在核验通过后才解除，真实的数据缺失仍会停止写入。
+
+`UPGRADE_SOURCE_MISSING` 表示作品索引缺失或异常为空，但仍有原作品文件、会话记录或已知作品信息。恢复原索引后再校验，不要用新空索引替代。作品库目录的状态查询不初始化或迁移数据；当前库无法读取时，设置中仍可查看路径、打开其他完整作品库或显式新建独立作品库，原目录保留。完整迁移需要源库先通过校验。
+
+升级快照在数据根旁 `.cuigengji-upgrade-backups/<数据根摘要>/<本次升级>/data`，旁边的 `manifest.json` 包含逐文件校验值。
 
 ## 切换作品库与恢复
 

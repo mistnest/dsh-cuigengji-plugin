@@ -4,8 +4,8 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {chromium,expect} from '@playwright/test';
 import {selectSettingsCategory} from './helpers/navigation.mjs';
-import {usageDay} from '../src/domain/usage/settings.ts';
-import {observeBalance} from '../src/domain/usage/balance.js';
+import {usageDay} from '../src/modules/usage/pricing/settings.ts';
+import {observeBalance} from '../src/modules/usage/ledger/balance.ts';
 const root=resolve(import.meta.dirname,'..'),output=join(root,'test-results/usage-variables');await mkdir(output,{recursive:true});
 const host=spawn(process.execPath,['scripts/preview-workbench.mjs'],{cwd:root,stdio:['ignore','pipe','pipe']});let browser,page;const checks=[];
 try{

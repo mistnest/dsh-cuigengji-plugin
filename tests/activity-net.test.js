@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {localDay,emptyActivity,normalizeActivity,mergeActivity} from '../src/application/activity.ts';
-import {Store} from '../src/core/store.js';
-import {WorkData} from '../src/application/backup/workspace.js';
+import {localDay,emptyActivity,normalizeActivity,mergeActivity} from '../src/modules/workspace/activity/activity.ts';
+import {Store} from '../src/composition/store.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
 
 const human={kind:'human',sessionId:'net-author'},agent={kind:'agent',sessionId:'net-agent'};
 const day1='2024-12-31',day2='2025-01-01',day3='2025-01-02';

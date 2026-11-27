@@ -1,1 +1,1 @@
-export * from "../adapters/dsh/prompt.js";
+export * from "./../modules/access/guidance/prompt.js";

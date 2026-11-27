@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectReference,renderReference} from '../src/core/context.js';
+import {selectReference,renderReference} from '../src/modules/workspace/queries/context.ts';
 const chapter=(id,order,content)=>({id,title:id,order,content,revision:1});
 test('complete long sections preserve stable order without a plugin budget',()=>{
   const novel={plan:{id:'plan',revision:2,approved:true,content:'规划'.repeat(10000)},chapters:{a:chapter('a',0,'A'.repeat(10000)),b:chapter('b',1,'B'.repeat(10000)),c:chapter('c',2,'正文'.repeat(20000))}};

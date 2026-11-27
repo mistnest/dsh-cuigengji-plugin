@@ -1,1 +1,1 @@
-export * from "../application/queries/handoff.js";
+export * from "./../modules/workspace/queries/handoff.js";

@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {UsageService} from '../src/application/usage/service.ts';
-import {UsageStore} from '../src/infrastructure/persistence/usage-store.ts';
-import {charge,validatePrice} from '../src/domain/usage/pricing.ts';
-import {peakPrice,peakStatus,defaultPriceSchedule,priceScheduleIssue} from '../src/domain/usage/calendar.ts';
-import {usageDay} from '../src/domain/usage/settings.ts';
+import {UsageService} from '../src/modules/usage/reports/service.ts';
+import {UsageStore} from '../src/modules/usage/ledger/store.ts';
+import {charge,validatePrice} from '../src/modules/usage/pricing/pricing.ts';
+import {peakPrice,peakStatus,defaultPriceSchedule,priceScheduleIssue} from '../src/modules/usage/pricing/calendar.ts';
+import {usageDay} from '../src/modules/usage/pricing/settings.ts';
 
 const off=Date.parse('2026-11-01T10:00:00+08:00'),peak=Date.parse('2026-11-02T10:00:00+08:00');
 const usage={inputTokens:1000,outputTokens:100,cacheReadTokens:2000,cacheWriteTokens:0,totalTokens:3100};

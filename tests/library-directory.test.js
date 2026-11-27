@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile,writeFile,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {LibraryService,within} from '../src/application/libraries/service.ts';
-import {workspaceDigest} from '../src/application/maintenance/upgrade.ts';
-import {Store} from '../src/application/store.js';
+import {LibraryService,within} from '../src/composition/library-runtime.ts';
+import {workspaceDigest} from '../src/modules/library/upgrade/upgrade.ts';
+import {Store} from '../src/composition/store.ts';
 
 async function fixture(t){
   const base=await mkdtemp(join(tmpdir(),'cuigengji-library-'));t.after(()=>rm(base,{recursive:true,force:true}));

@@ -1,1 +1,1 @@
-export * from "../domain/preset/index.js";
+export * from "./../modules/workspace/presets/index.js";

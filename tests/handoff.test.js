@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHandoff } from '../src/core/handoff.js';
-import { renderHandoff } from '../src/core/handoff-text.js';
-import { registerSkills, skillSpecs } from '../src/assistant/skills.js';
+import { createHandoff } from '../src/modules/workspace/queries/handoff.ts';
+import { renderHandoff } from '../src/modules/workspace/queries/handoff-text.ts';
+import { registerSkills, skillSpecs } from '../src/modules/access/guidance/skills.ts';
 import { readFileSync } from 'node:fs';
 
 function project() {

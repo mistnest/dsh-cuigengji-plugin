@@ -1,9 +1,14 @@
 /** Use the author's visible entry points, shared by the UI regression scripts. */
 export async function openAuthorPage(page, name) {
-  if (name === '写作预设') {
+  if (name === '写作预设' || name === '创作记忆') {
     await page.getByRole('button', {name: '设置', exact: true}).click();
     await selectSettingsCategory(page,'AI与写作');
-    await page.getByRole('dialog',{name:'设置',exact:true}).getByRole('button', {name: '写作预设', exact: true}).click();
+    await page.getByRole('dialog',{name:'设置',exact:true}).getByRole('button', {name: '创作记忆', exact: true}).click();
+    if (name === '写作预设') {
+      const legacy = page.getByRole('button', {name:'旧版预设',exact:true});
+      if (!await legacy.isVisible()) await page.getByLabel('创作记忆更多操作', {exact:true}).click();
+      await legacy.click();
+    }
     return;
   }
   await page.getByRole('button', {name: '作品首页', exact: true}).click();

@@ -1,1 +1,1 @@
-export * from "../application/backup/workspace.js";
+export * from "./../modules/library/archives/workspace-archive.js";

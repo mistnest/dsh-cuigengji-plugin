@@ -5,11 +5,11 @@ import {tmpdir} from 'node:os';
 import {join, dirname} from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {Store} from '../src/core/store.js';
-import {WorkData} from '../src/application/backup/workspace.js';
-import {bookPath, fileId, pageKey, splitWorkspace, readableFileName, validManagedFileName, namedChapterFiles, managedFileKey} from '../src/infrastructure/persistence/project-layout.ts';
-import {validManagedPath,treeChapterFiles,treePlanningFiles} from '../src/infrastructure/persistence/tree-layout.ts';
-import {directorySnapshot} from '../src/domain/chapters/order.ts';
+import {Store} from '../src/composition/store.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
+import {bookPath, fileId, pageKey, splitWorkspace, readableFileName, validManagedFileName, namedChapterFiles, managedFileKey} from '../src/modules/library/records/project-layout.ts';
+import {validManagedPath,treeChapterFiles,treePlanningFiles} from '../src/modules/library/records/tree-layout.ts';
+import {directorySnapshot} from '../src/modules/workspace/chapters/order.ts';
 import {storageSnapshot} from './helpers/storage-snapshot.js';
 
 const json = async path => JSON.parse(await readFile(path, 'utf8'));

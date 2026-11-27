@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Store} from '../src/core/store.js';
-import {WorkData} from '../src/data/workspace.js';
+import {Store} from '../src/composition/store.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
 async function fixture(t){const root=await mkdtemp(join(tmpdir(),'planning-pages-'));t.after(()=>rm(root,{recursive:true,force:true}));const store=new Store(root),actor={kind:'agent',sessionId:'planner'};const novel=await store.dispatch('novel.create',{title:'分页面讨论'},{kind:'human'});await store.dispatch('binding.set',{novelId:novel.id},{kind:'human',sessionId:actor.sessionId});const run=(action,args={})=>store.dispatch(action,args,actor);const apply=operations=>run('planning.apply',{requestId:crypto.randomUUID(),operations});return{root,store,novel,run,apply};}
 test('pages isolate scene indexes, edges, continuation, and annotations; CRUD is revision checked',async t=>{
  const {run,apply}=await fixture(t);

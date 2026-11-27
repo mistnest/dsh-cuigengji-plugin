@@ -1,0 +1,45 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve,dirname,basename} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {randomUUID} from 'node:crypto';
+import {build} from 'esbuild';
+import {Store} from '../src/composition/store.ts';
+import {describe} from '../src/modules/author-ui/workbench/features/planning/history-model.ts';
+
+test('production planning history renders cleaned snapshots and preserves surviving cards and undo actions',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'cuigengji-history-view-'));
+  t.after(async()=>{
+    assert.equal(dirname(resolve(root)),resolve(tmpdir()));assert.ok(basename(root).startsWith('cuigengji-history-view-'));
+    await rm(root,{recursive:true,force:true});
+  });
+  const bundle=await build({stdin:{contents:"import React from 'react';import{renderToString}from'react-dom/server';import{PlanningHistory}from'./src/modules/author-ui/workbench/features/planning/History.tsx';export const render=props=>renderToString(React.createElement(PlanningHistory,props));",resolveDir:resolve(import.meta.dirname,'..'),loader:'jsx'},bundle:true,platform:'node',format:'cjs',write:false,logLevel:'silent'});
+  const renderer=join(root,'render.cjs');await writeFile(renderer,bundle.outputFiles[0].contents);
+  const {render}=await import(pathToFileURL(renderer).href);
+  const store=new Store(join(root,'data')),actor={kind:'human',sessionId:'history-view-author'};
+  const novel=await store.dispatch('novel.create',{title:'合成历史记录'},actor);
+  const run=(action,args={})=>store.dispatch(action,{novelId:novel.id,...args},actor);
+  const apply=operations=>run('planning.apply',{operations,requestId:randomUUID()});
+  const created=await apply([{op:'node.create',ref:'a',value:{title:'主角来信',content:'删除的旧稿'}},{op:'node.create',ref:'b',value:{title:'同批另一张卡',content:'保留的同批旧稿'}}]);
+  const a=created.mapping.a,b=created.mapping.b;
+  await apply([{op:'node.update',id:a,expectedRevision:1,value:{content:'当前采用稿'}}]);
+  const nodes=(await run('planning.list')).items;
+  assert.ok(render({changes:await run('planning.history'),nodes}).includes('删除的旧稿'));
+  const elsewhere=render({changes:await run('planning.history'),nodes:[]});
+  assert.equal((elsewhere.match(/>定位节点<\/button>/g)||[]).length,3,'full snapshots keep cross-page navigation');
+  const selection={scope:'planning-history',entityId:a,filter:{mode:'selected',revisions:[1]}};
+  const preview=await run('cleanup.preview',selection);
+  await run('cleanup.apply',{...selection,token:preview.token,confirm:true,requestId:randomUUID()});
+  await apply([{op:'node.update',id:b,expectedRevision:1,value:{content:'另一张卡的修订稿'}}]);
+  const changes=await run('planning.history'),html=render({changes,nodes});
+  assert.ok(html.includes('版本 1 已清理'));assert.ok(!html.includes('删除的旧稿'));
+  assert.ok(html.includes('当前采用稿'));assert.ok(html.includes('保留的同批旧稿'));
+  assert.equal((html.match(/title="部分历史版本已清理，无法整批撤销"/g)||[]).length,2);
+  assert.equal((html.match(/>撤销这次变更<\/button>/g)||[]).length,3);
+  assert.ok(!html.includes('>加载更多记录<'));
+  assert.equal((await run('planning.get',{nodeId:a})).node.content,'当前采用稿');
+  await assert.rejects(run('planning.revert',{transactionId:created.transactionId,requestId:randomUUID()}),{code:'HISTORY_CLEANED'});
+  assert.match(describe({id:a,revision:1},nodes),/记录不完整/);
+});

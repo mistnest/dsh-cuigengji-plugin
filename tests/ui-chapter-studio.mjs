@@ -61,7 +61,15 @@ try{
   let saved=await call('chapter.get',{novelId,chapterId:a.id,maxChars:200000});const writeCount=writes.length;
   expect(historyReads).toEqual([]);
   await expect(active().locator('.chapter-toolbar').getByRole('button',{name:'改动对比',exact:true})).toHaveCount(0);
+  await expect(active().locator('.chapter-toolbar').getByRole('button',{name:'页内预览',exact:true})).toHaveCount(0);
   await expect(active().getByText('版本历史',{exact:true})).toHaveCount(0);
+  const dirSummary=page.locator('.directory-header .directory-summary');
+  await expect(dirSummary).toBeVisible();
+  await expect(dirSummary).toContainText('3 章 ·');
+  expect((await dirSummary.boundingBox()).y).toBeLessThan((await page.locator('.chapter-item').first().boundingBox()).y);
+  await active().getByLabel('章节设置',{exact:true}).click();
+  await expect(active().getByRole('button',{name:'阅读预览',exact:true})).toHaveCount(0);
+  await active().getByLabel('章节设置',{exact:true}).click();
   await openComparison();await expect(active().locator('.chapter-title-row details.menu')).not.toHaveAttribute('open','');
   const compare=page.getByRole('region',{name:'修改前后对比',exact:true});
   await compare.getByRole('combobox',{name:'对照历史版本'}).selectOption('2');

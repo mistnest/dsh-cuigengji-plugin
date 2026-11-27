@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Store } from '../src/core/store.js';
-import { WorkData } from '../src/application/backup/workspace.js';
+import { Store } from '../src/composition/store.ts';
+import { WorkData } from '../src/modules/library/archives/workspace-archive.ts';
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'cuigengji-activity-'));

@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,mkdir,readdir,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
-import {Store} from '../src/core/store.js';
-import {WorkData} from '../src/application/backup/workspace.js';
-import {fileId,bookPath,splitWorkspace} from '../src/infrastructure/persistence/project-layout.ts';
-import {projectDirectoryName,validProjectDirectory} from '../src/infrastructure/persistence/project-directories.ts';
+import {Store} from '../src/composition/store.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
+import {fileId,bookPath,splitWorkspace} from '../src/modules/library/records/project-layout.ts';
+import {projectDirectoryName,validProjectDirectory} from '../src/modules/library/records/project-directories.ts';
 import {storageSnapshot} from './helpers/storage-snapshot.js';
 
 const library = async root=>JSON.parse(await readFile(join(root,'library.json'),'utf8'));

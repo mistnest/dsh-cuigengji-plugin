@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Store} from '../src/application/store.js';
-import {createSessionPolicy} from '../src/application/bindings/session.js';
-import {registerPrompt} from '../src/adapters/dsh/prompt.js';
-import {WorkData} from '../src/application/backup/workspace.js';
-import {readGuidance} from '../src/adapters/dsh/guidance.js';
+import {Store} from '../src/composition/store.ts';
+import {createSessionPolicy} from '../src/modules/access/dsh/session-policy.ts';
+import {registerPrompt} from '../src/modules/access/guidance/prompt.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
+import {readGuidance} from '../src/modules/access/guidance/read.ts';
 
 test('guidance is independent of focus, durable, per-session and removable from assembly',async t=>{
  const root=await mkdtemp(join(tmpdir(),'cg-guidance-'));t.after(()=>rm(root,{recursive:true,force:true}));

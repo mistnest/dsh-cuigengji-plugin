@@ -1,8 +1,8 @@
 // Invoked by check-release-install.mjs with the DSH desktop executable in Node
 // mode. Loads the package from node_modules, not the source tree.
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {resolve,join} from 'node:path';
+import {readFile,mkdir,writeFile,rm,stat} from 'node:fs/promises';
+import {resolve,join,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 const [packagePath,dataRoot,expectationPath] = process.argv.slice(2);
 const manifest = JSON.parse(await readFile(join(packagePath,'package.json'),'utf8'));
@@ -15,7 +15,7 @@ const ctx = {tools:{register:tool=>registered.set(tool.name,tool)},skills:{regis
   on:(event,fn)=>listeners.set(event,[...(listeners.get(event)||[]),fn]),effect:fn=>effects.push(fn()),provide:(key,value)=>{ctx[key]=value;}};
 const emit=async(event,value)=>{for(const callback of listeners.get(event)||[])await callback(value);};
 try {
-  await apply(ctx,{dataRoot,usageRoot:join(dataRoot,'test-usage')});
+  await apply(ctx,{dataRoot,usageRoot:join(dataRoot,'test-usage'),externalRoot:join(dataRoot,'test-external')});
   const execute = async (name,action,args={},session='synthetic-upgrade-author') => JSON.parse(await registered.get(name).execute({action,args},
     {agent:{id:session},callId:crypto.randomUUID(),signal:new AbortController().signal}));
   const status = await execute('cuigengji_maintenance','status'); assert.equal(status.status,'ready',JSON.stringify(status.error));
@@ -99,11 +99,45 @@ try {
   assert.equal(proseHistory.value[0].content,prose,'the installed replacement keeps the original version');
   const derivedCurrent=(await rpc('novel.list',{includeArchived:true})).value.find(row=>row.id===derived.id);
   const derivedRecycled=(await rpc('novel.archive',{novelId:derived.id,expectedRevision:derivedCurrent.revision,confirm:true})).value;
-  assert.equal((await rpc('novel.purge',{novelId:derived.id,expectedRevision:derivedRecycled.revision,confirm:true})).value.purged,true);
+  assert.equal(derivedRecycled.archived,true);
+  const selection={scope:'novel-trash',ids:[derived.id]},approval=await rpc('cleanup.preview',selection);
+  assert.equal(approval.ok,true);
+  await execute('cuigengji_project','chapter.create',{novelId:novel.id,title:'并行编辑验收',content:'永久删除另一部回收作品时，本书仍可正常编辑。',requestId:'installed-during-trash-review'},sessionId);
+  const cleaned=await rpc('cleanup.apply',{...selection,token:approval.value.token,confirm:true,requestId:'installed-trash-cleanup'});
+  assert.equal(cleaned.ok,true,JSON.stringify(cleaned));assert.equal(cleaned.value.deleted,1);
   const currentRevision=(await rpc('novel.list')).value.find(n=>n.id===novel.id).revision;
   const again=(await rpc('novel.archive',{novelId:novel.id,expectedRevision:currentRevision,confirm:true})).value;
   assert.equal((await rpc('novel.purge',{novelId:novel.id,expectedRevision:again.revision,confirm:true})).value.purged,true);
   assert.equal((await rpc('novel.list',{includeArchived:true})).value.some(n=>n.id===novel.id),false);
+  assert.equal((await execute('cuigengji_maintenance','verify')).verified,true,'deleting works must leave startup verification healthy');
+  // Run the reported startup failure against installed JavaScript inside the
+  // desktop runtime, in another disposable library (no source imports).
+  const {Store}=await import(pathToFileURL(join(packagePath,'runtime/core/store.js')));
+  const {UpgradeCoordinator,workspaceDigest}=await import(pathToFileURL(join(packagePath,'runtime/application/maintenance/upgrade.js')));
+  const {LibraryService}=await import(pathToFileURL(join(packagePath,'runtime/composition/library-runtime.js')));
+  const fixture=resolve(dataRoot,'readiness-fixture');assert.equal(dirname(fixture),resolve(dataRoot));
+  await mkdir(join(fixture,'runtime/requests'),{recursive:true});
+  const receipt={signature:'installed-old-receipt',cleaned:true},requestPath=join(fixture,'runtime/requests',`${'a'.repeat(64)}.json`);
+  await writeFile(requestPath,JSON.stringify(receipt));
+  await writeFile(join(fixture,'runtime/upgrade.json'),JSON.stringify({format:'cuigengji-upgrade',version:1,pluginVersion:manifest.version,dataRoot:fixture,
+    status:'failed',stage:'failed',failedStage:'verify',startedAt:new Date().toISOString(),fromStorageVersion:5,toStorageVersion:5,migrated:false,
+    backupPath:null,backupComplete:false,beforeStateDigest:workspaceDigest({schemaVersion:1,novels:{},bindings:{},requests:{}}),
+    error:{code:'UPGRADE_CONTENT_MISMATCH',message:'合成的旧版空库误报'}}));
+  const fixtureStore=new Store(fixture),repaired=await new UpgradeCoordinator(fixtureStore).start();
+  assert.equal(repaired.status,'ready',JSON.stringify(repaired.error));assert.equal(repaired.beforeStateDigest,repaired.afterStateDigest);
+  assert.deepEqual(JSON.parse(await readFile(requestPath,'utf8')),receipt);
+  const fixtureActor={kind:'human',sessionId:'installed-readiness'},fixtureBook=await fixtureStore.dispatch('novel.create',{title:'索引保护验收'},fixtureActor);
+  const fixtureChapter=await fixtureStore.dispatch('chapter.create',{novelId:fixtureBook.id,title:'正文',content:'索引异常时保留正文。'},fixtureActor);
+  await new UpgradeCoordinator(new Store(fixture)).ensureReady();
+  const fixtureIndex=await readFile(join(fixture,'library.json'),'utf8');await rm(join(fixture,'library.json'));
+  const retry=new UpgradeCoordinator(new Store(fixture));
+  assert.equal((await retry.start()).error.code,'UPGRADE_SOURCE_MISSING');
+  const libraryStatus=await new LibraryService(fixture).status();assert.equal(libraryStatus.novels,null);assert.equal(libraryStatus.error.code,'UPGRADE_SOURCE_MISSING');
+  await assert.rejects(stat(join(fixture,'library.json')),{code:'ENOENT'});
+  await writeFile(join(fixture,'library.json'),fixtureIndex);
+  assert.equal((await retry.ensureReady()).status,'ready');
+  assert.equal((await new UpgradeCoordinator(new Store(fixture)).verify()).verified,true);
+  assert.equal((await fixtureStore.dispatch('chapter.get',{novelId:fixtureBook.id,chapterId:fixtureChapter.id},fixtureActor)).content,'索引异常时保留正文。');
   console.log(JSON.stringify({ok:true,installedVersion:manifest.version,node:process.version,electron:process.versions.electron,
-    fromStorageVersion:status.fromStorageVersion,migrated:status.migrated,counts:verification.summary.counts,backupPath:status.backupPath,lifecycleVerified:true,ordinarySessionsVerified:true,writingRecordsVerified:true,canvasVerified:true,manuscriptSearchVerified:true}));
+    fromStorageVersion:status.fromStorageVersion,migrated:status.migrated,counts:verification.summary.counts,backupPath:status.backupPath,lifecycleVerified:true,ordinarySessionsVerified:true,writingRecordsVerified:true,canvasVerified:true,manuscriptSearchVerified:true,readinessVerified:true}));
 } finally {for (const dispose of effects) await dispose();}

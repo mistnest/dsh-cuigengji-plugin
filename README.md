@@ -35,14 +35,14 @@
 3. 安装后按提示重启，从左侧「催更姬」进入，创建或选择作品。
 
 ```text
-dsh-cuigengji-plugin@0.6.2
+dsh-cuigengji-plugin@0.7.0
 ```
 
 请保留版本号，避免宿主将不带版本的包名解析到旧版。「安装源」用于下载依赖，保持为包源即可。
 
-[详细安装步骤](docs/getting-started.md) · [备用成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.6.2/dsh-cuigengji-plugin-0.6.2.tgz) · [更新与数据迁移](docs/upgrade.md)
+[详细安装步骤](docs/getting-started.md) · [备用成品包](https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.7.0/dsh-cuigengji-plugin-0.7.0.tgz) · [更新与数据迁移](docs/upgrade.md)
 
-也可以把[安装与更新指南](docs/agent-installation.md)交给 Agent，由它处理安装、备份和升级检查。0.6.2 的发布验收使用 DSH Windows 桌面版 **0.2.3-alpha.2** 内置运行时，覆盖隔离安装、升级和工作台操作，具体范围见[更新记录](docs/CHANGELOG.md)。更新插件会自动备份、迁移并校验原有作品。
+也可以把[安装与更新指南](docs/agent-installation.md)交给 Agent，由它处理安装、备份和升级检查。0.7.0 的发布验收使用 DSH Windows 桌面版 **0.2.3-alpha.2** 内置运行时，覆盖隔离安装、升级和工作台操作，具体范围见[更新记录](docs/CHANGELOG.md)。更新插件会自动备份、迁移并校验原有作品。
 
 ## 视频与教程
 
@@ -80,7 +80,8 @@ dsh-cuigengji-plugin@0.6.2
 
 | 还有这些写作工具 | 能帮你做什么 |
 | --- | --- |
-| [每本作品的写作预设](docs/presets.md) | 保存文风、视角等写作要求，启用后提供给绑定作品的 AI 会话。 |
+| [每本作品的创作记忆](docs/presets.md) | 按节保存文风、视角和伏笔决定，供 AI 按需查阅。旧版预设可继续使用或转为创作记忆。 |
+| [外部 MCP 协作](docs/external-agents.md) | 按作品和资料类型开放只读或读写权限，核对外部客户端的调用记录。 |
 | [酒馆资料导入](docs/tavern-import.md) | 接着用已有的角色卡、世界书和提示词预设，导入后继续整理。 |
 | [导入、导出与备份](docs/import-export.md) | 带走整本作品，或选择章节、设定分组、规划页与预设；也能备份整个工作库。 |
 | [桌宠用量与记账](docs/pet-usage.md) | 在桌宠速览查看今日 Token、估算费用和余额，按日期、模型查明细，自定义模型价格。 |

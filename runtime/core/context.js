@@ -1,1 +1,1 @@
-export * from "../application/queries/context.js";
+export * from "./../modules/workspace/queries/context.js";

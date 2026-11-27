@@ -4,8 +4,8 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/core/store.js';
-import {toScreen,toWorld,zoomAt,fitCamera,contains,intersects,vacantCardPoint,CARD_WIDTH,CARD_HEIGHT} from '../src/client/shared/graph-geometry.ts';
+import {Store} from '../src/composition/store.ts';
+import {toScreen,toWorld,zoomAt,fitCamera,contains,intersects,vacantCardPoint,CARD_WIDTH,CARD_HEIGHT} from '../src/modules/author-ui/workbench/shared/graph-geometry.ts';
 
 test('toolbar card creation finds room among cards and resized notes without covering ports',()=>{
   const center={x:400,y:300},occupied=[{x:276,y:216,width:CARD_WIDTH,height:CARD_HEIGHT},{x:564,y:100,width:400,height:600}];

@@ -40,7 +40,7 @@ try {
   await selectSettingsCategory(page,'编辑与外观');
   const font=page.getByLabel('默认正文字号',{exact:true});await font.click();
   await page.screenshot({path:join(shots,'settings-360.png')});
-  await font.getByRole('option',{name:'20',exact:true}).click();await expect(font).toHaveValue('20');
+  await font.selectOption('20');await expect(font).toHaveValue('20');
   await expect(page.getByRole('dialog',{name:'设置',exact:true})).toBeVisible();
   await page.getByLabel('关闭设置',{exact:true}).click();
   await page.evaluate(()=>{document.documentElement.style.cssText='--dsw-alias-bg-base:#20251f;--dsw-alias-label-primary:#e4e8de;--dsw-alias-label-secondary:#a8b0a0;--dsw-alias-border-l1:#404a3b;--dsw-alias-state-success-primary:#a4c195';});
@@ -51,7 +51,7 @@ try {
   // Exercise the real registration/component with the documented DSH observables.
   // No model calls, messages, or durable DSH sessions are created by this fixture.
   const bundle=await build({stdin:{resolveDir:root,loader:'tsx',contents:`
-    import React,{useSyncExternalStore} from 'react';import{createRoot}from'react-dom/client';import{applyWithRPC}from'./src/client/index.tsx';
+    import React,{useSyncExternalStore} from 'react';import{createRoot}from'react-dom/client';import{applyWithRPC}from'./src/modules/author-ui/workbench/index.tsx';
     function source(value){const listeners=new Set();return{getSnapshot:()=>value,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},set(next){value=next;listeners.forEach(fn=>fn())}}}
     const mounted=source('blank'), sessions=source({byId:{blank:{id:'blank',blank:true,retainedBy:{mainView:1}}}}), workspaces=source({phase:'ready',items:[{workspaceId:'work',title:'小说工作区'}]});
     let fail=false;const registrations=[];const opened=[],created=[],rpcCalls=[];let connects=0,selected=0;
@@ -80,6 +80,26 @@ try {
   expect((await page.evaluate(()=>fixture.stats())).rpcCalls).toEqual(['workspace.status','workspace.status']);
   await page.evaluate(()=>fixture.compact());await expect(entry).toBeVisible();await expect(entry).toHaveAccessibleName('打开催更姬');
   await page.evaluate(()=>{fixture.mode('none');fixture.empty()});await entry.click();await expect(page.getByRole('option',{name:'小说作品库（推荐）'})).toHaveCount(1);await expect(page.getByRole('button',{name:'进入工作台'})).toBeEnabled();await page.keyboard.press('Escape');await expect(entry).toBeFocused();
+  // DS-Bot portals a separate column to body and retains the collapsed native sidebar underneath.
+  await page.evaluate(()=>{
+    fixture.mode('blank');
+    const column=document.createElement('aside');
+    column.className='bt-leftcol';
+    column.innerHTML='<div class="bt-side"><div class="bt-leftcol-foot"></div></div>';
+    document.body.append(column);
+  });
+  const botEntry=page.locator('.bt-leftcol-foot').getByRole('button',{name:'打开催更姬'});
+  await expect(botEntry).toBeVisible();await expect(entry).toHaveCount(1);
+  await botEntry.click();await expect(page.locator('output')).toHaveText('dsh-resource://cuigengji/blank');
+  await page.locator('.bt-leftcol-foot').evaluate(foot=>{
+    const rail=document.createElement('div');
+    rail.className='bt-leftcol-foot bt-leftcol-foot-rail';
+    foot.replaceWith(rail);
+  });
+  await expect(botEntry).toBeVisible();await expect(botEntry.locator('span')).toBeHidden();
+  await page.locator('.bt-leftcol').evaluate(column=>column.remove());
+  await expect(page.locator('#root aside').getByRole('button',{name:'打开催更姬'})).toBeVisible();
+  await expect(entry).toHaveCount(1);
   expect(errors).toEqual([]);
   console.log(JSON.stringify({ok:true,checks:['styled native dropdowns: mouse, keyboard, Escape, long labels, scrolling, narrow, dark, modal','resident entry: blank session, global panel, sessionless workspace, failure retry, compact and empty state']}));
 }catch(error){if(browser){const page=browser.contexts()[0]?.pages()[0];if(page)await page.screenshot({path:join(shots,'failure.png')});}throw error;}

@@ -4,11 +4,12 @@ import {createServer} from 'node:http';
 import {mkdtemp,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
-import {LibraryService} from '../src/application/libraries/service.ts';
-import {convertLegacyExport} from '../src/infrastructure/migrations/legacy.js';
+import {LibraryService} from '../src/composition/library-runtime.ts';
+import {convertLegacyExport} from '../src/modules/workspace/transfer/formats/legacy.ts';
 import {seedCanvasDemo} from './canvas-demo.mjs';
 import {seedReadableCanvasDemo} from './readable-canvas-demo.mjs';
-import {UsageService} from '../src/application/usage/service.ts';
+import {UsageService} from '../src/modules/usage/reports/service.ts';
+import {createExternalAccess} from '../src/composition/external-reader.ts';
 
 const root=resolve(import.meta.dirname,'..');
 const directory=await mkdtemp(join(tmpdir(),'cuigengji-preview-'));
@@ -16,15 +17,24 @@ const libraries=new LibraryService(directory,{persist:async()=>{}});
 const usage=new UsageService(join(directory,'usage'));
 const store=libraries.proxy('store'),workData=libraries.proxy('workData'),transfer=libraries.proxy('transfer');
 await libraries.current.maintenance.ensureReady();
+const externalRoot=directory+'-external';
+const external=createExternalAccess(libraries,{root:externalRoot,connectorPath:resolve(root,'src/modules/access/mcp/external-server.ts')});
 const actor={kind:'human',sessionId:'production-preview'};
 let layoutFault=process.argv.includes('--fail-layout-once')?'before':process.argv.includes('--lose-layout-response-once')?'after':null;
 let novelId;
 const welcome=process.argv.includes('--welcome'),empty=process.argv.includes('--empty');
 const readableCanvas=process.argv.includes('--readable-canvas');
+const connectionsDemo=process.argv.includes('--connections-demo');
 if(readableCanvas){
   novelId=await seedReadableCanvasDemo(store,actor);
 }else if(process.argv[2]==='--canvas-demo'){
   novelId=await seedCanvasDemo(store,actor);
+}else if(connectionsDemo){
+  const mist=await store.dispatch('novel.create',{title:'雾港来信'},actor);
+  const hill=await store.dispatch('novel.create',{title:'青崖纪事'},actor);
+  novelId=mist.id;
+  await external.create({name:'反重力助手',novelIds:[mist.id],permissions:{manuscript:'write',settings:'read'}});
+  await external.create({name:'设定核对助手',novelIds:[mist.id,hill.id],permissions:{settings:'read',guidance:'read'}});
 }else if(empty){
   // A genuine first launch, with no works and no session binding.
 }else if(process.argv[2]&&!process.argv[2].startsWith('--')){
@@ -37,8 +47,8 @@ if(readableCanvas){
 }
 if(novelId&&!welcome&&!empty)await store.dispatch('binding.set',{novelId},actor);
 const initialView=readableCanvas?"if(localStorage.getItem('cuigengji:ui:production-preview:page')===null)localStorage.setItem('cuigengji:ui:production-preview:page',JSON.stringify('plan'));":"";
-const previewEntry=process.argv.includes('--sidebar-host')?"import{mountSidebarHost}from'./tests/fixtures/sidebar-host.tsx';mountSidebarHost(rpc);":"createRoot(document.getElementById('root')).render(<Workbench sessionId=\"production-preview\" rpc={rpc}/>);";
-const output=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{Workbench}from'./src/client/index.tsx';${initialView}const rpc=async(action,args,sessionId)=>{const response=await fetch('/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,args,sessionId})});const result=await response.json();if(!response.ok)throw new Error(result.error);return result;};${previewEntry}`,resolveDir:root,loader:'tsx'},bundle:true,write:false,format:'iife',loader:{'.png':'dataurl'},define:{'process.env.NODE_ENV':'"development"'}});
+const previewEntry=connectionsDemo?"import{mountConnections}from'./tests/fixtures/connections-manager.tsx';mountConnections(rpc);":process.argv.includes('--sidebar-host')?"import{mountSidebarHost}from'./tests/fixtures/sidebar-host.tsx';mountSidebarHost(rpc);":"createRoot(document.getElementById('root')).render(<Workbench sessionId=\"production-preview\" rpc={rpc}/>);";
+const output=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{Workbench}from'./src/modules/author-ui/workbench/index.tsx';${initialView}const rpc=async(action,args,sessionId)=>{const response=await fetch('/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,args,sessionId})});const result=await response.json();if(!response.ok)throw new Error(result.error);return result;};${previewEntry}`,resolveDir:root,loader:'tsx'},bundle:true,write:false,format:'iife',loader:{'.png':'dataurl'},define:{'process.env.NODE_ENV':'"development"'}});
 const server=createServer(async(req,res)=>{
   try{
     res.setHeader('Cache-Control','no-store');
@@ -54,7 +64,7 @@ const server=createServer(async(req,res)=>{
       if(args.__libraryRoot&&args.__libraryRoot!==store.root)throw new Error('作品库已切换，请刷新后重试');
       delete args.__libraryRoot;
       const handle=async()=>action.startsWith('usage.')?usage.dispatch(action,args):action==='settings.get'?{dataRoot:store.root}:transferMethod?await transfer[transferMethod](args,acting):action==='legacy.preview'?convertLegacyExport(args.input):method?await workData[method](args.backup):await store.dispatch(action,args,acting);
-      const result=action==='library.status'?await libraries.status():action==='library.pick'?{path:null,manual:true}:action==='library.inspect'?await libraries.inspect(args.path):action==='library.change'?await libraries.change(args):await libraries.use(handle);
+      const result=action.startsWith('external.')?await external[{'external.status':'status','external.create':'create','external.update':'update','external.revoke':'revoke','external.records':'records'}[action]](args):action==='library.status'?await libraries.status():action==='library.pick'?{path:null,manual:true}:action==='library.inspect'?await libraries.inspect(args.path):action==='library.restoreIndex'?await libraries.use(()=>libraries.current.store.restoreIndexCopy(args.confirm===true)):action==='library.change'?await libraries.change(args):await libraries.use(handle);
       if(layout&&layoutFault==='after'){layoutFault=null;throw new Error('试用：模拟布局已提交但响应丢失');}
       res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));return;
     }
@@ -69,4 +79,4 @@ const previewPort=portOption?Number(portOption.slice(7)):0;
 if(!Number.isInteger(previewPort)||previewPort<0||previewPort>65535)throw new Error('Invalid preview port');
 await new Promise(resolve=>server.listen(previewPort,'127.0.0.1',resolve));
 console.log(JSON.stringify({url:`http://127.0.0.1:${server.address().port}/`,dataDirectory:directory,mode:'production UI with isolated data'}));
-for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close(()=>process.exit(0)));
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{void external.close().finally(()=>server.close(()=>process.exit(0)));});

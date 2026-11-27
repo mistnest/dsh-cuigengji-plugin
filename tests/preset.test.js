@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp,rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { importPreset,compilePreset,presetImportOrders } from '../src/core/preset.js';
-import { Store } from '../src/core/store.js';
-import { registerPrompt } from '../src/assistant/prompt.js';
+import { importPreset,compilePreset,presetImportOrders } from '../src/modules/workspace/presets/index.ts';
+import { Store } from '../src/composition/store.ts';
+import { registerPrompt } from '../src/modules/access/guidance/prompt.ts';
 
 const raw={name:'写作',temperature:0.8,prompts:[
   {identifier:'a',name:'文风',role:'system',content:'短句'},

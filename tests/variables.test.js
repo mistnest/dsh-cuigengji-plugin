@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Store} from '../src/core/store.js';
-import {applyVariablePatch} from '../src/domain/variables/patch.ts';
-import {parseVariableUpdates,renderVariables,importVariableSource} from '../src/domain/variables/tavern.ts';
-import {importPreset} from '../src/domain/preset/index.js';
-import {TransferService} from '../src/application/transfer/service.ts';
+import {Store} from '../src/composition/store.ts';
+import {applyVariablePatch} from '../src/modules/workspace/variables/patch.ts';
+import {parseVariableUpdates,renderVariables,importVariableSource} from '../src/modules/workspace/variables/tavern.ts';
+import {importPreset} from '../src/modules/workspace/presets/index.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
 
 async function fixture(t){
   const root=await mkdtemp(join(tmpdir(),'cg-variables-'));t.after(()=>rm(root,{recursive:true,force:true}));

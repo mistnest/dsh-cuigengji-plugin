@@ -1,1 +1,1 @@
-export * from "../application/bindings/session.js";
+export * from "./../modules/access/dsh/session-policy.js";

@@ -1,1 +1,1 @@
-export * from "../adapters/dsh/rpc.js";
+export * from "./../modules/access/rpc/route.js";

@@ -9,8 +9,8 @@ import {resolve,join} from 'node:path';
 const root=resolve(import.meta.dirname,'..'),shots=join(root,'test-results','pet-quick');
 const bundle=await build({absWorkingDir:root,stdin:{resolveDir:root,loader:'tsx',contents:`
 import React from 'react';import{createRoot}from'react-dom/client';
-import{PetCompanion}from'./src/client/features/pet/index.tsx';
-import{invalidatePetActivity}from'./src/client/features/pet/activity.ts';
+import{PetCompanion}from'./src/modules/author-ui/workbench/features/pet/index.tsx';
+import{invalidatePetActivity}from'./src/modules/author-ui/workbench/features/pet/activity.ts';
 let sample='normal';window.openedRecords=0;
 const activity=()=>({date:'2026-11-02',novelId:null,title:sample==='long'?'雨城来信 · 旧城区与失踪信件的调查笔记 · 演示作品':'雨城来信',stats:{proseAdded:1234,settingAdded:120,planningChanges:3,conversationInput:420,chaptersTouched:2,settingsTouched:1}});
 const presentation=()=>({lines:[],customContent:false,appearance:{scale:1},summary:{date:'2026-11-02',tokens:sample==='long'?1234567890:286420,calls:12,input:48210,cacheRead:192810,cacheWrite:0,output:45400,currency:'CNY',cost:'0.801873',costs:sample==='long'?{CNY:'12345.789',USD:'12.98'}:{CNY:'0.801873'},unpriced:1,balanceTotals:sample==='long'?{CNY:'123456.789',USD:'23.45'}:{CNY:'86.244999'},balances:[{id:'demo',name:sample==='long'?'一个很长的演示账户名称，用来检查明细排版':'演示账户',currency:'CNY',balance:'86.244999',at:1793635200000}]}});

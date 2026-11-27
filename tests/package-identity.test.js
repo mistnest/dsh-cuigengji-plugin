@@ -6,8 +6,43 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {parse} from 'yaml';
-import {PACKAGE_NAME, LEGACY_PACKAGE_NAME, renamedBundles, renamedPatch} from '../src/infrastructure/migrations/package-identity.ts';
-import {renameInstallation} from '../src/adapters/dsh/rename-installation.ts';
+import {PACKAGE_NAME, LEGACY_PACKAGE_NAME, renamedBundles, renamedPatch} from '../src/modules/access/dsh/package-identity.ts';
+import {renameInstallation} from '../src/modules/access/dsh/rename-installation.ts';
+import {desktopProcessQuery} from '../src/modules/access/dsh/desktop-processes.ts';
+
+test('Windows desktop guard permits only a headless external connector', {skip: process.platform !== 'win32'}, () => {
+  const executable = 'C:/DSH/DeepSeek Harness.exe';
+  const powershell = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const command = String.raw`
+    $ErrorActionPreference = 'Stop'
+    $exe = $env:CUIGENGJI_PROCESS_DESKTOP_EXE
+    $name = [IO.Path]::GetFileName($exe)
+    $quotedExe = '"' + $exe + '"'
+    $adapter = $quotedExe + ' "C:/Temp/package/runtime/modules/access/mcp/external-server.js" --connection "C:/Temp/connection.json"'
+    function Get-CimInstance {
+      [pscustomobject]@{ProcessId=1; Name=$name; ExecutablePath=$exe; CommandLine=$adapter}
+      [pscustomobject]@{ProcessId=2; Name=$name; ExecutablePath=$exe; CommandLine=$quotedExe}
+      [pscustomobject]@{ProcessId=3; Name=$name; ExecutablePath=$exe; CommandLine=$quotedExe + ' --type=renderer --another=external-server.js'}
+      [pscustomobject]@{ProcessId=4; Name=$name; ExecutablePath=$exe; CommandLine=$adapter}
+      [pscustomobject]@{ProcessId=5; Name=$name; ExecutablePath=$exe; CommandLine=$adapter}
+      [pscustomobject]@{ProcessId=6; Name=$name; ExecutablePath=$null; CommandLine=$null}
+      [pscustomobject]@{ProcessId=7; Name=$name; ExecutablePath='C:/Other/DeepSeek Harness.exe'; CommandLine=$quotedExe}
+      [pscustomobject]@{ProcessId=8; Name=$name; ExecutablePath=$exe; CommandLine=$quotedExe + ' C:/Temp/rename-installation.js'}
+    }
+    function Get-Process {
+      param($Id, $ErrorAction)
+      if ($Id -eq 1) { [pscustomobject]@{MainWindowHandle=[IntPtr]::Zero} }
+      if ($Id -eq 4) { [pscustomobject]@{MainWindowHandle=[IntPtr]42} }
+    }
+    ${desktopProcessQuery}
+  `;
+  const result = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], {
+    env: {...process.env, CUIGENGJI_PROCESS_DESKTOP_EXE: executable, CUIGENGJI_PROCESS_NODE_PID: '8'},
+    encoding: 'utf8', windowsHide: true, timeout: 15000,
+  });
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  assert.deepEqual(JSON.parse(result.stdout), {Desktop: [2, 3, 4, 5, 6], ExternalMcp: [1]});
+});
 
 test('rename keeps bundle order and one active writing plugin', () => {
   assert.deepEqual(renamedBundles(['host', LEGACY_PACKAGE_NAME, 'market', PACKAGE_NAME]), ['host', PACKAGE_NAME, 'market']);
@@ -110,7 +145,7 @@ test('maintenance CLI executes through a linked installation path like pnpm', as
   const f = await fixture(t);
   const linked = join(f.profile, 'linked-install');
   await symlink(fileURLToPath(new URL('../', import.meta.url)), linked, 'junction');
-  const result = spawnSync(process.execPath, [join(linked, 'src/adapters/dsh/rename-installation.ts'), '--profile', f.profile, '--home', f.home],
+  const result = spawnSync(process.execPath, [join(linked, 'src/modules/access/dsh/rename-installation.ts'), '--profile', f.profile, '--home', f.home],
     {encoding: 'utf8', windowsHide: true, timeout: 30000});
   assert.equal(result.status, 0, result.stderr);
   assert.ok(result.stdout.trim(), 'linked CLI must return its migration result');

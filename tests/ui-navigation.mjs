@@ -35,8 +35,8 @@ try {
   await page.goto(url);await page.locator('.chapter-item').first().click();
   await expect(page.getByLabel('绑定小说',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('作品操作',{exact:true})).toHaveCount(0);
-  await expect(page.getByRole('navigation',{name:'小说功能'}).getByRole('button')).toHaveCount(3);
-  await expect(page.getByRole('button',{name:'写作预设',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('navigation',{name:'小说功能'}).getByRole('button')).toHaveCount(4);
+  await expect(page.getByRole('button',{name:'创作记忆',exact:true})).toHaveCount(0);
   const manuscript=page.getByLabel('正文',{exact:true}),scroll=page.locator('.editor-scroll');
   await expect(manuscript).toHaveValue(prose);
   await scroll.evaluate(e=>e.scrollTop=1000);
@@ -73,9 +73,9 @@ try {
   await page.setViewportSize({width:1200,height:900});
   await page.getByRole('button',{name:'设置',exact:true}).click();
   await selectSettingsCategory(page,'AI与写作');
-  await expect(page.getByRole('button',{name:'写作预设',exact:true})).toBeVisible();await shot('settings-1200');
+  await expect(page.getByRole('button',{name:'创作记忆',exact:true})).toBeVisible();await shot('settings-1200');
   await expect(page.getByRole('dialog',{name:'设置',exact:true}).getByRole('button',{name:'关于催更姬',exact:true})).toHaveCount(0);
-  await selectSettingsCategory(page,'AI与写作');await page.getByRole('button',{name:'写作预设',exact:true}).click();await expect(page.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();await page.getByRole('button',{name:'‹ 返回设置',exact:true}).click();await page.getByRole('button',{name:'关闭设置',exact:true}).click();
+  await selectSettingsCategory(page,'AI与写作');await page.getByRole('button',{name:'创作记忆',exact:true}).click();await expect(page.getByRole('heading',{name:'创作记忆',exact:true})).toBeVisible();await page.getByRole('button',{name:'‹ 返回设置',exact:true}).click();await page.getByRole('button',{name:'关闭设置',exact:true}).click();
   for(const width of [1200,560,360]){await page.setViewportSize({width,height:900});const about=page.getByRole('button',{name:'关于催更姬',exact:true});await expect(about).toBeInViewport();await about.click();await expect(page.getByRole('dialog',{name:'关于催更姬',exact:true})).toBeVisible();await shot('about-'+width);await page.getByLabel('关闭关于催更姬',{exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(about).toBeFocused();}
   await page.setViewportSize({width:1200,height:900});
   await page.getByRole('button',{name:'规划',exact:true}).click();await expect(page.locator('.planning-card')).toHaveCount(3);

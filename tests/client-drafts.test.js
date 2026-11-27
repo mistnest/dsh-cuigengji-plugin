@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changed, draftKey, persistDraft, restoreDraft, rebaseDraft } from '../src/client/shared/drafts.js';
+import { changed, draftKey, persistDraft, restoreDraft, rebaseDraft } from '../src/modules/author-ui/workbench/shared/drafts.ts';
 
 const storage = () => {
   const data = new Map();

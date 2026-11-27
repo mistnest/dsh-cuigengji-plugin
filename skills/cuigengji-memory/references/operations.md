@@ -76,3 +76,9 @@ ID、版本、来源都须先读取核对。小范围改删优先 patch，整体
 ```
 
 返回 deleted:true、changed 和 deletedEdgeIds，确认原卡从正常 graph.list 消失。历史仍可按作者要求查看，规划中的原 ID 引用显示已删除，不会另造人物或静默改写正文。删错时可先看历史摘要，再 graph.restore 到明确的未删除版本；相连关系不自动恢复，按作者需要单独重建。
+
+## 展示配图（仅按需）
+
+图片主要供作者在卡片上查看。平时写作不查图、不读图，也不把查图当作读设定的前置步骤。作者要求导入或查看图片时才使用现有 `cuigengji_memory` 的 `image.*` 动作。
+
+先 `image.list {kind:"memory",nodeId}` 取得图片 ID 与配图 revision；规划卡片改为 `kind:"planning"`。明确读一张图用 `image.read {kind,nodeId,imageId}`。导入用 `image.import {kind,nodeId,expectedRevision,requestId,files:[{filePath:"本地绝对路径"}]}`，或提供 `name/data` 的 base64 图片。`image.update` 的 `coverId` 设置封面，`image.delete` 的 `imageId` 移除一张图。这里的 expectedRevision 是配图版本，无图为 0，与文字版本不同。图片保存后不改设定文字、不自动注入会话。

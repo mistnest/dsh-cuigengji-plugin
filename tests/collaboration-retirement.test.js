@@ -4,13 +4,13 @@ import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {Store} from '../src/core/store.js';
-import {createSessionPolicy} from '../src/application/bindings/session.js';
-import {UpgradeCoordinator} from '../src/application/maintenance/upgrade.ts';
-import {WorkData} from '../src/application/backup/workspace.js';
-import {TransferService} from '../src/application/transfer/service.ts';
-import {TOOL_ACTIONS,HUMAN_ACTIONS} from '../src/contracts/actions.js';
-import {skillSpecs,persona} from '../src/adapters/dsh/skills.js';
+import {Store} from '../src/composition/store.ts';
+import {createSessionPolicy} from '../src/modules/access/dsh/session-policy.ts';
+import {UpgradeCoordinator} from '../src/modules/library/upgrade/upgrade.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
+import {TOOL_ACTIONS,HUMAN_ACTIONS} from '../src/modules/access/catalog/actions.ts';
+import {skillSpecs,persona} from '../src/modules/access/guidance/skills.ts';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const human={kind:'human',sessionId:'retirement-author'};
 async function fixture(t){
@@ -36,7 +36,7 @@ async function seedLegacy(store,a,b){
 
 test('retired collaboration has no UI/tool/Skill registration or operational endpoint',async t=>{
   const {store,policy,a}=await fixture(t);
-  assert.ok(![...Object.values(TOOL_ACTIONS).flat(),...HUMAN_ACTIONS].some(action=>action.startsWith('collaboration.')));
+  assert.ok(![...Object.values(TOOL_ACTIONS).flat(),...HUMAN_ACTIONS].some(action=>action.startsWith('collaboration.')||action.startsWith('task.')));
   assert.ok(!skillSpecs.some(([name])=>name==='cuigengji-collaborate'));
   assert.doesNotMatch(persona,/写手固定|collaboration\.|主编/);
   for(const action of ['collaboration.assign','collaboration.prepare','collaboration.overview','collaboration.report','binding.inherit'])await assert.rejects(store.dispatch(action,{novelId:a.id},human),{code:'FEATURE_RETIRED'});

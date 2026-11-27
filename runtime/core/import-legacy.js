@@ -1,1 +1,1 @@
-export * from "../infrastructure/migrations/legacy.js";
+export * from "./../modules/workspace/transfer/formats/legacy.js";

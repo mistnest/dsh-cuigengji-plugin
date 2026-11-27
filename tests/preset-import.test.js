@@ -4,8 +4,8 @@ import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/application/store.js';
-import {TransferService} from '../src/application/transfer/service.ts';
+import {Store} from '../src/composition/store.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
 
 const actor = {kind: 'human', sessionId: 'preset-import-author'};
 async function setup(t) {

@@ -1,1 +1,1 @@
-export * from "../contracts/actions.js";
+export * from "./../modules/access/catalog/actions.js";

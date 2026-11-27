@@ -4,11 +4,11 @@ import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/application/store.js';
-import {registerPrompt} from '../src/adapters/dsh/prompt.js';
-import {bookPath,fileId} from '../src/infrastructure/persistence/project-layout.ts';
-import {WorkData} from '../src/application/backup/workspace.js';
-import {TransferService} from '../src/application/transfer/service.ts';
+import {Store} from '../src/composition/store.ts';
+import {registerPrompt} from '../src/modules/access/guidance/prompt.ts';
+import {bookPath,fileId} from '../src/modules/library/records/project-layout.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
 
 async function fixture(t){
   const root=await mkdtemp(join(tmpdir(),'cg-memory-timeline-'));t.after(()=>rm(root,{recursive:true,force:true}));

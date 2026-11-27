@@ -1,6 +1,6 @@
 # 安装与开始使用
 
-催更姬使用 DSH 自带的插件管理安装，普通用户无需另装 Git、Node.js 或 pnpm。当前正式版 **0.6.2**，最低声明为 DSH **0.2.0-rc.2**；本版以 Windows 桌面版 **0.2.3-alpha.2** 内置运行时验收隔离安装、升级与工作台，具体范围见[更新记录](CHANGELOG.md)。后续版本允许安装不等于已经逐一测试。
+催更姬使用 DSH 自带的插件管理安装，普通用户无需另装 Git、Node.js 或 pnpm。当前正式版 **0.7.0**，最低声明为 DSH **0.2.0-rc.2**；本版以 Windows 桌面版 **0.2.3-alpha.2** 内置运行时验收隔离安装、升级与工作台，具体范围见[更新记录](CHANGELOG.md)。后续版本允许安装不等于已经逐一测试。
 
 ## 安装或更新
 
@@ -9,28 +9,30 @@
 3. 安装后按提示保存编辑、完整退出 DSH（包括托盘）并重启，从左侧「催更姬」进入。
 
 ```text
-dsh-cuigengji-plugin@0.6.2
+dsh-cuigengji-plugin@0.7.0
 ```
 
 请保留版本号，避免宿主选择较旧版本。安装源是依赖下载地址，不填 GitHub 仓库网址。镜像尚未同步时可使用官方源，或使用同一输入框里的备用成品包地址：
 
 ```text
-https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.6.2/dsh-cuigengji-plugin-0.6.2.tgz
+https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.7.0/dsh-cuigengji-plugin-0.7.0.tgz
 ```
 
-也可先从 [Release](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.6.2) 下载，再填本地 `.tgz` 绝对路径。GitHub 与 npm 使用同一份包，Release 的 `SHA256SUMS` 可核对下载。GitHub 的源码 ZIP 不能代替成品包。
+也可先从 [Release](https://github.com/mistnest/dsh-cuigengji-plugin/releases/tag/v0.7.0) 下载，再填本地 `.tgz` 绝对路径。GitHub 与 npm 使用同一份包，Release 的 `SHA256SUMS` 可核对下载。GitHub 的源码 ZIP 不能代替成品包。
 
 仓库也支持直接安装 `https://github.com/mistnest/dsh-cuigengji-plugin`，编译文件已提交，无需安装时构建。仓库引用解析可能需要 Git，重复安装同地址还可能沿用旧提交；没有 Git 或更新已有插件时优先用精确包名或成品包。
+
+从社区插件市场安装或更新，请先将 DSH Desktop 与市场更新到最新版，见[市场更新说明](market-updates.md)。催更姬更新结束后完整退出托盘再重开，确认后台也已换成新版。
 
 ## 交给 Agent 处理
 
 把 [Windows Agent 安装指南](agent-installation.md)链接交给它：
 
-> 请按指南安装或更新催更姬到0.6.2，保留配置和小说数据，完整重启后确认实际版本、原数据目录及作品，核对自动迁移结果。
+> 请按指南安装或更新催更姬到0.7.0，保留配置和小说数据，完整重启后确认实际版本、原数据目录及作品，核对自动迁移结果。
 
 首次安装是空白工作库。旧版自动备份、迁移、校验，Agent 负责确认结果；无需重新导入作品。若仍安装着旧名 `dsh-cuigengji`，先按[名称迁移](package-name-migration.md)转接配置，不同时启用两个包。
 
-0.6.2 沿用作品存储布局 5。**不要用0.4.x直接打开迁移后的库**；需要回退时保留新增内容，使用升级前快照恢复到另一目录，详见[迁移与恢复](upgrade.md)。
+0.7.0 沿用作品存储布局 5。**不要用0.4.x直接打开迁移后的库**；需要回退时保留新增内容，使用升级前快照恢复到另一目录，详见[迁移与恢复](upgrade.md)。
 
 ## 开始一起写
 
@@ -44,7 +46,7 @@ https://github.com/mistnest/dsh-cuigengji-plugin/releases/download/v0.6.2/dsh-cu
 
 正文直接编辑、自动保存；查找替换使用 Ctrl+F / Ctrl+H。规划与设定使用内容树、画布和详情，支持文件夹、收纳和图片导出。常用操作见[工作台功能](workbench.md)及[规划与设定](planning-board.md)。
 
-「设置 → AI与写作」管理当前作品预设及当前会话写作指引。写作指引默认开启，已有会话明确关闭的选择会保留。开启时规则和有效预设自动加入提示词；关闭后改为 MCP 按需读取，可明确告诉 AI「使用催更姬」。已有聊天保留，正文和资料始终按需查阅，见[预设与会话指引](presets.md)。
+从作品顶部的「记忆」记录跨章文风、视角和伏笔决定，AI 在需要时查阅。「设置 → AI与写作」可管理当前会话的写作指引及外部 MCP 连接。写作指引默认开启，曾明确关闭的会话保留该选择。仍使用旧预设的作品可继续让有效预设随会话载入，详见[创作记忆与旧版预设](presets.md)。
 
 ## 作品位置和备份
 

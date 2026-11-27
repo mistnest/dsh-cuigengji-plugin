@@ -3,8 +3,8 @@ import {spawn} from 'node:child_process';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {chromium,expect} from '@playwright/test';
-import {UsageService} from '../src/application/usage/service.ts';
-import {usageDay} from '../src/domain/usage/settings.ts';
+import {UsageService} from '../src/modules/usage/reports/service.ts';
+import {usageDay} from '../src/modules/usage/pricing/settings.ts';
 import {selectSettingsCategory} from './helpers/navigation.mjs';
 
 const root=resolve(import.meta.dirname,'..'),output=join(root,'test-results/usage-pricing');

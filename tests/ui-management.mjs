@@ -30,6 +30,7 @@ try {
   const fits = async () => expect(await page.locator('.cuigengji').first().evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.getByRole('button', {name: '规划', exact: true}).click();
   await open('写作预设');
+  await page.getByRole('button', {name: '‹ 返回创作记忆', exact: true}).click();
   await page.getByRole('button', {name: '‹ 返回设置', exact: true}).click();
   await expect(page.getByRole('dialog', {name:'设置',exact:true})).toBeVisible();
   await page.getByRole('button', {name:'关闭设置',exact:true}).click();

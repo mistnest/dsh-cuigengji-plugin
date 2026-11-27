@@ -1,1 +1,1 @@
-export * from "../adapters/mcp/client.js";
+export * from "./../modules/access/mcp/client.js";

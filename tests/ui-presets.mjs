@@ -79,5 +79,83 @@ try {
   await page.getByRole('button',{name:'刷新当前页面',exact:true}).click();
   await expect(newerNotice).toBeVisible();
   await expect(page.getByLabel('提示词内容',{exact:true})).toHaveValue('作者尚未保存的草稿。');
-  expect(errors).toEqual([]);console.log(JSON.stringify({ok:true,checks:['actual preset-entry uploads: TXT, Markdown, named JSON, full preset, Prompt Manager, standalone system prompt','preset destination is fixed; backup extraction imports only the selected preset; role cards are rejected','two-book isolation, manuscript and setting preservation, append/replace and narrow layout','ordering, disabled items, ignored role/placement/trigger rules','literal macros, original download, persistence and zero-content notice','own save does not report a stale resource as newer; real concurrent updates keep the local draft']}));
+  await page.getByRole('button',{name:'‹ 返回创作记忆',exact:true}).click();
+  const memoryEditor=page.getByRole('textbox',{name:'创作记忆正文'});
+  const previewMemory=page.getByRole('article',{name:'创作记忆预览'});
+  await expect(page.getByRole('group',{name:'创作记忆视图'})).toHaveCount(0);
+  await expect(previewMemory).toBeVisible();
+  await page.getByRole('button',{name:'全文编辑',exact:true}).click();
+  const originalMemory='## 视角\n\n跟着徒弟看。\n\n## 对话\n\n让人物说完。';
+  await memoryEditor.fill(originalMemory);
+  await page.getByRole('button',{name:'保存为创作记忆',exact:true}).click();
+  await expect(page.getByRole('button',{name:'保存记忆',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'完成编辑',exact:true}).click();
+  await expect(previewMemory.getByRole('heading',{name:'视角',level:2})).toBeVisible();
+  await expect(previewMemory.getByRole('heading',{name:'对话',level:2})).toBeVisible();
+  await expect.poll(async()=>(await call('creativeMemory.read',{novelId,full:true})).content).toBe(originalMemory);
+  const saved=await call('creativeMemory.read',{novelId,full:true});
+  // Click section directly in-place while sibling sections stay rendered as Markdown.
+  await previewMemory.getByRole('heading',{name:'视角',level:2}).click();
+  await expect(memoryEditor).toHaveValue('## 视角\n\n跟着徒弟看。');
+  await expect(previewMemory.getByRole('heading',{name:'对话',level:2})).toBeVisible();
+  await memoryEditor.fill('## 视角\n\n跟着徒弟和师父看。');
+  await call('creativeMemory.update',{novelId,expectedRevision:saved.revision,expectedHash:saved.contentHash,requestId:crypto.randomUUID(),patch:{oldText:'让人物说完',newText:'让回答迟一点'}});
+  await page.getByRole('button',{name:'保存记忆',exact:true}).click();
+  await expect.poll(async()=>(await call('creativeMemory.read',{novelId,full:true})).content).toMatch(/徒弟和师父[\s\S]*让回答迟一点/);
+  await page.getByRole('button',{name:'完成',exact:true}).click();
+  await expect(previewMemory).toContainText('跟着徒弟和师父看。');
+  await expect(previewMemory).toContainText('让回答迟一点');
+  // Silent background auto-save keeps the inline editor focused without modal popups,
+  // intercepts Ctrl+S both inside and outside the editor, and flushes on tab switch.
+  await previewMemory.getByRole('heading',{name:'视角',level:2}).click();
+  await memoryEditor.fill('## 视角\n\n跟着徒弟、师父与守夜人看。');
+  await expect.poll(async()=>(await call('creativeMemory.read',{novelId,full:true})).content,{timeout:5000}).toContain('守夜人');
+  await expect(memoryEditor).toBeFocused();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const ctrlSInsidePrevented=await memoryEditor.evaluate(el=>{const ev=new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true});el.dispatchEvent(ev);return ev.defaultPrevented;});
+  expect(ctrlSInsidePrevented).toBe(true);
+  await expect(memoryEditor).toBeVisible();
+  await page.getByRole('button',{name:'完成',exact:true}).click();
+  const ctrlSOutsidePrevented=await previewMemory.evaluate(el=>{const ev=new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true});el.dispatchEvent(ev);return ev.defaultPrevented;});
+  expect(ctrlSOutsidePrevented).toBe(true);
+  await previewMemory.getByRole('heading',{name:'对话',level:2}).click();
+  await memoryEditor.fill('## 对话\n\n离开页面时也会静默保存这句改动。');
+  await page.getByRole('button',{name:'‹ 返回设置',exact:true}).click();
+  await page.getByRole('button',{name:'关闭设置',exact:true}).click();
+  await expect.poll(async()=>(await call('creativeMemory.read',{novelId,full:true})).content,{timeout:5000}).toContain('离开页面时也会静默保存这句改动。');
+  await openAuthorPage(page,'创作记忆');
+  // Concurrent remote prepend while editing section 2 must keep focus/typing inside section 2.
+  const beforePrepend=await call('creativeMemory.read',{novelId,full:true});
+  await previewMemory.getByRole('heading',{name:'对话',level:2}).click();
+  await memoryEditor.fill('## 对话\n\n先写前半句。');
+  await call('creativeMemory.update',{novelId,expectedRevision:beforePrepend.revision,expectedHash:beforePrepend.contentHash,requestId:crypto.randomUUID(),content:`## 序幕\n\n远端插入的序幕。\n\n${beforePrepend.content}`});
+  await page.getByRole('button',{name:'保存记忆',exact:true}).click();
+  await expect(page.getByRole('button',{name:'保存记忆',exact:true})).toBeDisabled({timeout:8000});
+  await expect.poll(async()=>(await call('creativeMemory.read',{novelId,full:true})).content,{timeout:5000}).toMatch(/远端插入的序幕。[\s\S]*先写前半句。/);
+  await expect(memoryEditor).toHaveValue('## 对话\n\n先写前半句。');
+  await memoryEditor.fill('## 对话\n\n先写前半句，再补后半句。');
+  await page.getByRole('button',{name:'保存记忆',exact:true}).click();
+  await page.getByRole('button',{name:'完成',exact:true}).click();
+  const afterPrepend=(await call('creativeMemory.read',{novelId,full:true})).content;
+  expect(afterPrepend).toMatch(/## 序幕\n\n远端插入的序幕。[\s\S]*## 视角[\s\S]*## 对话\n\n先写前半句，再补后半句。/);
+  const imported='## 卷末\n\n在此揭谜。**留白**，再写 `尾声`。\n\n> 转折\n\n1. 离开\n   - 告别\n\n| 人物 | 选择 |\n| --- | --- |\n| 师父 | 沉默 |';
+  await page.getByLabel('导入创作记忆',{exact:true}).setInputFiles({name:'memory.md',mimeType:'text/markdown',buffer:Buffer.from(imported)});
+  await expect(previewMemory.getByRole('heading',{name:'卷末',level:2})).toBeVisible();
+  for(const [selector,value] of [['strong','留白'],['code','尾声'],['blockquote','转折'],['ol ul li','告别'],['td','沉默']]){
+    await expect(previewMemory.locator(selector).filter({hasText:value})).toBeVisible();
+  }
+  expect((await call('creativeMemory.read',{novelId,full:true})).content).not.toContain('在此揭谜');
+  await page.getByRole('button',{name:'＋ 新增条目',exact:true}).click();
+  await page.getByRole('button',{name:'完成',exact:true}).click();
+  await page.waitForTimeout(1050);
+  expect((await call('creativeMemory.read',{novelId,full:true})).content).not.toContain('在此揭谜');
+  await page.getByRole('button',{name:'保存记忆',exact:true}).click();
+  await page.getByLabel('创作记忆更多操作',{exact:true}).click();
+  await expect(page.getByRole('button',{name:'导出 Markdown',exact:true})).toBeEnabled();
+  const savedAfterImport=(await call('creativeMemory.read',{novelId,full:true})).content;
+  expect(savedAfterImport).toContain('在此揭谜');
+  const markdownDownload=page.waitForEvent('download');
+  await page.getByRole('button',{name:'导出 Markdown',exact:true}).click();
+  expect(await readFile(await (await markdownDownload).path(),'utf8')).toBe(savedAfterImport);
+  expect(errors).toEqual([]);console.log(JSON.stringify({ok:true,checks:['creative memory conversion, author/AI merge, Markdown import draft and export','actual preset-entry uploads: TXT, Markdown, named JSON, full preset, Prompt Manager, standalone system prompt','preset destination is fixed; backup extraction imports only the selected preset; role cards are rejected','two-book isolation, manuscript and setting preservation, append/replace and narrow layout','ordering, disabled items, ignored role/placement/trigger rules','literal macros, original download, persistence and zero-content notice','own save does not report a stale resource as newer; real concurrent updates keep the local draft']}));
 } finally {await browser?.close();preview.kill();}

@@ -4,7 +4,7 @@ import {Context} from '@deepseek-ai/cordis';
 import Projections from '@deepseek-ai/dsh-session-projection';
 import Sessions from '@deepseek-ai/dsh-session';
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
-import {registerPrompt} from '../src/adapters/dsh/prompt.js';
+import {registerPrompt} from '../src/modules/access/guidance/prompt.ts';
 
 test('DSH admits, replaces and retires the writing instructions in real session events', async t => {
   const ctx = new Context();

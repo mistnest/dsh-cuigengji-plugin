@@ -8,9 +8,9 @@ import { basename, join, resolve } from 'node:path';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
-import { Store } from '../src/core/store.js';
-import { DesktopPet } from '../src/application/pet/desktop.ts';
-import { UsageService } from '../src/application/usage/service.ts';
+import { Store } from '../src/composition/store.ts';
+import { DesktopPet } from '../src/modules/author-ui/desktop/desktop.ts';
+import { UsageService } from '../src/modules/usage/reports/service.ts';
 import { spawn } from 'node:child_process';
 
 const root = resolve(import.meta.dirname, '..'), directory = await mkdtemp(join(tmpdir(), 'cuigengji-pet-ui-'));
@@ -22,7 +22,7 @@ await usage.ingest('pet-a',[{seq:0,time:Date.now(),type:'assistant/message',data
 await usage.store.run(meta=>{meta.balances.deepseek={balance:'86.244999',at:Date.now()};},true);
 let nativeProcess, nativeOutput = '';
 const desktopPet = new DesktopPet(directory, (action, args, actor) => store.dispatch(action, args, actor), { usage,supported: process.platform === 'win32', launch() {
-  const child = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', resolve(root, 'src/desktop/pet.ps1'), '-StateDirectory', directory, '-AssetsDirectory', resolve(root, 'src/client/assets/pets'), '-ParentProcessId', String(process.pid), '-Headless'], { windowsHide: true });
+  const child = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', resolve(root, 'src/modules/author-ui/desktop/pet.ps1'), '-StateDirectory', directory, '-AssetsDirectory', resolve(root, 'src/modules/author-ui/workbench/assets/pets'), '-ParentProcessId', String(process.pid), '-Headless'], { windowsHide: true });
   child.stdout.on('data', value => nativeOutput += value); nativeProcess = child; return child;
 } });
 for (const [session, title, text] of [['pet-a', '甲作品', '今天写下了一个故事。'], ['pet-b', '乙作品', '另一部作品。']]) {
@@ -34,7 +34,7 @@ for (const [session, title, text] of [['pet-a', '甲作品', '今天写下了一
 }
 const bundle = await build({ stdin: { resolveDir: root, loader: 'tsx', contents: `
 import React,{useSyncExternalStore} from 'react';import{createRoot}from'react-dom/client';
-import{applyWithRPC}from'./src/client/index.tsx';import{styles}from'./src/client/style.ts';
+import{applyWithRPC}from'./src/modules/author-ui/workbench/index.tsx';import{styles}from'./src/modules/author-ui/workbench/style.ts';
 function source(value){const listeners=new Set();return{getSnapshot:()=>value,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},set(next){value=next;listeners.forEach(fn=>fn())}}}
 const mounted=source('pet-a'),panel=source(null),counter=source(0),status=source(new Map()),show=source(true);
 const registrations=[],disposers=[],retired=[],requests=[],opened=[],held=new Map(),pending=[],failures=new Map();let statusFault=false;

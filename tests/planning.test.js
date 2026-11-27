@@ -4,7 +4,7 @@ import {mkdtemp,rm,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/core/store.js';
+import {Store} from '../src/composition/store.ts';
 async function setup(t){const root=await mkdtemp(join(tmpdir(),'planning-'));t.after(()=>rm(root,{recursive:true,force:true}));const store=new Store(root);const novel=await store.dispatch('novel.create',{title:'协同规划'});const actor={kind:'human',sessionId:'author'};await store.dispatch('binding.set',{novelId:novel.id},actor);return {root,store,novel,actor,run:(action,args={},a=actor)=>store.dispatch(action,args,a),apply:operations=>store.dispatch('planning.apply',{operations,requestId:randomUUID()},actor)};}
 
 test('discussion continuation atomically links a new scene, inherits group and exposes directional context',async t=>{
@@ -72,7 +72,7 @@ test('planning deletion scope conflicts and backups keep historical chapter refe
 });
 
 test('100-node planning layout has finite non-overlapping card positions',async()=>{
- const {arrange}=await import('../src/client/planning/layout.js');
+ const {arrange}=await import('../src/modules/author-ui/workbench/features/planning/layout.ts');
  const nodes=Array.from({length:100},(_,i)=>({id:`n${i}`}));
  const edges=Array.from({length:150},(_,i)=>({from:`n${i%75}`,to:`n${i%75+1+(i%2)}`,type:i%3?'next':'requires'}));
  const positions=Object.values(arrange(nodes,edges));
@@ -82,7 +82,7 @@ test('100-node planning layout has finite non-overlapping card positions',async(
 
 
 test('planning overview rejects mixed pagination revisions without losing earlier state',async()=>{
- const {readPlanningSnapshot}=await import('../src/client/planning/data.js');
+ const {readPlanningSnapshot}=await import('../src/modules/author-ui/workbench/features/planning/data.ts');
  let calls=0;
  const call=async()=>++calls===1?{items:[{id:'a'}],sequence:1,nextOffset:200}:{items:[{id:'b'}],sequence:2,nextOffset:null};
  await assert.rejects(readPlanningSnapshot(call,'novel'),/读取期间规划已更新/);

@@ -3,10 +3,10 @@ import {join, resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
-import {Store} from '../src/core/store.js';
-import {WorkData} from '../src/application/backup/workspace.js';
-import {fileId, bookPath, storedChapterFile, storedSettingFile, storedPageFile, STORAGE_VERSION, planningPage} from '../src/infrastructure/persistence/project-layout.ts';
-import {pageManifest} from '../src/infrastructure/persistence/tree-layout.ts';
+import {Store} from '../src/composition/store.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
+import {fileId, bookPath, storedChapterFile, storedSettingFile, storedPageFile, STORAGE_VERSION, planningPage} from '../src/modules/library/records/project-layout.ts';
+import {pageManifest} from '../src/modules/library/records/tree-layout.ts';
 
 const source = process.argv[2] && resolve(process.argv[2]), apply = process.argv.includes('--apply');
 const output = process.argv[3] && !process.argv[3].startsWith('--') ? resolve(process.argv[3]) : null;

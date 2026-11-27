@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {searchDirectory} from '../src/domain/directory/search.ts';
+import {searchDirectory} from '../src/modules/workspace/cards/directory/search.ts';
 
 const groups=[
   {id:'volume',name:'开篇'},

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compilePresentation} from '../src/domain/usage/presentation.ts';
-import {emptyUsage} from '../src/domain/usage/settings.ts';
+import {compilePresentation} from '../src/modules/usage/reports/presentation.ts';
+import {emptyUsage} from '../src/modules/usage/pricing/settings.ts';
 
 const total={tokens:286420,calls:12,input:48210,cacheRead:192810,cacheWrite:0,output:45400,unpriced:0,costs:{CNY:'0.801873000',USD:'1.235600000'},reportCosts:{CNY:'9.451073000'}};
 const account=(id,currency,balance,extra={})=>({id,name:id,currency,enabled:true,snapshot:{balance,at:1,...extra}});

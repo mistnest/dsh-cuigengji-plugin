@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {panelGeometry,resizePanel} from '../src/client/shared/workspace-panels.ts';
+import {panelGeometry,resizePanel} from '../src/modules/author-ui/workbench/shared/workspace-panels.ts';
 test('panels consume the gap, push on contact and separate in either direction',()=>{
   let stored={directory:232,detail:420,split:null};
   const g=()=>panelGeometry(1100,true,true,stored);

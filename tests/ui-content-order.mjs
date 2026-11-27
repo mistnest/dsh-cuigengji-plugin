@@ -4,7 +4,7 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {chromium,expect} from '@playwright/test';
 import {showOrganization,moveBatch} from './helpers/navigation.mjs';
-import {directorySnapshot} from '../src/domain/directory/order.ts';
+import {directorySnapshot} from '../src/modules/workspace/cards/directory/order.ts';
 const root=resolve(import.meta.dirname,'..'),shots=join(root,'test-results/content-order');
 await mkdir(shots,{recursive:true});
 const host=spawn(process.execPath,['scripts/preview-workbench.mjs'],{cwd:root,stdio:['ignore','pipe','pipe']});

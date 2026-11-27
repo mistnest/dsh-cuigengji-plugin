@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mergeDocument} from '../src/client/shared/document-merge.ts';
+import {mergeDocument, mergeText} from '../src/modules/author-ui/workbench/shared/document-merge.ts';
 const fields=['title','summary','content','groupId'];
 const base={revision:1,title:'来信',summary:'旧摘要',content:'雨夜里，她收到了信。翌日，他决定出发。',groupId:null,position:{x:0,y:0}};
 test('document merge keeps server layout and metadata, merges independent fields',()=>{
@@ -29,4 +29,26 @@ test('missing optional fields, clearing content and no-op saves retain remote va
   const untouched=mergeDocument(base,base,remote,fields);
   assert.deepEqual(untouched.value,remote);assert.deepEqual(untouched.patch,{});
   assert.deepEqual(mergeDocument(base,{...base,summary:''},remote,fields).patch,{summary:''});
+});
+test('multi-hunk disjoint edits and adjacent character replacements merge without false conflicts',()=>{
+  const doc='## 第一节\n\n旧开头。\n\n## 第二节\n\n旧中间。\n\n## 第三节\n\n旧结尾。';
+  const local='## 第一节\n\n作者改开头。\n\n## 第二节\n\n旧中间。\n\n## 第三节\n\n作者改结尾。';
+  const remote='## 第一节\n\n旧开头。\n\n## 第二节\n\nAI 改中间。\n\n## 第三节\n\n旧结尾。';
+  assert.equal(mergeText(doc,local,remote),'## 第一节\n\n作者改开头。\n\n## 第二节\n\nAI 改中间。\n\n## 第三节\n\n作者改结尾。');
+  assert.equal(mergeText('甲和乙和丙','甲1和乙和丙1','甲和乙2和丙'),'甲1和乙2和丙1');
+  assert.equal(mergeText('ab','甲b','a乙'),'甲乙');
+  assert.equal(mergeText('ABC','aBC','AXBC'),'aXBC');
+  assert.equal(mergeText('ABC','AXBC','aBC'),'aXBC');
+  assert.equal(mergeText('ABC','XABC','aBC'),'XaBC');
+  assert.equal(mergeText('ABC\nDEF','aBC\nDEF','AXBC\nDEF'),'aXBC\nDEF');
+  assert.equal(mergeText('L1\nL2\nL3','L1改\nL2\nL3','L1\n插入行\nL2\nL3'),'L1改\n插入行\nL2\nL3');
+  assert.equal(mergeText('ab','a甲b','a乙b'),null);
+  // 150,000-codepoint single line and 1,500-line sparse edits must merge cleanly without RangeError or false conflict.
+  const longMid='中'.repeat(150000);
+  assert.equal(mergeText(`头${longMid}尾`,`改头${longMid}尾`,`头${longMid}改尾`),`改头${longMid}改尾`);
+  const manyLines=Array.from({length:1500},(_,i)=>`第 ${i} 行原文`);
+  const manyLocal=[...manyLines];manyLocal[2]='作者改第 2 行';
+  const manyRemote=[...manyLines];manyRemote[1490]='AI 改第 1490 行';
+  const mergedMany=mergeText(manyLines.join('\n'),manyLocal.join('\n'),manyRemote.join('\n'));
+  assert.ok(mergedMany&&mergedMany.includes('作者改第 2 行')&&mergedMany.includes('AI 改第 1490 行'));
 });

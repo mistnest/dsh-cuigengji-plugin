@@ -7,6 +7,8 @@ import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium,expect} from '@playwright/test';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 import {selectSettingsCategory} from '../tests/helpers/navigation.mjs';
 
 const argv=process.argv.slice(2),arg=name=>argv[argv.indexOf(name)+1];
@@ -92,9 +94,28 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
   await rpc('graph.create',{novelId,type:'world_entry',name:'雾港街区',summary:'逐行编辑验收',content:''});
   await rpc('planning.apply',{novelId,requestId:crypto.randomUUID(),operations:[{op:'node.create',value:{title:'灯塔来信',summary:'在码头发现新线索',content:'两条行动线索在灯塔会合。',position:{x:200,y:200}}}]});
   await workbench.getByRole('complementary',{name:'章节目录',exact:true}).getByText('第一章 兼容验收',{exact:true}).click();const prose=workbench.getByRole('textbox',{name:'正文',exact:true});await expect(prose).toHaveValue('　　雨停以后，灯还亮着。');
-  const edited='　　雨停以后，灯还亮着。\n\n　　门外传来脚步声。';await prose.fill(edited);await expect.poll(async()=>(await rpc('chapter.get',{novelId,chapterId:chapter.id})).content).toBe(edited);
+  const edited='　　雨停以后，灯还亮着。\n\n　　门外传来**脚步声**。';await prose.fill(edited);await expect.poll(async()=>(await rpc('chapter.get',{novelId,chapterId:chapter.id})).content).toBe(edited);
+  await expect(workbench.getByRole('button',{name:'页内预览',exact:true})).toHaveCount(0);
+  await workbench.getByLabel('章节设置',{exact:true}).click();
+  await expect(workbench.getByRole('button',{name:'阅读预览',exact:true})).toHaveCount(0);
+  await workbench.getByRole('button',{name:'改动对比',exact:true}).click();
+  const compare=workbench.getByRole('region',{name:'修改前后对比',exact:true});
+  await expect(compare).toBeVisible();
+  await compare.getByRole('button',{name:'返回正文',exact:true}).click();
+  await expect(prose).toHaveValue(edited);
   report.checks.push('sidebar entry, first work, manuscript read/edit/autosave');
   await workbench.getByRole('button',{name:'规划',exact:true}).click();await expect(workbench.getByRole('button',{name:'灯塔来信',exact:true})).toBeVisible();
+  const scene=(await rpc('planning.list',{novelId})).items.find(node=>node.title==='灯塔来信');
+  await rpc('planning.apply',{novelId,requestId:crypto.randomUUID(),operations:[{op:'node.update',id:scene.id,expectedRevision:scene.revision,value:{content:'修订后的灯塔来信规划。'}}]});
+  const cleanup={novelId,scope:'planning-history',entityId:scene.id,filter:{mode:'selected',revisions:[1]}};
+  const preview=await rpc('cleanup.preview',cleanup);
+  await rpc('cleanup.apply',{...cleanup,token:preview.token,confirm:true,requestId:crypto.randomUUID()});
+  await workbench.getByLabel('规划更多操作',{exact:true}).click();await workbench.getByRole('button',{name:/修改记录$/}).click();
+  const history=workbench.locator('.planning-history');await expect(history).toBeVisible();
+  await expect(history.locator('pre').filter({hasText:'版本 1 已清理'})).toHaveCount(2);
+  await expect(workbench.getByRole('alert',{name:'催更姬界面异常'})).toHaveCount(0);
+  await history.getByRole('button',{name:'关闭记录',exact:true}).click();
+  report.checks.push('installed planning history remains usable after permanent cleanup of old card snapshots');
   await workbench.getByRole('button',{name:'设定',exact:true}).click();await expect(workbench.getByRole('button',{name:'林岚',exact:true})).toBeVisible();
   for(const name of ['林岚','雾港街区']) {
     // The resizable directory can cover a card's canvas position; open the
@@ -120,7 +141,15 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
     await workbench.getByRole('button',{name:'‹ 返回设定',exact:true}).click();
   }
   report.checks.push('real DSH character/world editors: 65 Enter lines, background polling, caret/scroll and saved content');
-  await workbench.getByRole('button',{name:'设置',exact:true}).click();await selectSettingsCategory(page,'AI与写作');await page.getByRole('button',{name:'写作预设',exact:true}).click();await expect(workbench.getByRole('heading',{name:'写作预设',exact:true})).toBeVisible();
+  await workbench.getByRole('button',{name:'设置',exact:true}).click();await selectSettingsCategory(page,'AI与写作');await page.getByRole('button',{name:'创作记忆',exact:true}).click();
+  const creativeText='## 第一卷视角\n\n读者跟着徒弟一起作判断。';
+  await workbench.getByRole('button',{name:'全文编辑',exact:true}).click();
+  await workbench.getByRole('textbox',{name:'创作记忆正文'}).fill(creativeText);
+  await workbench.getByRole('button',{name:'保存记忆',exact:true}).click();
+  await expect(workbench.getByRole('button',{name:'保存记忆',exact:true})).toBeDisabled();
+  await workbench.getByRole('button',{name:'完成编辑',exact:true}).click();
+  await expect.poll(async()=>(await rpc('creativeMemory.read',{novelId,full:true})).content).toBe(creativeText);
+  await expect(workbench.getByRole('heading',{name:'第一卷视角',level:2})).toBeVisible();
   await page.getByRole('button',{name:'作品首页',exact:true}).click();await workbench.getByRole('button',{name:'导出《雾港 · 新宿主兼容验收》',exact:true}).click();await expect(workbench.getByRole('heading',{name:'导入 / 导出',exact:true})).toBeVisible();await expect(workbench.getByRole('button',{name:'下载文件',exact:true})).toBeEnabled();
   report.checks.push('planning canvas, character/world settings, presets, transfer');
   const probeTool=async(name,action,args={})=>{
@@ -128,10 +157,89 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
   };
   await probeTool('cuigengji_project','novel.focus',{novelId});
   const handoff=await probeTool('cuigengji_project','novel.handoff');assert.equal(handoff.result.novel.id,novelId);assert.equal(handoff.skills.length,7);assert.ok(handoff.skills.includes('cuigengji-variables'));
+  assert.equal(handoff.result.creativeMemory.headings[0].title,'第一卷视角');
+  const creative=(await probeTool('cuigengji_context','creativeMemory.read',{section:0})).result;
+  await probeTool('cuigengji_context','creativeMemory.update',{expectedRevision:creative.revision,expectedHash:creative.contentHash,patch:{oldText:'第一卷视角',newText:'开篇视角'},requestId:crypto.randomUUID()});
   const memory=await probeTool('cuigengji_memory','graph.list');assert.ok(memory.result.some(node=>node.name==='林岚'));
   const planning=await probeTool('cuigengji_plan','planning.list');assert.equal(planning.result.items[0].title,'灯塔来信');
+  const cards=memory.result.slice(0,2);
+  assert.equal(cards.length,2);
+  const materials=[{kind:'chapter',id:chapter.id},...cards.map(card=>({kind:'setting',id:card.id})),{kind:'planning',id:scene.id}];
+  const readMaterials=(await probeTool('cuigengji_context','context.readMany',{novelId,items:materials})).result.items;
+  assert.deepEqual(readMaterials.map(item=>[item.ok,item.kind,item.id]),materials.map(item=>[true,item.kind,item.id]));
+  assert.equal(readMaterials[0].content,edited);
+  const batchEdits={novelId,requestId:crypto.randomUUID(),reason:'合成作品核对故事时间',
+    updates:readMaterials.filter(item=>item.kind==='setting').map(({id,revision})=>({nodeId:id,expectedRevision:revision,storyTime:'灯塔来信前夜'}))};
+  const savedEdits=(await probeTool('cuigengji_memory','graph.updateMany',batchEdits)).result;
+  assert.deepEqual(savedEdits.items.map(item=>[item.id,item.revision,item.changed]),batchEdits.updates.map(item=>[item.nodeId,item.expectedRevision+1,true]));
+  assert.deepEqual((await probeTool('cuigengji_memory','graph.updateMany',batchEdits)).result,savedEdits);
+  report.checks.push('installed DSH reads chapters, settings and planning together, updates two cards and replays the saved receipt');
   const maintenance=await probeTool('cuigengji_maintenance','verify',{expectedVersion:manifest.version,expectedNovelIds:[novelId]});assert.equal(maintenance.result.verified,true);
   report.checks.push('real host tool and Skill registries, handoff, MCP, planning, integrity');
+  const configuredPreset=await rpc('preset.get',{novelId});
+  await rpc('preset.set',{novelId,expectedRevision:configuredPreset?.revision||0,preset:{name:'只读接入验收',enabled:true,blocks:[{identifier:'external-test-style',name:'文风',enabled:true,content:'通过人物行动推进情节。'}]}});
+  const readerProfile=await rpc('external.create',{name:'独立查阅验收',modules:['manuscript','settings','planning','guidance']});
+  const listGrants=async()=>(await probeTool('cuigengji_connections','external.status')).result.profiles;
+  const grant=await probeTool('cuigengji_connections','external.create',{name:'桌面管理验收',novelIds:[novelId],permissions:{manuscript:'read',settings:'write'}});
+  assert.deepEqual((await rpc('external.status')).profiles.find(p=>p.id===grant.result.id).permissions,grant.result.permissions);
+  const authored=await rpc('external.update',{id:grant.result.id,expectedRevision:grant.result.revision,permissions:{manuscript:'write',settings:'none'}});
+  const reread=(await listGrants()).find(p=>p.id===grant.result.id);
+  assert.equal(reread.revision,authored.revision);assert.equal(reread.permissions.manuscript,'write');assert.equal(reread.permissions.settings,'none');
+  await probeTool('cuigengji_connections','external.revoke',{id:reread.id,expectedRevision:reread.revision});
+  assert(!(await rpc('external.status')).profiles.some(p=>p.id===reread.id));
+  report.checks.push('installed DSH agent and author RPC share versioned novel scopes and three-level module grants');
+  const readerClient=new Client({name:'installed-package-reader',version:'1.0'},{capabilities:{}});
+  try{
+    const spec=readerProfile.clientConfig.mcpServers[readerProfile.serverName];
+    await readerClient.connect(new StdioClientTransport({...spec,stderr:'pipe'}));
+    const query=async(name,args={})=>{const result=await readerClient.callTool({name,arguments:args});assert.ok(!result.isError,result.content[0]?.text);return JSON.parse(result.content[0].text);};
+    assert.ok((await readerClient.listTools()).tools.some(tool=>tool.name==='cuigengji_chapter_get'));
+    assert.equal((await query('cuigengji_novel_list',{query:'雾港'})).items[0].id,novelId);
+    assert.equal((await query('cuigengji_chapter_get',{novelId,chapterId:chapter.id})).content,edited);
+    assert.ok((await query('cuigengji_graph_list',{novelId,query:'林岚'})).items.length);
+    assert.equal((await query('cuigengji_planning_get',{novelId,nodeId:scene.id})).node.id,scene.id);
+    const externalBatch=(await query('cuigengji_context_readMany',{novelId,items:materials})).items;
+    assert.deepEqual(externalBatch.map(item=>[item.ok,item.kind,item.id]),materials.map(item=>[true,item.kind,item.id]));
+    assert.equal(externalBatch[0].content,edited);
+    assert.deepEqual(externalBatch.filter(item=>item.kind==='setting').map(item=>item.revision),savedEdits.items.map(item=>item.revision));
+    assert.equal((await readerClient.callTool({name:'cuigengji_graph_updateMany',arguments:batchEdits})).structuredContent.error.code,'READ_ONLY');
+    assert.equal((await query('cuigengji_guidance_read',{novelId,section:'all'})).preset.enabled,false);
+    assert.equal((await query('cuigengji_creativeMemory_read',{novelId,section:0})).title,'开篇视角');
+    assert.equal((await readerClient.callTool({name:'cuigengji_creativeMemory_update',arguments:{novelId,content:''}})).structuredContent.error.code,'READ_ONLY');
+    const denied=await readerClient.callTool({name:'cuigengji_chapter_delete',arguments:{novelId,chapterId:chapter.id,confirm:true}});
+    assert.equal(denied.structuredContent.error.code,'READ_ONLY');
+    const records=await rpc('external.records',{id:readerProfile.id});assert.ok(records.items.some(row=>row.action==='chapter.get'&&row.ok));
+    const writable=(await probeTool('cuigengji_connections','external.update',{id:readerProfile.id,expectedRevision:readerProfile.revision,novelIds:[novelId],permissions:{settings:'write'}})).result;
+    const card=savedEdits.items[0];
+    const fromClient=await query('cuigengji_graph_update',{novelId,nodeId:card.id,expectedRevision:card.revision,storyTime:'潮落以后',requestId:'desktop-external-write'});
+    assert.equal(fromClient.revision,card.revision+1);assert.equal((await rpc('graph.get',{novelId,nodeId:card.id})).storyTime,'潮落以后');
+    const narrowed=await rpc('external.update',{id:readerProfile.id,expectedRevision:writable.revision,permissions:{settings:'read'}});
+    assert.equal((await readerClient.callTool({name:'cuigengji_graph_update',arguments:{novelId,nodeId:card.id,expectedRevision:fromClient.revision,summary:'收回权限后',requestId:'desktop-blocked-write'}})).structuredContent.error.code,'READ_ONLY');
+    await rpc('external.revoke',{id:readerProfile.id,expectedRevision:narrowed.revision});
+    assert.equal((await readerClient.callTool({name:'cuigengji_novel_list',arguments:{}})).structuredContent.error.code,'CONNECTION_UNAVAILABLE');
+    report.checks.push('external stdio MCP from installed runtime using desktop executable, real saved prose/settings/planning/presets, readonly rejection, audit and revocation');
+  }finally{await readerClient.close();}
+  const writerProfile=await rpc('external.create',{name:'直接写手验收',novelIds:[novelId],permissions:{manuscript:'write'}});
+  const writerClient=new Client({name:'installed-direct-writer',version:'1'},{capabilities:{}});
+  const submitted=edited+'\n\n雾散了一点，灯还亮着。';
+  try{
+    await writerClient.connect(new StdioClientTransport({...writerProfile.clientConfig.mcpServers[writerProfile.serverName],stderr:'pipe'}));
+    const call=async(name,args={})=>{
+      const result=await writerClient.callTool({name,arguments:args});
+      assert.ok(!result.isError,result.content[0]?.text);return JSON.parse(result.content[0]?.text);
+    };
+    const beforeChapter=await call('cuigengji_chapter_get',{novelId,chapterId:chapter.id});
+    assert.equal(beforeChapter.content,edited);
+    const updatedChapter=await call('cuigengji_chapter_update',{novelId,chapterId:chapter.id,expectedRevision:beforeChapter.revision,append:'\n\n雾散了一点，灯还亮着。',requestId:'direct-writer-append'});
+    assert.equal(updatedChapter.revision,beforeChapter.revision+1);
+    assert.equal((await rpc('chapter.get',{novelId,chapterId:chapter.id})).content,submitted);
+    await workbench.getByRole('button',{name:'设置',exact:true}).click();await selectSettingsCategory(page,'AI与写作');
+    await expect(page.getByRole('button',{name:'任务与交稿',exact:true})).toHaveCount(0);
+    await page.getByRole('button',{name:'关闭设置',exact:true}).click();
+    await rpc('external.revoke',{id:writerProfile.id,expectedRevision:writerProfile.revision});
+    assert.equal((await writerClient.callTool({name:'cuigengji_chapter_get',arguments:{novelId,chapterId:chapter.id}})).structuredContent.error.code,'CONNECTION_UNAVAILABLE');
+    report.checks.push('scoped direct MCP writer updates chapter prose directly with version history and no staged submission UI');
+  }finally{await writerClient.close();}
   const cfg=await rpc('usage.config');assert.ok(resolve(cfg.root).startsWith(resolve(home)));assert.equal(cfg.templates.length,34);
   const usage=await rpc('usage.report');assert.equal(usage.total.calls,0);
   assert.ok((await rpc('usage.presentation')).lines.length>0);
@@ -141,6 +249,26 @@ export function apply(ctx){ctx.connection.fetch.register({path:'/api/isolated-cu
   assert.equal((await probeTool('cuigengji_variables','variables.read',{novelId})).result.data.等级,1);
   const rules=await probeTool('cuigengji_guidance','variables',{novelId});assert.equal(rules.result.modules[0].id,'variables');
   report.checks.push('isolated usage service, built-in companion payload, variable tool writes and on-demand variable guidance');
+  // Exercise both deletion buttons in installed UI after tools have advanced
+  // the displayed revision. No model/provider request is involved.
+  const disposable=await rpc('novel.create',{title:'删除流程验收'});
+  await page.getByRole('button',{name:'作品首页',exact:true}).click();
+  await workbench.getByRole('button',{name:'刷新当前页面',exact:true}).click();
+  const card=workbench.getByRole('article',{name:'作品 删除流程验收',exact:true});await expect(card).toBeVisible();
+  await probeTool('cuigengji_project','chapter.create',{novelId:disposable.id,title:'工具新建正文',content:'首页加载以后才写入的正文。',requestId:crypto.randomUUID()});
+  await card.getByRole('button',{name:'将《删除流程验收》移入回收站',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'确定',exact:true}).click();
+  await expect(card).toHaveCount(0);await expect(workbench.locator('.notice.error')).toHaveCount(0);
+  await workbench.getByRole('button',{name:/^作品回收站/}).click();
+  await workbench.getByRole('button',{name:'永久删除《删除流程验收》',exact:true}).click();
+  const cleanupDialog=page.getByRole('dialog',{name:'永久删除回收站内容',exact:true});
+  await expect(cleanupDialog.getByRole('button',{name:'永久删除 1 项',exact:true})).toBeEnabled();
+  await probeTool('cuigengji_project','chapter.create',{novelId,title:'并行写作验收',content:'删除回收作品时，另一部作品的正常编辑不能使确认失效。',requestId:crypto.randomUUID()});
+  await cleanupDialog.getByRole('button',{name:'永久删除 1 项',exact:true}).click();
+  await expect(cleanupDialog.getByRole('status')).toContainText('已删除 1');await cleanupDialog.getByRole('button',{name:'完成',exact:true}).click();
+  assert.equal((await rpc('novel.list',{includeArchived:true})).some(book=>book.id===disposable.id),false);
+  assert.equal((await probeTool('cuigengji_maintenance','verify')).result.verified,true);
+  report.checks.push('installed home recycle after tool edits, permanent deletion during unrelated writing, and verification after removal');
   assert.deepEqual(errors,[]);assert.deepEqual(failedRpc,[]);report.ok=true;
   if(argv.includes('--report')){const target=resolve(arg('--report'));await mkdir(dirname(target),{recursive:true});await page.screenshot({path:target.replace(/\.json$/,'.png')});await writeFile(target,JSON.stringify(report,null,2));}
   console.log(JSON.stringify(report));

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { Store } from '../src/core/store.js';
+import { Store } from '../src/composition/store.ts';
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'cuigengji-core-'));
@@ -190,7 +190,7 @@ test('export/import validates hashes and relations, repeated imports do not dupl
 
 test('cross-process writers serialize and preserve every chapter', async t => {
   const { root, novel, run } = await fixture(t);
-  const moduleUrl = new URL('../src/core/store.js', import.meta.url).href;
+  const moduleUrl = new URL('../src/composition/store.ts', import.meta.url).href;
   const execute = i => new Promise((resolve, reject) => {
     const code = `import {Store} from ${JSON.stringify(moduleUrl)}; const s = new Store(${JSON.stringify(root)}); await s.dispatch('chapter.create', {novelId:${JSON.stringify(novel.id)},title:${JSON.stringify('章' + i)}});`;
     const child = spawn(process.execPath, ['--input-type=module', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -260,7 +260,7 @@ test('simultaneous stale revisions produce one winner without overwriting it', a
 
 test('dead process lock recovery remains exclusive with competing writers', async t => {
   const { root, novel, run } = await fixture(t);
-  const moduleUrl = new URL('../src/core/store.js', import.meta.url).href;
+  const moduleUrl = new URL('../src/composition/store.ts', import.meta.url).href;
   const code = `import {Store} from ${JSON.stringify(moduleUrl)}; const s = new Store(${JSON.stringify(root)}); await s.acquire(); process.stdout.write('locked'); setInterval(()=>{},1000);`;
   const child = spawn(process.execPath, ['--input-type=module', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => { if (child.exitCode === null && !child.killed) child.kill('SIGKILL'); });

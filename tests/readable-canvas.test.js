@@ -4,11 +4,11 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/application/store.js';
-import {arrangeCanvas} from '../src/domain/canvas/layout.ts';
-import {objectBox,foldProjection,frameMembers,portPoint} from '../src/domain/canvas/model.ts';
-import {routeEdges,routeJunctions,segmentClear} from '../src/domain/canvas/routing.ts';
-import {TransferService} from '../src/application/transfer/service.ts';
+import {Store} from '../src/composition/store.ts';
+import {arrangeCanvas} from '../src/modules/workspace/cards/canvas/layout.ts';
+import {objectBox,foldProjection,frameMembers,portPoint} from '../src/modules/workspace/cards/canvas/model.ts';
+import {routeEdges,routeJunctions,segmentClear} from '../src/modules/workspace/cards/canvas/routing.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
 
 async function fixture(t){const root=await mkdtemp(join(tmpdir(),'cuigengji-readable-'));t.after(()=>rm(root,{recursive:true,force:true}));const store=new Store(root),actor={kind:'agent',sessionId:'canvas-writer'},novel=await store.dispatch('novel.create',{title:'隔离画布'},actor);await store.dispatch('novel.focus',{novelId:novel.id},actor);const run=(action,args={})=>store.dispatch(action,args,actor);return {store,run,actor,novel,apply:operations=>run('planning.apply',{operations,requestId:randomUUID()})};}
 

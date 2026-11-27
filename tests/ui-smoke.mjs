@@ -6,9 +6,9 @@ import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
-import { Store } from '../src/core/store.js';
-import { WorkData } from '../src/data/workspace.js';
-import {TransferService} from '../src/application/transfer/service.ts';
+import { Store } from '../src/composition/store.ts';
+import { WorkData } from '../src/modules/library/archives/workspace-archive.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
 import {openAuthorPage,selectSettingsCategory} from './helpers/navigation.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -21,7 +21,7 @@ await store.dispatch('binding.set',{novelId:novel.id},actor);
 const chapter = await store.dispatch('chapter.create',{novelId:novel.id,title:'第一章',content:'门口有人敲门。'},actor);
 await store.dispatch('binding.set',{novelId:novel.id,chapterId:chapter.id,goal:'接续门外的相遇'},actor);
 const rpcActions=[];
-  const output = await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{Workbench}from'./src/client/index.tsx';const rpc=async(action,args,sessionId)=>{const r=await fetch('/dispatch',{method:'POST',body:JSON.stringify({action,args,sessionId})});const value=await r.json();if(!r.ok)throw new Error(value.error);return value;};createRoot(document.getElementById('root')).render(<Workbench sessionId="ui-smoke" rpc={rpc}/>);`,resolveDir:root,loader:'tsx'},bundle:true,write:false,format:'iife',loader:{'.png':'dataurl'},define:{'process.env.NODE_ENV':'"development"'}});
+  const output = await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{Workbench}from'./src/modules/author-ui/workbench/index.tsx';const rpc=async(action,args,sessionId)=>{const r=await fetch('/dispatch',{method:'POST',body:JSON.stringify({action,args,sessionId})});const value=await r.json();if(!r.ok)throw new Error(value.error);return value;};createRoot(document.getElementById('root')).render(<Workbench sessionId="ui-smoke" rpc={rpc}/>);`,resolveDir:root,loader:'tsx'},bundle:true,write:false,format:'iife',loader:{'.png':'dataurl'},define:{'process.env.NODE_ENV':'"development"'}});
 const server = createServer(async(req,res)=>{
   try {
     if(req.url==='/bundle.js'){res.setHeader('content-type','text/javascript');res.end(output.outputFiles[0].contents);return;}

@@ -3,8 +3,8 @@ import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { Store } from '../src/core/store.js';
-import { WorkData } from '../src/application/backup/workspace.js';
+import { Store } from '../src/composition/store.ts';
+import { WorkData } from '../src/modules/library/archives/workspace-archive.ts';
 
 const source = resolve(process.argv[2] || ''), reportDirectory = process.argv[3] && resolve(process.argv[3]);
 if (!process.argv[2]) throw new Error('Usage: node scripts/check-storage-migration.mjs <legacy-store.json> [report-directory]');

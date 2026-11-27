@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { manuscriptClipboard } from '../src/client/features/chapters/clipboard.ts';
+import { manuscriptClipboard } from '../src/modules/author-ui/workbench/features/chapters/clipboard.ts';
 
 test('copy keeps literal text, indentation, blank lines, and only real line breaks', () => {
   const selected='　　第一段。\r\n\r\n  A & B <正文> "引号"\n';

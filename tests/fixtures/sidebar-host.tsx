@@ -1,7 +1,7 @@
 import React,{useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {applyWithRPC} from '../../src/client/index.tsx';
-import type {WorkbenchRPC} from '../../src/client/WorkbenchShell.tsx';
+import {applyWithRPC} from '../../src/modules/author-ui/workbench/index.tsx';
+import type {WorkbenchRPC} from '../../src/modules/author-ui/workbench/WorkbenchShell.tsx';
 
 /** Exercise the real plugin registration in a narrow, clipping host panel. */
 export function mountSidebarHost(rpc:WorkbenchRPC) {

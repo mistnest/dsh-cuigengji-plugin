@@ -4,10 +4,10 @@ import {mkdtemp,rm,readFile,readdir,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/core/store.js';
-import {TransferService} from '../src/application/transfer/service.ts';
-import {createSessionPolicy} from '../src/application/bindings/session.js';
-import {HUMAN_ACTIONS,TOOL_ACTIONS} from '../src/contracts/actions.js';
+import {Store} from '../src/composition/store.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
+import {createSessionPolicy} from '../src/modules/access/dsh/session-policy.ts';
+import {HUMAN_ACTIONS,TOOL_ACTIONS} from '../src/modules/access/catalog/actions.ts';
 
 async function fixture(t){
   const root=await mkdtemp(join(tmpdir(),'cuigengji-cleanup-'));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -165,6 +165,38 @@ test('novel recycle cleanup removes recycled works and their files without backi
   assert.equal(remaining.filter(path=>path.endsWith('.json')).length,0);
   await assert.rejects(stat(join(root,'backups','cleanup')),{code:'ENOENT'});
   assert.ok(!(await new Store(root).load()).novels[novel.id]);
+});
+
+for(const all of [false,true])test(`novel trash approval ignores edits to live works (${all?'clear trash':'selected work'})`,async t=>{
+  const {store,actor,run,novel,preview}=await fixture(t);
+  const other=await store.dispatch('novel.create',{title:'继续写作的作品'},actor);
+  const current=await run('novel.get');await run('novel.archive',{expectedRevision:current.revision,confirm:true});
+  const selection={scope:'novel-trash',...(all?{}:{ids:[novel.id]})},p=await preview(selection);
+  const content='另一部作品的修改不应阻止删除已回收的作品。';
+  const chapter=await store.dispatch('chapter.create',{novelId:other.id,title:'并行更新',content,requestId:randomUUID()},{kind:'agent',sessionId:'another-writer'});
+  assert.equal((await run('cleanup.apply',{...selection,token:p.token,confirm:true,requestId:randomUUID()})).deleted,1);
+  assert.equal((await store.dispatch('chapter.get',{novelId:other.id,chapterId:chapter.id},actor)).content,content);
+});
+
+test('selected novel trash approval ignores unselected works but still rejects a restored target',async t=>{
+  const {store,actor,run,novel,preview}=await fixture(t);
+  const other=await store.dispatch('novel.create',{title:'另一本回收作品'},actor);
+  for(const id of [novel.id,other.id]){
+    const current=await store.dispatch('novel.get',{novelId:id},actor);
+    await store.dispatch('novel.archive',{novelId:id,expectedRevision:current.revision,confirm:true},actor);
+  }
+  const selection={scope:'novel-trash',ids:[novel.id]},p=await preview(selection),all=await preview({scope:'novel-trash'});
+  const newcomer=await store.dispatch('novel.create',{title:'确认后才被回收的作品'},actor);
+  await store.dispatch('novel.archive',{novelId:newcomer.id,expectedRevision:newcomer.revision,confirm:true},actor);
+  assert.equal((await preview(selection)).token,p.token);
+  await assert.rejects(run('cleanup.apply',{scope:'novel-trash',token:all.token,confirm:true,requestId:randomUUID()}),{code:'CONFLICT'});
+  const updatedAll=await preview({scope:'novel-trash'});
+  const otherCurrent=await store.dispatch('novel.get',{novelId:other.id},actor);
+  await store.dispatch('novel.restore',{novelId:other.id,expectedRevision:otherCurrent.revision},actor);
+  assert.equal((await preview(selection)).token,p.token);
+  await assert.rejects(run('cleanup.apply',{scope:'novel-trash',token:updatedAll.token,confirm:true,requestId:randomUUID()}),{code:'CONFLICT'});
+  const current=await run('novel.get');await run('novel.restore',{expectedRevision:current.revision});
+  await assert.rejects(run('cleanup.apply',{...selection,token:p.token,confirm:true,requestId:randomUUID()}),{code:'CONFLICT'});
 });
 
 test('an active native agent prevents permanent clearing of its recycled work inside the store lock',async t=>{

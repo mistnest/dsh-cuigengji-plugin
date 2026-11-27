@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkbenchRPC} from '../src/client/shared/rpc.ts';
+import {createWorkbenchRPC} from '../src/modules/author-ui/workbench/shared/rpc.ts';
 
 const unavailable=()=>new Error('transport failure for /api/cuigengji/dispatch: HTTP 404');
 

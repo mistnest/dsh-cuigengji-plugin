@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { previewTavern, parseTavernFile, crc32 } from '../src/core/import-tavern.js';
-import { Store } from '../src/core/store.js';
+import { previewTavern, parseTavernFile, crc32 } from '../src/modules/workspace/transfer/formats/tavern.ts';
+import { Store } from '../src/composition/store.ts';
 
 const card = { spec:'chara_card_v2',spec_version:'2.0',data:{name:'林素',description:'守夜人',personality:'沉静',scenario:'雨夜',first_mes:'谁？',mes_example:'示例',system_prompt:'保留但不注入',extensions:{unknown:{a:1}},character_book:{name:'雨城',entries:[{keys:['雨城'],content:'终年下雨',enabled:true},{keys:['旧城'],content:'废弃设定',enabled:false}]}} };
 function chunk(type, data) {

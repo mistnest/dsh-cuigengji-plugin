@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {canvasLinkRoutes,placeRouteLabel} from '../src/domain/canvas/link-style.ts';
-import {objectBox,portPoint} from '../src/domain/canvas/model.ts';
-import {routeEdges,routeJunctions} from '../src/domain/canvas/routing.ts';
+import {canvasLinkRoutes,placeRouteLabel} from '../src/modules/workspace/cards/canvas/link-style.ts';
+import {objectBox,portPoint} from '../src/modules/workspace/cards/canvas/model.ts';
+import {routeEdges,routeJunctions} from '../src/modules/workspace/cards/canvas/routing.ts';
 
 test('changing link style preserves every relationship and layout; organized remains the default',()=>{
   const boxes=[['s',0,220],['a',400,0],['b',400,440],['end',800,220]].map(([id,x,y])=>objectBox({id,position:{x,y}}));

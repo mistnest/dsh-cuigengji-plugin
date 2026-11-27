@@ -4,26 +4,29 @@ import {mkdtemp, mkdir, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
-import {Store} from '../src/application/store.js';
-import {apply} from '../src/index.js';
-import {ordinaryBindings} from '../src/application/bindings/state.ts';
+import {Store} from '../src/composition/store.ts';
+import {apply} from '../src/index.ts';
+import {ordinaryBindings} from '../src/modules/workspace/novels/session/state.ts';
 import {Context} from '@deepseek-ai/cordis';
-import * as plugin from '../src/index.js';
+import * as plugin from '../src/index.ts';
 
-for(const optionalServices of [false,true])test(`native Cordis activates the backend with optional capabilities ${optionalServices?'available':'absent'}`,async()=>{
+for(const optionalServices of [false,true])test(`native Cordis activates the backend with optional capabilities ${optionalServices?'available':'absent'}`,async t=>{
   const parent=await mkdtemp(join(tmpdir(),'cuigengji-native-startup-')),root=join(parent,'data'),ctx=new Context(),routes=[],tools=[],skills=[];
   try{
     ctx.provide('tools',{register:tool=>tools.push(tool)});
     ctx.provide('skills',{register:skill=>skills.push(skill)});
     ctx.provide('systemPrompt',{});
     ctx.provide('connection',{fetch:{register:route=>routes.push(route)}});
+    const loaderSettled = Promise.withResolvers();
+    t.after(() => loaderSettled.resolve());
     const edits=[],entry={options:{name:'dsh-cuigengji-plugin'}};
     if(optionalServices){
-      ctx.provide('configEditor',{entries:()=>[entry],edit:async(_entry,change)=>edits.push(change({dataRoot:root}))});
+      ctx.provide('configEditor',{entries:()=>[entry],edit:async(_entry,change)=>{await loaderSettled.promise; edits.push(change({dataRoot:root}));}});
       ctx.provide('directoryPicker',{capability:()=>({kind:'native',pick:async()=>join(parent,'selected')})});
     }
     const boot=ctx.plugin(plugin,{dataRoot:root,usageRoot:join(parent,'usage')});
     await Promise.race([Promise.resolve(boot),delay(2500).then(()=>{throw new Error('Backend never activated through the native dependency resolver');})]);
+    loaderSettled.resolve();
     const service=ctx.get('cuigengji');assert.ok(service,'the real service must be available after activation');
     assert.equal(routes.length,1);assert.ok(tools.some(tool=>tool.name==='cuigengji_project'));assert.ok(tools.some(tool=>tool.name==='cuigengji_variables'));assert.equal(skills.length,7);
     const call=async(action,args={})=>{
@@ -36,7 +39,7 @@ for(const optionalServices of [false,true])test(`native Cordis activates the bac
     assert.deepEqual(await call('library.pick'),optionalServices?{path:join(parent,'selected'),manual:false}:{path:null,manual:true});
     if(optionalServices){
       const target=join(parent,'new-library');await call('library.change',{mode:'create',path:target,confirm:true});
-      assert.equal(edits.length,1);assert.equal(edits[0].dataRoot,target);assert.equal((await call('settings.get')).dataRoot,target);
+      assert.deepEqual(edits[0].recentLibraries,[root]);assert.equal(edits.at(-1).dataRoot,target);assert.equal((await call('settings.get')).dataRoot,target);
     }
   }finally{await ctx.fiber.dispose();await rm(parent,{recursive:true,force:true});}
 });
@@ -56,7 +59,7 @@ test('RPC is available during startup; project reads wait for the verified migra
   // Hold a real Store lock to reproduce a slow backup/migration without
   // slowing the filesystem or writing anything to an actual user profile.
   let release = await new Store(root).acquire();
-  const boot = apply(ctx, {dataRoot: root,usageRoot:join(parent,'usage')});
+  const boot = apply(ctx, {dataRoot: root,usageRoot:join(parent,'usage'),externalRoot:join(parent,'external')});
   try {
     assert.equal(routes.length, 1, 'the frontend can open before migration finishes; its route must already exist');
     const call = async (action, args = {}) => {

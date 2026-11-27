@@ -1,9 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ChapterSync,mergeText} from '../src/client/features/chapters/sync.ts';
-import {draftKey,draftScope} from '../src/client/shared/drafts.js';
+import {ChapterSync,mergeText} from '../src/modules/author-ui/workbench/features/chapters/sync.ts';
+import {draftKey,draftScope} from '../src/modules/author-ui/workbench/shared/drafts.ts';
+import {flushChapterDraft, openChapterDraft} from '../src/modules/author-ui/workbench/features/chapters/draft-sessions.ts';
 const initial={id:'one',revision:1,contentHash:'h1',deleted:false,title:'第一章',content:'甲段。\n\n乙段。',volumeId:null,order:0};
 const cache=()=>{const map=new Map();return{getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};};
+test('opening a chapter while a dormant draft loads uses the editor save queue', async t => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', {value: cache(), configurable: true});
+  t.after(() => original ? Object.defineProperty(globalThis, 'localStorage', original) : Reflect.deleteProperty(globalThis, 'localStorage'));
+  const key = draftKey('test-session', 'book:chapter:opening');
+  const reading = Promise.withResolvers();
+  const writes = [];
+  const io = {
+    read: () => reading.promise,
+    write: async value => { writes.push(value.content); return {revision: 2, contentHash: 'h2'}; },
+    onSaved() {},
+  };
+  const pending = flushChapterDraft(key, io);
+  const editor = openChapterDraft(key, initial, io);
+  t.after(() => editor.dispose());
+  editor.change({...initial, content: '切章期间继续写'});
+  reading.resolve(initial);
+  const saved = await pending;
+  assert.equal(saved.accept, editor.accept);
+  assert.equal(saved.chapter.revision, 2);
+  assert.deepEqual(writes, ['切章期间继续写']);
+});
 function setup(t,custom={}){
  let server={...initial},writes=[];
  const sync=new ChapterSync({key:'chapter',initial:server,storage:cache(),read:async()=>server,write:async(value,base,id)=>{writes.push({value,base,id});if(base.revision!==server.revision)throw Object.assign(new Error('conflict'),{code:'CONFLICT'});server={...value,revision:server.revision+1,contentHash:'h'+(server.revision+1)};return server;},onSaved:()=>{},delay:60000,...custom});

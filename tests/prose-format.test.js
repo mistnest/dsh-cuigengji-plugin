@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatProse } from '../src/client/features/chapters/format.ts';
-import { countManuscript } from '../src/domain/manuscript.ts';
+import { formatProse } from '../src/modules/author-ui/workbench/features/chapters/format.ts';
+import { countManuscript } from '../src/modules/workspace/chapters/count.ts';
 
 test('prose formatting preserves words, punctuation and paragraph order and is idempotent', () => {
   const original = '\r\n  她说：“Hello, world!”  \r\n\r\n\r\n\t他没有回答……\r第二天。\t\r\n';

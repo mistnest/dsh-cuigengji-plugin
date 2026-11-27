@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Store} from '../src/core/store.js';
-import {TransferService} from '../src/application/transfer/service.ts';
-import {bookPath} from '../src/infrastructure/persistence/project-layout.ts';
-import {scopePlanningFolders} from '../src/domain/planning/workspaces.ts';
-import {folderObjects} from '../src/domain/canvas/folders.ts';
-import {arrangeFolders} from '../src/domain/canvas/folder-layout.ts';
-import {foldProjection,objectBox,inside} from '../src/domain/canvas/model.ts';
-import {directorySnapshot} from '../src/domain/directory/order.ts';
+import {Store} from '../src/composition/store.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
+import {bookPath} from '../src/modules/library/records/project-layout.ts';
+import {scopePlanningFolders} from '../src/modules/workspace/planning/rules/workspaces.ts';
+import {folderObjects} from '../src/modules/workspace/cards/canvas/folders.ts';
+import {arrangeFolders} from '../src/modules/workspace/cards/canvas/folder-layout.ts';
+import {foldProjection,objectBox,inside} from '../src/modules/workspace/cards/canvas/model.ts';
+import {directorySnapshot} from '../src/modules/workspace/cards/directory/order.ts';
 
 async function fixture(t){
  const root=await mkdtemp(join(tmpdir(),'cg-canvas-workspaces-'));t.after(()=>rm(root,{recursive:true,force:true}));

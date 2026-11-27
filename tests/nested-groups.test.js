@@ -4,12 +4,12 @@ import {mkdtemp,rm,readFile,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/application/store.js';
-import {WorkData} from '../src/application/backup/workspace.js';
-import {TransferService} from '../src/application/transfer/service.ts';
-import {directorySnapshot} from '../src/domain/directory/order.ts';
-import {groupTrail,groupDescendants,groupRows,assertGroupHierarchy} from '../src/domain/directory/groups.ts';
-import {validManagedPath} from '../src/infrastructure/persistence/tree-layout.ts';
+import {Store} from '../src/composition/store.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
+import {directorySnapshot} from '../src/modules/workspace/cards/directory/order.ts';
+import {groupTrail,groupDescendants,groupRows,assertGroupHierarchy} from '../src/modules/workspace/cards/directory/groups.ts';
+import {validManagedPath} from '../src/modules/library/records/tree-layout.ts';
 
 async function fixture(t){
   const root=await mkdtemp(join(tmpdir(),'cuigengji-nested-'));t.after(()=>rm(root,{recursive:true,force:true}));

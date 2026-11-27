@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MemoryBridge } from '../src/mcp/client.js';
-import { Store } from '../src/core/store.js';
+import { MemoryBridge } from '../src/modules/access/mcp/client.ts';
+import { Store } from '../src/composition/store.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { memoryRuntime } from '../src/adapters/mcp/client.js';
-import { createSessionPolicy } from '../src/application/bindings/session.js';
-import { readGuidance } from '../src/adapters/dsh/guidance.js';
+import { memoryRuntime } from '../src/modules/access/mcp/client.ts';
+import { createSessionPolicy } from '../src/modules/access/dsh/session-policy.ts';
+import { readGuidance } from '../src/modules/access/guidance/read.ts';
 
 test('desktop child runs as Node without inheriting host credentials', () => {
   const runtime = {

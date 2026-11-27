@@ -89,7 +89,7 @@ try {
   const expectCollapsed=async()=>{await expect(workspace).toHaveClass(/directory-collapsed/);await expect(page.getByRole('button',{name:'展开章节目录',exact:true})).toBeVisible();};
   await page.getByRole('button',{name:'规划',exact:true}).click();await page.getByRole('button',{name:'正文',exact:true}).click();await expectCollapsed();
   await page.getByRole('button',{name:'设定',exact:true}).click();await page.getByRole('button',{name:'正文',exact:true}).click();await expectCollapsed();
-  await page.getByRole('button',{name:'设置',exact:true}).click();await selectSettingsCategory(page,'AI与写作');await page.getByRole('button',{name:'写作预设',exact:true}).click();await page.getByRole('button',{name:'‹ 返回设置',exact:true}).click();await page.getByRole('button',{name:'关闭设置',exact:true}).click();await expectCollapsed();
+  await page.getByRole('button',{name:'设置',exact:true}).click();await selectSettingsCategory(page,'AI与写作');await page.getByRole('button',{name:'创作记忆',exact:true}).click();await page.getByRole('button',{name:'‹ 返回设置',exact:true}).click();await page.getByRole('button',{name:'关闭设置',exact:true}).click();await expectCollapsed();
   await page.getByRole('button',{name:'刷新当前页面',exact:true}).click();await expectCollapsed();
   await page.reload();await expectCollapsed();
   await page.getByRole('button',{name:'作品首页',exact:true}).click();await page.locator('.welcome-book').filter({hasText:'催更姬 · 试用作品'}).click();await expectCollapsed();

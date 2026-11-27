@@ -1,5 +1,2 @@
-export * from "../application/store.js";
-import { default as default2 } from "../application/store.js";
-export {
-  default2 as default
-};
+export * from "./../composition/store.js";
+export { default } from "./../composition/store.js";

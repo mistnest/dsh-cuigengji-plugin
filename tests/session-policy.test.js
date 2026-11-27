@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSessionPolicy } from '../src/assistant/session.js';
-import { registerPrompt } from '../src/assistant/prompt.js';
+import { createSessionPolicy } from '../src/modules/access/dsh/session-policy.ts';
+import { registerPrompt } from '../src/modules/access/guidance/prompt.ts';
 
 test('session policy scopes novel data access without restricting host tools', async () => {
   const calls = [];

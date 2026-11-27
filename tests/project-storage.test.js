@@ -4,9 +4,9 @@ import { mkdtemp, readFile, writeFile, mkdir, readdir, rm, stat } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { Store } from '../src/core/store.js';
-import { WorkData } from '../src/application/backup/workspace.js';
-import { bookPath, fileId, pageKey, storedChapterFile, storedSettingFile, storedPageFile } from '../src/infrastructure/persistence/project-layout.ts';
+import { Store } from '../src/composition/store.ts';
+import { WorkData } from '../src/modules/library/archives/workspace-archive.ts';
+import { bookPath, fileId, pageKey, storedChapterFile, storedSettingFile, storedPageFile } from '../src/modules/library/records/project-layout.ts';
 import { storageSnapshot } from './helpers/storage-snapshot.js';
 
 async function fixture(t) {

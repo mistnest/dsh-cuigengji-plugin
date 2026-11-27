@@ -25,7 +25,7 @@ try {
   await call('chapter.delete',{novelId,chapterId:trash.id,expectedRevision:trash.revision,confirm:true});
   browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1250,height:920},reducedMotion:'reduce'});
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
-  await page.goto(url);await page.locator('.chapter-item').first().click();
+  await page.goto(url);await page.locator(`[data-chapter-id="${a.id}"] .chapter-open`).click();
   let prose=page.getByLabel('正文',{exact:true});
   const panel=page.getByRole('dialog',{name:'正文查找与替换'}),query=page.getByRole('textbox',{name:'正文查找内容'}),replacement=page.getByRole('textbox',{name:'正文替换为'});
   const scope=page.getByRole('combobox',{name:'正文查找范围'});

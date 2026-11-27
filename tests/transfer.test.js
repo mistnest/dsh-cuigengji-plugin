@@ -4,10 +4,10 @@ import {mkdtemp, rm, mkdir, writeFile, readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/application/store.js';
-import {TransferService} from '../src/application/transfer/service.ts';
-import {WorkData} from '../src/application/backup/workspace.js';
-import {crc32} from '../src/infrastructure/migrations/tavern.js';
+import {Store} from '../src/composition/store.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
+import {crc32} from '../src/modules/workspace/transfer/formats/tavern.ts';
 
 const actor = {kind: 'human', sessionId: 'transfer-author'};
 async function setup(t) {
@@ -42,7 +42,14 @@ async function setup(t) {
 }
 
 test('catalog indexes every range without exposing prose, and export does not mutate the store', async t => {
-  const s = await setup(t), before = await s.source.load(), cat = await s.from.catalog();
+  const s = await setup(t), before = await s.source.load();
+  const reads = [], readText = s.source.readText.bind(s.source);
+  s.source.readText = async path => { reads.push(path); return readText(path); };
+  const cat = await s.from.catalog();
+  s.source.readText = readText;
+  const {catalog} = await import('../src/modules/workspace/transfer/model.ts');
+  assert.deepEqual(cat.books, catalog(Object.values(before.novels)).books);
+  assert.ok(reads.every(path => !/(chapters|nodes|planning)\/(history|pages|transactions)\/|runtime\/requests\/|\.md$/.test(path)), reads.join('\n'));
   assert.equal(cat.books.length, 2); assert.equal(cat.books[0].chapters[0].words > 0, true);
   assert.equal(JSON.stringify(cat).includes('港口的详细设定'), false);
   await s.packet({kind: 'planning', novelId: s.n.id, pageIds: [s.page.id]});
@@ -198,9 +205,17 @@ test('whole-workspace restore includes attachments in the same transaction and c
   const s = await setup(t), audit = 'audit/' + 'a'.repeat(64) + '.jsonl';
   await mkdir(join(s.source.root, 'audit')); await writeFile(join(s.source.root, audit), 'audit\n');
   const output = await s.from.export({selection: {kind: 'workspace'}}), file = {name: output.filename, text: output.content};
+  const originalActivity = (await s.source.load()).activity;
+  assert.ok(Object.keys(originalActivity.daily).length);
+  const beforeActivity = (await s.target.load()).activity;
   const result = await s.importFile(file, {mode: 'restore'});
   assert.equal(await readFile(join(s.target.root, audit), 'utf8'), 'audit\n');
   const snapshot = JSON.parse(await readFile(join(result.backupDir, 'workspace.json'), 'utf8')); assert.equal(Object.keys(snapshot.payload.state.novels).length, 1); assert.equal(s.to.inspect({file: {name: 'workspace.json', json: snapshot}}).kind, 'workspace');
+  assert.deepEqual(JSON.parse(snapshot.payload.files.find(file => file.path === 'activity.json').content), beforeActivity);
+  for (const [day, record] of Object.entries(originalActivity.daily)) {
+    const restored = (await s.target.load()).activity.daily[day];
+    for (const [id, bucket] of Object.entries(record.novels)) assert.deepEqual(restored.novels[id], bucket);
+  }
   assert.deepEqual((await s.target.load()).bindings, (await s.source.load()).bindings);
   assert.equal((await new WorkData(s.target).preview(JSON.parse(output.content))).valid, true);
 });

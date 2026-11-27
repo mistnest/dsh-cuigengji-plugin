@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Store} from '../src/core/store.js';
+import {Store} from '../src/composition/store.ts';
 import {storageSnapshot} from './helpers/storage-snapshot.js';
 
 const actor={kind:'agent',sessionId:'setting-editor'};
@@ -19,6 +19,39 @@ async function fixture(t,value={}) {
     sources:[{chapterId:chapter.id,revision:chapter.revision}],position:{x:50,y:-80},...value});
   return {root,store,novel,run,folder,card};
 }
+
+test('one decision updates multiple cards atomically with per-card history, activity and one replayable receipt',async t=>{
+  const {root,store,novel,card,run}=await fixture(t);
+  const other=await run('graph.create',{type:'world_entry',name:'密信',content:'旧说法'});
+  const args={requestId:'one-decision',reason:'统一密信设定',updates:[
+    {nodeId:card.id,expectedRevision:1,patch:{oldText:'她十八岁。',newText:'她十九岁。'}},
+    {nodeId:other.id,expectedRevision:1,content:'统一说法',summary:'已修订'},
+  ]};
+  const before=await storageSnapshot(root), activity=(await run('activity.today')).stats;
+  for(const [extra,code] of [[{expectedRevision:9},'CONFLICT'],[{content:undefined,patch:{oldText:'缺失原文',newText:''}},'PATCH_CONFLICT']]){
+    await assert.rejects(run('graph.updateMany',{...args,updates:[args.updates[0],{...args.updates[1],...extra}]}),
+      err=>err.code===code && err.details.nodeId===other.id && err.details.currentRevision===1);
+    assert.equal(await storageSnapshot(root),before);
+  }
+  await assert.rejects(run('graph.updateMany',{...args,updates:[args.updates[0],args.updates[0]]}),{code:'INVALID_INPUT'});
+  const saved=await run('graph.updateMany',args);
+  assert.deepEqual(saved.items.map(item=>[item.id,item.revision,item.changed]),[[card.id,2,true],[other.id,2,true]]);
+  for(const {id} of saved.items)assert.deepEqual((await run('graph.history',{nodeId:id})).map(v=>[v.revision,v.reason]).at(-1),[2,args.reason]);
+  assert.equal((await run('activity.today')).stats.settingsTouched,activity.settingsTouched+2);
+  const after=await storageSnapshot(root);
+  assert.deepEqual(await new Store(root).dispatch('graph.updateMany',{novelId:novel.id,...args},actor),saved);
+  assert.equal(await storageSnapshot(root),after);
+  await assert.rejects(run('graph.updateMany',{...args,reason:'不同请求'}),{code:'REQUEST_ID_REUSED'});
+  await store.dispatch('graph.update',{novelId:novel.id,nodeId:other.id,expectedRevision:2,content:'作者刚刚改过'},
+    {kind:'human',sessionId:'author'});
+  const afterAuthor=await storageSnapshot(root);
+  await assert.rejects(run('graph.updateMany',{requestId:'after-author',updates:[
+    {nodeId:card.id,expectedRevision:2,summary:'再次统一'},
+    {nodeId:other.id,expectedRevision:2,summary:'再次统一'},
+  ]}),err=>err.code==='CONFLICT'&&err.details.nodeId===other.id&&err.details.currentRevision===3);
+  assert.equal(await storageSnapshot(root),afterAuthor);
+  assert.equal((await run('graph.get',{nodeId:other.id})).content,'作者刚刚改过');
+});
 
 test('a setting passage and its summary change together on the original card, with history and receipt replay',async t=>{
   const {root,novel,run,card}=await fixture(t);

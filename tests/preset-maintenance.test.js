@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {Store} from '../src/application/store.js';
-import {TransferService} from '../src/application/transfer/service.ts';
-import {registerPrompt} from '../src/adapters/dsh/prompt.js';
-import {readGuidance} from '../src/adapters/dsh/guidance.js';
-import {apply} from '../src/index.js';
+import {Store} from '../src/composition/store.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
+import {registerPrompt} from '../src/modules/access/guidance/prompt.ts';
+import {readGuidance} from '../src/modules/access/guidance/read.ts';
+import {apply} from '../src/index.ts';
 import {storageSnapshot} from './helpers/storage-snapshot.js';
 
 const human = {kind:'human', sessionId:'writer'}, agent = {kind:'agent', sessionId:'writer'};
@@ -219,7 +219,7 @@ test('registered DSH tools and actual MCP expose the same maintenance commands a
   const ctx = {tools:{register:tool => registered.set(tool.name, tool)}, skills:{register:skill => skills.set(skill.name, skill)}, connection:{fetch:{register(){}}},
     on(){}, effect:fn => effects.push(fn()), provide:(key,value) => {ctx[key] = value;}};
   t.after(async () => {for (const dispose of effects) await dispose(); await rm(root, {recursive:true, force:true});});
-  await apply(ctx, {dataRoot:root, usageRoot:join(root,'test-usage')});
+  await apply(ctx, {dataRoot:root, usageRoot:join(root,'test-usage'),externalRoot:join(root,'test-external')});
   const book = await ctx.cuigengji.dispatch('novel.create', {title:'工具维护预设'}, human);
   const other = await ctx.cuigengji.dispatch('novel.create', {title:'另一部作品'}, human);
   let id = 0;

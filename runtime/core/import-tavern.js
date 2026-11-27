@@ -1,1 +1,1 @@
-export * from "../infrastructure/migrations/tavern.js";
+export * from "./../modules/workspace/transfer/formats/tavern.js";

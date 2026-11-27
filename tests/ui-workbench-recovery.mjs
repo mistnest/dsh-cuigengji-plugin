@@ -7,7 +7,7 @@ import {basename,join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
-import {Store} from '../src/core/store.js';
+import {Store} from '../src/composition/store.ts';
 
 const root=resolve(import.meta.dirname,'..'),directory=await mkdtemp(join(tmpdir(),'cuigengji-recovery-'));
 const shots=join(root,'test-results','workbench-recovery');await mkdir(shots,{recursive:true});
@@ -17,7 +17,7 @@ const saved='　　这是一段已经保存的正文。';
 const chapter=await store.dispatch('chapter.create',{novelId:novel.id,title:'第一章 回到工作台',content:saved},actor);
 await store.dispatch('binding.set',{novelId:novel.id},actor);
 const bundle=await build({stdin:{resolveDir:root,loader:'tsx',contents:`
-  import React,{useSyncExternalStore} from 'react';import{createRoot}from'react-dom/client';import{applyWithRPC}from'./src/client/index.tsx';
+  import React,{useSyncExternalStore} from 'react';import{createRoot}from'react-dom/client';import{applyWithRPC}from'./src/modules/author-ui/workbench/index.tsx';
   function source(value){const listeners=new Set();return{getSnapshot:()=>value,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},set(next){value=next;listeners.forEach(fn=>fn())}}}
   const tab=source({sessionId:'recovery-main',hookFault:false}),chat=source(0),registrations=[],retired=[],actions=[];
   let mode='normal';

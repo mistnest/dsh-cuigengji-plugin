@@ -63,6 +63,17 @@ try{
     await expect(card.getByRole('combobox',{name:'对照卡片版本',exact:true}).locator('option[value="1"]')).toHaveCount(0);
     const result=await call(action,{novelId,nodeId:id});expect((result.items||result).some(v=>v.revision===1)).toBe(false);
     await card.getByRole('button',{name:'返回内容',exact:true}).click();await page.getByRole('button',{name:`‹ 返回${tab}`,exact:true}).click();
+    if(tab==='规划'){
+      await call('planning.apply',{novelId,requestId:crypto.randomUUID(),operations:[{op:'node.update',id,expectedRevision:2,value:{summary:'清理后继续修订'}}]});
+      await page.getByLabel('规划更多操作',{exact:true}).click();await page.getByRole('button',{name:/修改记录$/}).click();
+      const history=page.locator('.planning-history');await expect(history).toBeVisible();
+      await expect(history.locator('pre').filter({hasText:'版本 1 已清理'})).toHaveCount(2);
+      const undo=history.getByRole('button',{name:'撤销这次变更',exact:true,includeHidden:true});
+      await expect.poll(()=>undo.evaluateAll(buttons=>buttons.filter(button=>!button.disabled).length)).toBe(1);
+      expect(await undo.evaluateAll(buttons=>buttons.filter(button=>button.disabled).length)).toBe(2);
+      await expect(page.getByRole('alert',{name:'催更姬界面异常'})).toHaveCount(0);
+      await history.getByRole('button',{name:'关闭记录',exact:true}).click();
+    }
   }
   // Chapter recycle bin: checkbox selection, cancel, permanent delete and clear.
   await page.getByRole('button',{name:'正文',exact:true}).click();await page.getByRole('button',{name:/^回收站/}).click();

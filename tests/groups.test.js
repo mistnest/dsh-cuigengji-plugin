@@ -4,9 +4,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { Store } from '../src/core/store.js';
-import { WorkData } from '../src/data/workspace.js';
-import { isReadAction, TOOL_ACTIONS } from '../src/core/actions.js';
+import { Store } from '../src/composition/store.ts';
+import { WorkData } from '../src/modules/library/archives/workspace-archive.ts';
+import { isReadAction, TOOL_ACTIONS } from '../src/modules/access/catalog/actions.ts';
 async function setup(t) {
   const root = await mkdtemp(join(tmpdir(), 'cuigengji-groups-'));
   t.after(() => rm(root, { recursive: true, force: true }));

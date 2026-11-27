@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {apply} from '../src/index.js';
+import {apply} from '../src/index.ts';
 
 async function fixture(t) {
   const root=await mkdtemp(join(tmpdir(),'cg-ai-workspace-')),tools=new Map(),effects=[],handlers=new Map();
   const ctx={tools:{register:tool=>tools.set(tool.name,tool)},skills:{register(){}},connection:{fetch:{register(){}}},
     on:(name,fn)=>handlers.set(name,fn),effect:fn=>effects.push(fn()),provide:(name,value)=>{ctx[name]=value;}};
   t.after(async()=>{for(const dispose of effects)await dispose();await rm(root,{recursive:true,force:true});});
-  await apply(ctx,{dataRoot:root,usageRoot:join(root,'test-usage')});
+  await apply(ctx,{dataRoot:root,usageRoot:join(root,'test-usage'),externalRoot:join(root,'test-external')});
   let callId=0;
   const invoke=async(name,input,sessionId='writer')=>JSON.parse(await tools.get(name).execute(input,{agent:{id:sessionId},callId:`contract-${++callId}`,signal:new AbortController().signal}));
   const run=(name,action,args={},sessionId)=>invoke(name,{action,args},sessionId);
@@ -81,7 +81,15 @@ test('disabled guidance has resolvable references, unbound rules and explicit-wo
   }
   const core=await invoke('cuigengji_guidance',{section:'core'});
   const skill=await invoke('cuigengji_guidance',{section:'project'});
-  const marker=skill.modules[0].content.match(/shared-canvas-v\d+/)[0];assert.ok(core.modules[0].content.includes(marker),'old-chat reload marker agrees between entry points');
+  for (const guide of [core, skill]) {
+    const content=guide.modules[0].content;
+    assert.match(content,/shared-canvas-v19\b/);
+    assert.match(content,/DSH 子 Agent|DSH 原生子 Agent/);
+    assert.match(content,/显式传入 `?novelId\b/);
+    assert.match(content,/顶层扁平参数/);
+    assert.match(content,/cuigengji_reader_open/);
+    assert.match(content,/cuigengji_connections/);
+  }
   await run('cuigengji_project','novel.focus',{novelId:a.id});
   assert.equal((await invoke('cuigengji_guidance',{section:'preset',args:{novelId:b.id}})).preset.content,'目标书文风');
   assert.equal((await run('cuigengji_context','binding.get')).novelId,a.id);

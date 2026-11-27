@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mapSelection} from '../src/client/features/chapters/selection.ts';
+import {mapSelection} from '../src/modules/author-ui/workbench/features/chapters/selection.ts';
 
 test('a selection stays attached to its prose when preceding text is inserted or removed', () => {
   const before = '她收起信。\n\n门外有人敲门。', prefix = '雨停了。\n\n';

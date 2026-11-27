@@ -4,13 +4,13 @@ import {mkdtemp, mkdir, readFile, writeFile, readdir, rm, stat} from 'node:fs/pr
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/core/store.js';
-import {UpgradeCoordinator} from '../src/application/maintenance/upgrade.ts';
-import {FileTransaction} from '../src/infrastructure/persistence/file-transaction.ts';
-import {verifyUpgradeBackup} from '../src/infrastructure/persistence/upgrade-backup.ts';
-import {registerRpcRoute} from '../src/adapters/dsh/rpc.js';
-import {createWorkbenchRPC} from '../src/client/shared/rpc.ts';
-import {MemoryBridge} from '../src/adapters/mcp/client.js';
+import {Store} from '../src/composition/store.ts';
+import {UpgradeCoordinator} from '../src/modules/library/upgrade/upgrade.ts';
+import {FileTransaction} from '../src/modules/library/transactions/file-transaction.ts';
+import {verifyUpgradeBackup} from '../src/modules/library/upgrade/backup.ts';
+import {registerRpcRoute} from '../src/modules/access/rpc/route.ts';
+import {createWorkbenchRPC} from '../src/modules/author-ui/workbench/shared/rpc.ts';
+import {MemoryBridge} from '../src/modules/access/mcp/client.ts';
 
 async function temporary(t) {
   const parent = await mkdtemp(join(tmpdir(), 'cuigengji-bom-')), root = join(parent, '文本库');

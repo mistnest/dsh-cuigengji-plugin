@@ -21,9 +21,23 @@ $profile = Join-Path $DshHome 'profiles\desktop'
 foreach ($path in @($DesktopExe, $nodeShim, $pnpm, (Join-Path $profile 'package.json'))) {
   if (-not (Test-Path -LiteralPath $path)) { throw "Required installed desktop path missing: $path" }
 }
-if (Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $DesktopExe }) {
-  throw 'Exit DeepSeek Harness (including its tray process) before installing the plugin.'
+$processDetector = Join-Path $projectDirectory 'runtime\modules\access\dsh\desktop-processes.js'
+function Confirm-DesktopStopped {
+  $previousNode = $env:DSH_DESKTOP_NODE_EXECUTABLE
+  try {
+    $env:DSH_DESKTOP_NODE_EXECUTABLE = $DesktopExe
+    $result = & $nodeShim $processDetector $DesktopExe
+    if ($LASTEXITCODE -ne 0 -or -not $result) { throw 'Could not confirm that DeepSeek Harness is stopped.' }
+    $processes = $result | ConvertFrom-Json
+  } finally {
+    $env:DSH_DESKTOP_NODE_EXECUTABLE = $previousNode
+  }
+  if ($processes.Desktop.Count) {
+    throw 'Exit DeepSeek Harness (including its tray process) before installing the plugin.'
+  }
+  return $processes
 }
+$null = Confirm-DesktopStopped
 $ReleaseDirectory = [IO.Path]::GetFullPath($ReleaseDirectory)
 $null = New-Item -ItemType Directory -Path $ReleaseDirectory -Force
 $previousNode = $env:DSH_DESKTOP_NODE_EXECUTABLE
@@ -45,13 +59,34 @@ try {
     Copy-Item -LiteralPath $archive -Destination $installArchive
   }
   $env:DSH_DESKTOP_NODE_EXECUTABLE = $DesktopExe
+  $processes = Confirm-DesktopStopped
+  $profileManifestPath = Join-Path $profile 'package.json'
+  $profileManifestRaw = [IO.File]::ReadAllText($profileManifestPath, [Text.UTF8Encoding]::new($false))
+  $existingFilePattern = '("' + [regex]::Escape($manifest.name) + '"\s*:\s*")file:([^"]+)(")'
+  $match = [regex]::Match($profileManifestRaw, $existingFilePattern)
+  $updatedManifestRaw = $null
+  if ($match.Success -and -not (Test-Path -LiteralPath ($match.Groups[2].Value -replace '/','\'))) {
+    # DSH 0.2.3+ bundles pnpm 11, which stats existing file: tarballs before
+    # replacing them during `pnpm add`. Point stale entries at the new archive first.
+    $normalizedArchive = $installArchive -replace '\\','/'
+    $updatedManifestRaw = [regex]::Replace($profileManifestRaw, $existingFilePattern, "`${1}file:$normalizedArchive`${3}", 1)
+    [IO.File]::WriteAllText($profileManifestPath, $updatedManifestRaw, [Text.UTF8Encoding]::new($false))
+  }
   Set-Location -LiteralPath $profile
   & $nodeShim $pnpm add $installArchive
-  if ($LASTEXITCODE -ne 0) { throw 'Desktop profile installation failed.' }
+  if ($LASTEXITCODE -ne 0) {
+    if ($null -ne $updatedManifestRaw -and [IO.File]::ReadAllText($profileManifestPath) -ceq $updatedManifestRaw) {
+      [IO.File]::WriteAllText($profileManifestPath, $profileManifestRaw, [Text.UTF8Encoding]::new($false))
+    }
+    if ($processes.ExternalMcp.Count) {
+      throw 'Desktop profile installation failed. If pnpm reports locked files, close the external MCP client that started the connector and retry.'
+    }
+    throw 'Desktop profile installation failed.'
+  }
   $installedRoot = Join-Path (Join-Path $profile 'node_modules') $manifest.name
   $installed = Get-Content -LiteralPath (Join-Path $installedRoot 'package.json') -Encoding UTF8 -Raw | ConvertFrom-Json
   if ($installed.version -ne $manifest.version) { throw 'Installed plugin version differs.' }
-  foreach ($relative in @('runtime\adapters\mcp\client.js', 'runtime\adapters\dsh\rename-installation.js', 'runtime\application\pet\desktop.js', 'src\desktop\pet.ps1', 'src\desktop\PetWindow.cs', 'src\client\assets\pets\bigfish-pet-poses.png', 'src\client\assets\pets\cuigengji-pet-poses.png', 'lib\client.js', 'README.md', 'package.json')) {
+  foreach ($relative in @('runtime\modules\access\mcp\client.js', 'runtime\adapters\dsh\rename-installation.js', 'runtime\modules\access\dsh\desktop-processes.js', 'runtime\modules\author-ui\desktop\desktop.js', 'src\modules\author-ui\desktop\pet.ps1', 'src\modules\author-ui\desktop\PetWindow.cs', 'src\modules\author-ui\workbench\assets\pets\bigfish-pet-poses.png', 'src\modules\author-ui\workbench\assets\pets\cuigengji-pet-poses.png', 'lib\client.js', 'README.md', 'package.json')) {
     $sourceHash = (Get-FileHash -LiteralPath (Join-Path $projectDirectory $relative)).Hash
     $installedHash = (Get-FileHash -LiteralPath (Join-Path $installedRoot $relative)).Hash
     if ($sourceHash -ne $installedHash) { throw "Installed file differs: $relative. Bump the plugin version and retry." }

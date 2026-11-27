@@ -1,0 +1,107 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {Store} from '../src/composition/store.ts';
+import {WorkData} from '../src/modules/library/archives/workspace-archive.ts';
+import {selectProjects} from '../src/modules/workspace/transfer/packages.ts';
+import {copyWork,copyInto} from '../src/modules/workspace/transfer/copy.ts';
+import {imageGalleryKey} from '../src/modules/workspace/cards/image-types.ts';
+import {MemoryBridge} from '../src/modules/access/mcp/client.ts';
+import {prepareImageToolResult,renderImageToolResult} from '../src/modules/access/dsh/image-schema.ts';
+
+const pixel='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+cTKsAAAAASUVORK5CYII=';
+const file={name:'人物.png',data:pixel,thumbnail:{mimeType:'image/png',data:pixel}};
+const actor={kind:'human',sessionId:'image-author'};
+async function fixture(t){
+  const root=await mkdtemp(join(tmpdir(),'cuigengji-images-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  class CountingStore extends Store{reads=[];async readText(path){this.reads.push(path);return super.readText(path);}}
+  const store=new CountingStore(root),novel=await store.dispatch('novel.create',{title:'配图合成作品'},actor);
+  const run=(action,args={})=>store.dispatch(action,{novelId:novel.id,...args},actor);
+  const memory=await run('graph.create',{type:'character_card',name:'林岚',content:'最初的文字设定'});
+  const plan=await run('planning.apply',{requestId:crypto.randomUUID(),operations:[{op:'node.create',ref:'a',value:{title:'夜访灯塔',position:{x:40,y:60}}}]});
+  return {root,store,novel,run,memory,planning:plan.mapping.a};
+}
+test('gallery storage is independent, lazy, durable and does not enter ordinary AI reads',async t=>{
+  const {store,root,novel,run,memory,planning}=await fixture(t),key=imageGalleryKey('memory',memory.id);
+  const input={kind:'memory',nodeId:memory.id,expectedRevision:0,files:[file],requestId:'image-upload-once'};
+  const gallery=await run('image.import',input);
+  assert.equal(gallery.revision,1);assert.equal(gallery.images.length,1);assert.equal(gallery.images[0].data,undefined);
+  assert.deepEqual(await run('image.import',input),gallery);
+  await assert.rejects(run('image.import',{...input,requestId:'other'}),{code:'CONFLICT'});
+  await run('image.import',{kind:'planning',nodeId:planning,expectedRevision:0,files:[{...file,name:'灯塔.png'}]});
+  store.reads=[];
+  assert.equal((await run('graph.get',{nodeId:memory.id})).revision,1);
+  await run('graph.list');await run('planning.list');await run('planning.get',{nodeId:planning});
+  assert(!store.reads.some(path=>path.includes('/images/')));
+  store.reads=[];
+  const index=await run('image.list',{kind:'memory',includeThumbnails:true});
+  assert.equal(index.galleries[key].images[0].thumbnail.data,pixel);
+  assert(!store.reads.some(path=>/\/images\/(?!index\.json)/.test(path)));
+  const plain=await store.dispatch('image.list',{novelId:novel.id,includeThumbnails:true},{kind:'agent',sessionId:'image-reader'});
+  assert(!JSON.stringify(plain).includes(pixel));
+  store.reads=[];
+  const image=await run('image.read',{kind:'memory',nodeId:memory.id,imageId:gallery.coverId});
+  assert.equal(image.data,pixel);assert.equal(store.reads.filter(path=>/\/images\/(?!index\.json)/.test(path)).length,1);
+  const data=await store.load();store.validate(data);
+  const reloaded=new Store(root);assert.deepEqual((await reloaded.load()).novels[novel.id].cardImages,data.novels[novel.id].cardImages);
+  await run('graph.update',{nodeId:memory.id,expectedRevision:1,content:'人工编辑后的正文'});
+  await run('novel.update',{expectedRevision:(await run('novel.get')).revision,title:'改名后的配图作品'});
+  assert.equal((await run('image.read',{kind:'memory',nodeId:memory.id,imageId:gallery.coverId})).data,pixel);
+});
+test('replace, cover and remove use gallery CAS without changing text history',async t=>{
+  const {run,memory}=await fixture(t),args={kind:'memory',nodeId:memory.id};
+  let gallery=await run('image.import',{...args,expectedRevision:0,files:[file,{...file,name:'服饰.png'}]});
+  const second=gallery.images[1].id;
+  gallery=await run('image.update',{...args,expectedRevision:1,coverId:second});assert.equal(gallery.coverId,second);
+  gallery=await run('image.import',{...args,expectedRevision:2,replaceImageId:second,files:[{...file,name:'新服饰.png'}]});
+  assert.equal(gallery.images.length,2);assert.notEqual(gallery.coverId,second);assert.equal(gallery.images[1].name,'新服饰.png');
+  await assert.rejects(run('image.read',{...args,imageId:second}),{code:'NOT_FOUND'});
+  gallery=await run('image.delete',{...args,expectedRevision:3,imageId:gallery.coverId});assert.equal(gallery.coverId,gallery.images[0].id);
+  gallery=await run('image.delete',{...args,expectedRevision:4,imageId:gallery.coverId});assert.equal(gallery.coverId,null);assert.equal(gallery.images.length,0);
+  assert.equal((await run('graph.get',{nodeId:memory.id})).revision,1);assert.equal((await run('graph.history',{nodeId:memory.id})).length,1);
+  await assert.rejects(run('image.import',{...args,expectedRevision:5,files:[{name:'假图.png',data:Buffer.from('<script>invalid</script>').toString('base64')}]}),{code:'INVALID_IMAGE'});
+  assert.equal((await run('image.list')).galleries[imageGalleryKey('memory',memory.id)].revision,5);
+});
+test('portable image references survive selective copy and full backup restore',async t=>{
+  const {store,run,novel,memory,planning,root}=await fixture(t);
+  for(const [kind,nodeId] of [['memory',memory.id],['planning',planning]])await run('image.import',{kind,nodeId,expectedRevision:0,files:[file]});
+  const source=(await store.load()).novels[novel.id];
+  const selected=selectProjects([source],{kind:'memory',novelId:novel.id,nodeIds:[memory.id]}).projects[0];
+  assert.deepEqual(Object.keys(selected.cardImages),[imageGalleryKey('memory',memory.id)]);
+  const copied=copyWork(selected,{}),id=Object.keys(copied.nodes)[0];
+  assert.notEqual(id,memory.id);assert.equal(copied.cardImages[imageGalleryKey('memory',id)].images[0].data,pixel);
+  store.validateProject(copied);
+  const complete=copyWork(source,{});store.validateProject(complete);
+  assert.equal(Object.keys(complete.cardImages).length,2);
+  const existing=copyWork(selected,{});copyInto(source,existing,{});store.validateProject(existing);
+  const backup=await new WorkData(store).export(),target=new Store(join(root,'restored'));
+  await new WorkData(target).import(backup);
+  assert.deepEqual((await target.load()).novels[novel.id].cardImages,source.cardImages);
+});
+test('duplicating either kind of card carries its gallery without another image tool',async t=>{
+  const {run,memory,planning}=await fixture(t);
+  for(const [kind,nodeId] of [['memory',memory.id],['planning',planning]])await run('image.import',{kind,nodeId,expectedRevision:0,files:[file]});
+  const copied=await run('graph.duplicate',{members:[{id:memory.id,expectedRevision:1}]});
+  const copy=await run('planning.apply',{requestId:crypto.randomUUID(),operations:[{op:'node.create',ref:'copy',value:{title:'灯塔 · 副本'}}],imageCopies:[{sourceId:planning,targetRef:'copy'}]});
+  const index=await run('image.list');
+  assert.equal(index.galleries[imageGalleryKey('memory',copied.nodes[0].id)].images.length,1);
+  assert.equal(index.galleries[imageGalleryKey('planning',copy.mapping.copy)].images.length,1);
+  await run('image.delete',{kind:'memory',nodeId:copied.nodes[0].id,expectedRevision:1,imageId:index.galleries[imageGalleryKey('memory',copied.nodes[0].id)].coverId});
+  assert.equal((await run('image.list')).galleries[imageGalleryKey('memory',memory.id)].images.length,1);
+});
+test('AI import and explicit read use raster image content across MCP and native adapters',async t=>{
+  const {store,run,novel,memory,root}=await fixture(t),agent={kind:'agent',sessionId:'image-agent'};
+  await run('binding.set',{novelId:novel.id});
+  await store.dispatch('binding.set',{novelId:novel.id},agent);
+  const path=join(root,'reference.png');await writeFile(path,Buffer.from(pixel,'base64'));
+  const bridge=new MemoryBridge(store);t.after(()=>bridge.close());
+  const gallery=await bridge.call(agent.sessionId,'image.import',{kind:'memory',nodeId:memory.id,expectedRevision:0,files:[{filePath:path}],requestId:'agent-image'});
+  const result=await bridge.call(agent.sessionId,'image.read',{kind:'memory',nodeId:memory.id,imageId:gallery.coverId});
+  assert.equal(result.data,pixel);
+  const attachment={attachmentId:'synthetic-image',name:'reference.png'};
+  const prepared=await prepareImageToolResult({get:()=>({saveImage:async input=>{assert.equal(Buffer.from(input.data).toString('base64'),pixel);assert.equal(input.mediaType,'image/png');return attachment;}})},result);
+  const content=renderImageToolResult(JSON.stringify(prepared));assert.equal(content[1].type,'image');assert.deepEqual(content[1].attachment,attachment);assert(!JSON.stringify(content[0]).includes(pixel));
+  await assert.rejects(prepareImageToolResult({get:()=>null},result),{code:'HOST_IMAGE_UNAVAILABLE'});
+});

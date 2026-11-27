@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Store } from '../src/core/store.js';
-import { convertLegacyExport } from '../src/core/import-legacy.js';
+import { Store } from '../src/composition/store.ts';
+import { convertLegacyExport } from '../src/modules/workspace/transfer/formats/legacy.ts';
 
 test('legacy converter preserves inline prose and graph, omits runtime settings and presets', async t => {
   const root = await mkdtemp(join(tmpdir(), 'cuigengji-legacy-'));

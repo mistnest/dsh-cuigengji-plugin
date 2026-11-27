@@ -1,1 +1,1 @@
-export * from "../../domain/planning/model.js";
+export * from "./../../modules/workspace/planning/rules/model.js";

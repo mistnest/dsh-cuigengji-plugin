@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Store} from '../src/core/store.js';
-import {directorySnapshot, orderedDirectory} from '../src/domain/chapters/order.ts';
-import {ChapterSync, chapterChanges} from '../src/client/features/chapters/sync.ts';
-import {HUMAN_ACTIONS, TOOL_ACTIONS} from '../src/contracts/actions.js';
+import {Store} from '../src/composition/store.ts';
+import {directorySnapshot, orderedDirectory} from '../src/modules/workspace/chapters/order.ts';
+import {ChapterSync, chapterChanges} from '../src/modules/author-ui/workbench/features/chapters/sync.ts';
+import {HUMAN_ACTIONS, TOOL_ACTIONS} from '../src/modules/access/catalog/actions.ts';
 import {storageSnapshot} from './helpers/storage-snapshot.js';
 
 async function fixture(t) {

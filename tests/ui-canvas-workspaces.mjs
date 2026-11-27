@@ -32,6 +32,22 @@ try{
  const dragBy=async(locator,dx,dy)=>{await locator.scrollIntoViewIfNeeded();const box=await locator.boundingBox();const x=box.x+45,y=box.y+18;await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+dx,y+dy,{steps:12});await page.mouse.up();};
  await page.goto(url);await button('规划').click();await showOrganization(page);await expect(card(plan.mapping.a)).toBeVisible();
  await expect(page.locator('.directory-filters')).toHaveCount(0);await expect(page.getByRole('combobox',{name:'规划画布'})).toBeVisible();
+ // Fit uses the space beside the open directory; resizing while in a
+ // different tab must also restore the canvas inside the narrower panel.
+ await page.setViewportSize({width:720,height:850});
+ await expect(page.locator('.organized-workspace')).toHaveAttribute('data-narrow','false');
+ await button('适应视图').click();
+ const insideVisibleCanvas=()=>card(plan.mapping.a).evaluate(el=>{
+   const layout=el.closest('.workspace-layout'),canvas=layout.querySelector('.workspace-stage').getBoundingClientRect();
+   const sidebar=layout.querySelector('.workspace-sidebar'),bounds=el.getBoundingClientRect();
+   return bounds.left>=(sidebar.hidden?canvas.left:sidebar.getBoundingClientRect().right)-1&&bounds.right<=canvas.right+1;
+ });
+ await expect.poll(insideVisibleCanvas).toBe(true);
+ await button('正文').click();
+ await page.setViewportSize({width:385,height:850});
+ await button('规划').click();
+ await expect.poll(insideVisibleCanvas).toBe(true);
+ await page.setViewportSize({width:1500,height:1000});await showOrganization(page);
  await button('适应视图').click();
  await button('收纳文件夹 雨城篇').click();await expect(card(plan.mapping.a)).toHaveCount(0);await expect(folder(plan.mapping.root)).toContainText('3 项内容');await expect(folder(plan.mapping.root)).toContainText('2 条外部连接');
  await expect(page.locator(`[data-entry-id="${plan.mapping.note}"]`)).toHaveCount(0);await expect(page.locator('.tree-folder[data-tree-id="'+plan.mapping.root+'"]')).toBeVisible();

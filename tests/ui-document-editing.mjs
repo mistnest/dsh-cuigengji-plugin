@@ -3,7 +3,7 @@ import {spawn} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import {resolve, join} from 'node:path';
 import {chromium, expect} from '@playwright/test';
-import {countManuscript} from '../src/domain/manuscript.ts';
+import {countManuscript} from '../src/modules/workspace/chapters/count.ts';
 import {showOrganization} from './helpers/navigation.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -140,7 +140,8 @@ try {
   const readingSelection = async () => {
     const before = await page.locator('.detail-scroll').evaluate(element => element.scrollTop);
     await page.locator('.document-body').evaluate(element => {
-      const range = document.createRange(); range.setStart(element.firstChild, 0); range.setEnd(element.firstChild, 4);
+      const first = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode();
+      const range = document.createRange(); range.setStart(first, 0); range.setEnd(first, 4);
       const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
     });
     await expect(selectedCount).toHaveText('已选 4 字');

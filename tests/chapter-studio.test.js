@@ -3,9 +3,24 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {diffProse,highlightProseLine} from '../src/domain/chapters/diff.ts';
-import {manuscriptLineAt,manuscriptLineRange,manuscriptLineStarts} from '../src/client/features/chapters/lines.ts';
-import {Store} from '../src/application/store.js';
+import {diffProse,highlightProseLine} from '../src/modules/workspace/chapters/diff.ts';
+import {manuscriptLineAt,manuscriptLineRange,manuscriptLineStarts} from '../src/modules/author-ui/workbench/features/chapters/lines.ts';
+import {Store} from '../src/composition/store.ts';
+import {readFullChapter} from '../src/modules/workspace/chapters/pages.ts';
+
+test('a full chapter pins every continuation to the first revision', async () => {
+  const requests = [];
+  const read = async ({start = 0, expectedRevision}) => {
+    requests.push(expectedRevision);
+    return {revision: 4, content: ['甲', '乙', '丙'][start], nextStart: start < 2 ? start + 1 : null};
+  };
+  const chapter = await readFullChapter(read);
+  assert.equal(chapter.content, '甲乙丙');
+  assert.equal(chapter.nextStart, null);
+  assert.equal(chapter.end, 3);
+  assert.deepEqual(requests, [undefined, 4, 4]);
+  await assert.rejects(readFullChapter(async args => ({...await read(args), revision: args.start ? 5 : 4})), {code: 'CONFLICT'});
+});
 
 const reconstruct=(chunks,side)=>chunks.flatMap(chunk=>chunk[side]).join('\n');
 test('diff reconstructs both documents with repeated paragraphs, blank lines, insertions and deletions',()=>{

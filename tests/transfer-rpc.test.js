@@ -4,10 +4,10 @@ import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/application/store.js';
-import {TransferService} from '../src/application/transfer/service.ts';
-import {registerRpcRoute} from '../src/adapters/dsh/rpc.js';
-import {TOOL_ACTIONS} from '../src/contracts/actions.js';
+import {Store} from '../src/composition/store.ts';
+import {TransferService} from '../src/modules/library/archives/transfer-service.ts';
+import {registerRpcRoute} from '../src/modules/access/rpc/route.ts';
+import {TOOL_ACTIONS} from '../src/modules/access/catalog/actions.ts';
 
 test('transfer RPC works before binding a session, validates envelopes and stays off Agent tool actions', async t => {
   const root = await mkdtemp(join(tmpdir(), 'cuigengji-transfer-rpc-')); t.after(() => rm(root, {recursive: true, force: true}));

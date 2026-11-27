@@ -1,1 +1,1 @@
-export * from "../adapters/dsh/skills.js";
+export * from "./../modules/access/guidance/skills.js";

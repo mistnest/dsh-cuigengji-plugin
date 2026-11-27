@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, {after} from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter, once } from 'node:events';
 import { PassThrough } from 'node:stream';
@@ -6,14 +6,19 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { DesktopPet } from '../src/application/pet/desktop.ts';
-import { HUMAN_ACTIONS, TOOL_ACTIONS } from '../src/contracts/actions.js';
-import { registerRpcRoute } from '../src/adapters/dsh/rpc.js';
+import { DesktopPet } from '../src/modules/author-ui/desktop/desktop.ts';
+import { HUMAN_ACTIONS, TOOL_ACTIONS } from '../src/modules/access/catalog/actions.ts';
+import { registerRpcRoute } from '../src/modules/access/rpc/route.ts';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const deadline = async promise => { let timer; try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Native test timed out')), 20_000); })]); } finally { clearTimeout(timer); } };
-async function fixture(t) {
+// The per-test pet teardown drains pending preference writes before removing its directory.
+const tempRoots = [];
+after(async () => {
+  for (const root of tempRoots) await rm(root, {recursive: true, force: true, maxRetries: 3});
+});
+async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'cuigengji-native-test-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  tempRoots.push(root);
   return root;
 }
 function fakeChild(ready = true) {
@@ -29,7 +34,7 @@ const input = { desktop: true, initial: true, role: 'bigfish', visible: true, re
 const fakeDispatch = async (action, args, actor) => action === 'binding.get' ? { novelId: actor.sessionId } : { date: '2026-10-18', novelId: args.novelId || null, title: args.novelId || null, stats: { proseAdded: 12, settingAdded: 3, planningChanges: 1 } };
 
 test('Electron desktop host works without the installer-only executable variable', { skip: process.platform !== 'win32' }, async t => {
-  const root = await fixture(t);
+  const root = await fixture();
   const launcher = process.env.DSH_DESKTOP_NODE_EXECUTABLE;
   const electron = Object.getOwnPropertyDescriptor(process.versions, 'electron');
   let pet;
@@ -54,7 +59,7 @@ test('Electron desktop host works without the installer-only executable variable
 });
 
 test('desktop pet is human-only, opt-in from desktop preload, and launches once for concurrent calls', async t => {
-  const root = await fixture(t); let starts = 0, child;
+  const root = await fixture(); let starts = 0, child;
   const pet = new DesktopPet(root, fakeDispatch, { supported: true, launch() { starts++; return child = fakeChild(); } }); t.after(() => pet.close());
   assert.deepEqual(await pet.sync({}), { supported: false, available: false }); assert.equal(starts, 0);
   const results = await Promise.all([pet.sync(input), pet.sync(input), pet.sync(input)]);
@@ -64,7 +69,7 @@ test('desktop pet is human-only, opt-in from desktop preload, and launches once 
 });
 
 test('a disabled desktop pet does not start a native process on the next launch',async t=>{
-  const root=await fixture(t);let starts=0;
+  const root=await fixture();let starts=0;
   const options={supported:true,launch(){starts++;return fakeChild();}};
   const initial=new DesktopPet(root,fakeDispatch,options);
   await initial.sync({...input,visible:false});await initial.close();
@@ -77,7 +82,7 @@ test('a disabled desktop pet does not start a native process on the next launch'
 });
 
 test('native role/hide preferences synchronize without being overwritten by stale UI polling', async t => {
-  const root = await fixture(t); let child;
+  const root = await fixture(); let child;
   const pet = new DesktopPet(root, fakeDispatch, { supported: true, launch: () => child = fakeChild() });
   await pet.sync(input);
   child.stdout.write(JSON.stringify({ type: 'preferences', role: 'cuigengji', visible: false }) + '\n');
@@ -92,7 +97,7 @@ test('native role/hide preferences synchronize without being overwritten by stal
 });
 
 test('slow native progress cannot cross books, read failures do not broaden the scope', async t => {
-  const root = await fixture(t); let child, release, failBinding = false;
+  const root = await fixture(); let child, release, failBinding = false;
   const calls = [], gate = new Promise(resolve => release = resolve);
   const pet = new DesktopPet(root, async (action, args, actor) => {
     calls.push({ action, args, actor });
@@ -111,7 +116,7 @@ test('slow native progress cannot cross books, read failures do not broaden the 
 });
 
 test('launcher failure stays bounded and an explicit retry recovers', async t => {
-  const root = await fixture(t); let starts = 0;
+  const root = await fixture(); let starts = 0;
   const pet = new DesktopPet(root, fakeDispatch, { supported: true, launch: () => fakeChild(++starts > 1) }); t.after(() => pet.close());
   assert.equal((await pet.sync(input)).available, false);
   assert.equal((await pet.sync(input)).available, false); assert.equal(starts, 1);
@@ -119,7 +124,7 @@ test('launcher failure stays bounded and an explicit retry recovers', async t =>
 });
 
 test('a late usage presentation cannot replace the current conversation in the native companion',async t=>{
-  const root=await fixture(t);let child,release;
+  const root=await fixture();let child,release;
   const gate=new Promise(resolve=>release=resolve),usage={subscribe:()=>()=>{},presentation:async args=>{if(args.sessionId==='author-a')await gate;return {sessionId:args.sessionId};}};
   const pet=new DesktopPet(root,fakeDispatch,{supported:true,usage,launch:()=>child=fakeChild()});t.after(()=>pet.close());
   await pet.sync(input);await tick();await pet.sync({...input,initial:false,sessionId:'author-b'});release();
@@ -129,7 +134,7 @@ test('a late usage presentation cannot replace the current conversation in the n
 });
 
 test('large library progress stays inside the native pipe limit and does not send per-book details', async t => {
-  const root = await fixture(t); let child;
+  const root = await fixture(); let child;
   const pet = new DesktopPet(root, async (action, args, actor) => action === 'binding.get' ? null : {
     ...await fakeDispatch(action, args, actor),
     novels: Array.from({ length: 1000 }, (_, i) => ({ novelId: String(i), title: '这是一本作品的标题', stats: { proseAdded: 1000 } })),
@@ -141,7 +146,7 @@ test('large library progress stays inside the native pipe limit and does not sen
 });
 
 test('unreadable device preferences do not prevent launching or switching the desktop pet', async t => {
-  const root = await fixture(t); await mkdir(join(root, 'pet-desktop.json'));
+  const root = await fixture(); await mkdir(join(root, 'pet-desktop.json'));
   const pet = new DesktopPet(root, fakeDispatch, { supported: true, launch: () => fakeChild() }); t.after(() => pet.close());
   const initial = await pet.sync(input);
   assert.equal(initial.available, true); assert.match(initial.error, /偏好暂未读取/);
@@ -176,7 +181,7 @@ test('desktop pet RPC waits for migration, supports no conversation and uses the
 });
 
 test('real Windows companion compiles, renders and exchanges UTF-8 updates over pipes', { skip: process.platform !== 'win32' }, async t => {
-  const root = await fixture(t), script = resolve('src/desktop/pet.ps1'), assets = resolve('src/client/assets/pets');
+  const root = await fixture(), script = resolve('src/modules/author-ui/desktop/pet.ps1'), assets = resolve('src/modules/author-ui/workbench/assets/pets');
   await copyFile(resolve('tests/fixtures/pet-disposal.gif'),join(root,'test-animation.gif'));
   await copyFile(resolve('tests/fixtures/pet-disposal.json'),join(root,'test-animation.json'));
   const args = ['-NoLogo', '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', script, '-StateDirectory', root, '-AssetsDirectory', assets];

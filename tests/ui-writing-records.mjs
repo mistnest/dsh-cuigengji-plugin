@@ -7,8 +7,8 @@ import {createHash,randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
-import {Store} from '../src/core/store.js';
-import {localDay,emptyActivity} from '../src/application/activity.ts';
+import {Store} from '../src/composition/store.ts';
+import {localDay,emptyActivity} from '../src/modules/workspace/activity/activity.ts';
 
 const root=resolve(import.meta.dirname,'..'),directory=await mkdtemp(join(tmpdir(),'cuigengji-records-ui-'));
 const shots=join(root,'test-results','writing-records');await mkdir(shots,{recursive:true});
@@ -37,7 +37,7 @@ state.activity.daily['2024-03-12']={date:'2024-03-12',updatedAt:'2024-03-12T12:0
 await store.save(state);
 const output=await build({stdin:{resolveDir:root,loader:'tsx',contents:`
 import React,{useState}from'react';import{createRoot}from'react-dom/client';
-import{WritingRecords}from'./src/client/features/pet/Records.tsx';import{PreferencesProvider}from'./src/client/shared/preferences.tsx';import{styles}from'./src/client/style.ts';
+import{WritingRecords}from'./src/modules/author-ui/workbench/features/pet/Records.tsx';import{PreferencesProvider}from'./src/modules/author-ui/workbench/shared/preferences.tsx';import{styles}from'./src/modules/author-ui/workbench/style.ts';
 const requests=[],pending=[];let holdToday=false,failure=false;
 const rpc=async(action,args,sessionId)=>{requests.push({action,args,sessionId});if(failure)throw Error('测试：记录暂时不可用');const response=await fetch('/dispatch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,args,sessionId})});const value=await response.json();if(!response.ok)throw Error(value.error);if(holdToday&&args.from===args.to)await new Promise(resolve=>pending.push(resolve));return value;};
 window.fixture={requests,hold:()=>holdToday=true,release:()=>{holdToday=false;pending.splice(0).forEach(resolve=>resolve());},pending:()=>pending.length,fail:value=>failure=value};

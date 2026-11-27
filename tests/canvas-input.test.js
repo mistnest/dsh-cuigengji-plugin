@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {defaultCanvasScrollAction,wheelCamera} from '../src/client/shared/graph-wheel.ts';
-import {toWorld} from '../src/client/shared/graph-geometry.ts';
+import {defaultCanvasScrollAction,wheelCamera} from '../src/modules/author-ui/workbench/shared/graph-wheel.ts';
+import {toWorld} from '../src/modules/author-ui/workbench/shared/graph-geometry.ts';
 
 const camera={x:240,y:-80,zoom:.75},anchor={x:350,y:260},view={width:800,height:600};
 const input=overrides=>({deltaX:0,deltaY:0,deltaMode:0,ctrlKey:false,metaKey:false,shiftKey:false,...overrides});

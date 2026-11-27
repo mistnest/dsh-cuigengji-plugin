@@ -4,8 +4,8 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {Store} from '../src/core/store.js';
-import {planningAction} from '../src/domain/planning/index.ts';
+import {Store} from '../src/composition/store.ts';
+import {planningAction} from '../src/modules/workspace/planning/rules/index.ts';
 
 async function setup(t){
   const root=await mkdtemp(join(tmpdir(),'card-history-'));t.after(()=>rm(root,{recursive:true,force:true}));

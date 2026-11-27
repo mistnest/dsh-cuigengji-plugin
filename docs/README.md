@@ -8,13 +8,16 @@
 | --- | --- |
 | 安装插件、创建第一本作品 | [安装与开始使用](getting-started.md) |
 | 让 Agent 帮忙安装或更新 | [Windows Agent 安装指南](agent-installation.md) |
+| 为外部助手选择小说并分配读写权限 | [MCP 连接管理](external-agents.md) |
 | 更新旧版并保留作品 | [更新与数据迁移](upgrade.md) |
+| 从插件市场更新，或处理 already-installed | [市场更新说明](market-updates.md) |
 | 正文查找替换、桌宠、写作记录与设置 | [工作台常用功能](workbench.md) |
 | 桌宠显示 Token、费用、余额与自定义气泡 | [桌宠用量与记账](pet-usage.md) |
 | 可选的剧情状态与常见酒馆变量 | [剧情变量](variables.md) |
 | 从旧包名迁移 | [包名迁移](package-name-migration.md) |
 | 一起整理大纲、推演剧情和资源 | [规划与设定工作台](planning-board.md) |
-| 设置文风和写作要求 | [写作预设](presets.md) |
+| 给规划、角色与设定添加展示图片 | [卡片配图](card-images.md) |
+| 维护一部作品的长期写作决定、使用旧版预设 | [创作记忆与旧版预设](presets.md) |
 | 导入已有酒馆资料 | [角色卡、世界书与预设导入](tavern-import.md) |
 | 导出作品或备份整个工作库 | [导入与导出](import-export.md) |
 | 了解各版更新 | [更新记录](CHANGELOG.md) |

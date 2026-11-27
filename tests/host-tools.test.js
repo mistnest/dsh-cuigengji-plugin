@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { apply } from '../src/index.js';
+import { apply } from '../src/index.ts';
 import { storageSnapshot } from './helpers/storage-snapshot.js';
 
 test('registered DSH tools execute through session policy and real MCP', async t => {
@@ -16,7 +16,7 @@ test('registered DSH tools execute through session policy and real MCP', async t
     on() {}, effect: fn => effects.push(fn()), provide: (key, value) => { ctx[key] = value; },
   };
   t.after(async () => { for (const dispose of effects) await dispose(); await rm(root, { recursive: true, force: true }); });
-  await apply(ctx, { dataRoot: root,usageRoot:join(root,'test-usage') });
+  await apply(ctx, { dataRoot: root,usageRoot:join(root,'test-usage'),externalRoot:join(root,'test-external') });
   const human = { kind: 'human', sessionId: 'writer' };
   const dispatch = (action, args = {}) => ctx.cuigengji.dispatch(action, args, human);
   let id = 0;
@@ -24,6 +24,14 @@ test('registered DSH tools execute through session policy and real MCP', async t
     { action, args }, { agent: { id: 'writer' }, callId: `test-${++id}`, signal: new AbortController().signal }));
   assert.equal(await execute('cuigengji_context', 'binding.get'), null);
   const novel = await dispatch('novel.create', { title: '工具边界测试' });
+  const connection=await execute('cuigengji_connections','external.create',{name:'校对助手',novelIds:[novel.id],permissions:{settings:'read'}});
+  assert.equal(connection.permissions.settings,'read');assert.equal(connection.clientConfig,undefined);
+  const panel=await ctx.cuigengji.external.update({id:connection.id,expectedRevision:connection.revision,permissions:{settings:'write'}});
+  await assert.rejects(execute('cuigengji_connections','external.update',{id:connection.id,expectedRevision:connection.revision,permissions:{settings:'none'}}),{code:'CONFLICT'});
+  const latest=(await execute('cuigengji_connections','external.status')).profiles.find(p=>p.id===connection.id);
+  assert.equal(latest.permissions.settings,'write');assert.equal(latest.revision,panel.revision);
+  await execute('cuigengji_connections','external.update',{id:latest.id,expectedRevision:latest.revision,permissions:{guidance:'read'}});
+  assert.equal((await ctx.cuigengji.external.status()).profiles[0].permissions.guidance,'read');
   await dispatch('binding.set', { novelId: novel.id });
   assert.equal((await execute('cuigengji_project', 'novel.get')).id, novel.id);
   await assert.rejects(execute('cuigengji_project','novel.get',{novelId:'other'}),{code:'NOT_FOUND'});
@@ -49,6 +57,10 @@ test('registered DSH tools execute through session policy and real MCP', async t
   assert.equal((await execute('cuigengji_context', 'preset.read')).content, '短句与留白');
   const node = await execute('cuigengji_memory', 'graph.create', { type: 'character_card', name: '来客', sources: [{ chapterId: chapter.id, revision: chapter.revision }] });
   assert.equal((await execute('cuigengji_memory', 'graph.get', { nodeId: node.id })).name, '来客');
+  const batch = await execute('cuigengji_context','context.readMany',{items:[{kind:'chapter',id:chapter.id},{kind:'setting',id:node.id}]});
+  assert.deepEqual(batch.items.map(item=>[item.id,item.ok]),[[chapter.id,true],[node.id,true]]);
+  const unchanged=await execute('cuigengji_memory','graph.updateMany',{updates:[{nodeId:node.id,expectedRevision:node.revision,name:'来客'}]});
+  assert.equal(unchanged.items[0].changed,false);
   // Native DSH uses its value-schema DSL; the MCP path uses JSON Schema.
   // Both must accept arbitrary structured values and share the same state.
   await dispatch('variables.configure',{baseRevision:0,enabled:true});
